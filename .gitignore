@@ -1,0 +1,14 @@
+.vs/
+[Bb]in/
+[Oo]bj/
+[Pp]ublish/
+[Cc]ompiled/
+Payload.zip
+SingleFilePacker/Payload.zip
+*.exe
+*.zip
+*.pdb
+*.ipch
+*.suo
+*.user
+*.log

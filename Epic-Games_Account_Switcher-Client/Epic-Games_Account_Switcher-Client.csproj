@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows7.0</TargetFramework>
+    <RootNamespace>Epic_Games_Account_Switcher_Client</RootNamespace>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>new_icon.ico</ApplicationIcon>
+    <Version>2026.03.25</Version>
+    <Authors>Epic-Games_Account_Switcher Team</Authors>
+    <Product>Epic-Games_Account_Switcher</Product>
+    <AssemblyName>Epic-Games_Account_Switcher</AssemblyName>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="favicon.ico" />
+    <Resource Include="new_icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Epic-Games_Account_Switcher-Globals\Epic-Games_Account_Switcher-Globals.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopySkins" AfterTargets="Build">
+    <ItemGroup>
+      <SkinsFiles Include="$(SolutionDir)Skins_Icons\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(SkinsFiles)" DestinationFolder="$(TargetDir)Skins_Icons\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

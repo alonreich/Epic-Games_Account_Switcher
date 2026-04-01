@@ -1,0 +1,30 @@
+# Build Artifacts
+bin/
+obj/
+Compiled/
+TestResults/
+
+# Visual Studio / IDE
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Executables and Binaries
+*.exe
+*.dll
+*.pdb
+*.nupkg
+*.vshost.*
+
+# Git and OS
+.git/
+.gitignore
+.editorconfig
+.appveyor.yml
+.crowdin.yml
+
+# Node.js (if applicable)
+node_modules/
+npm-debug.log
