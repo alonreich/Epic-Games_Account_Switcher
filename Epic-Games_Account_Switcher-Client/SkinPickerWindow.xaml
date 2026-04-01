@@ -1,0 +1,50 @@
+<Window x:Class="Epic_Games_Account_Switcher_Client.SkinPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Choose Skin" Height="450" Width="600"
+        Background="#1F2335" WindowStyle="None" AllowsTransparency="True"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
+    <Border BorderBrush="#7AA2F7" BorderThickness="1" CornerRadius="12" Background="#1F2335">
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="SELECT PREDEFINED SKIN" Foreground="White" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+
+            <ListBox x:Name="SkinsList" Grid.Row="1" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="SkinsList_MouseDoubleClick">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel HorizontalAlignment="Center"/>
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border x:Name="IconBorder" Margin="10" Padding="5" CornerRadius="8" BorderThickness="2" BorderBrush="Transparent">
+                            <Grid Width="120" Height="120">
+                                <Ellipse Width="110" Height="110">
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding FullPath}" Stretch="UniformToFill" />
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                            </Grid>
+                        </Border>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                <Setter TargetName="IconBorder" Property="BorderBrush" Value="#7AA2F7"/>
+                                <Setter TargetName="IconBorder" Property="Background" Value="#292E42"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
+                <Button Content="CANCEL" Click="Cancel_Click" Width="100" Height="35" Margin="0,0,20,0" Background="Transparent" Foreground="#F7768E" BorderBrush="#F7768E"/>
+                <Button Content="SELECT SKIN" Click="Select_Click" Width="150" Height="35" Background="#7AA2F7" Foreground="Black" FontWeight="Bold" BorderThickness="0"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

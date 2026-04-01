@@ -1,0 +1,45 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11222.16 d18.3
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Epic-Games_Account_Switcher-Client", "Epic-Games_Account_Switcher-Client\Epic-Games_Account_Switcher-Client.csproj", "{1EFC2E49-9A26-4470-B133-A7EA11F3FBF0}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Epic-Games_Account_Switcher-Globals", "Epic-Games_Account_Switcher-Globals\Epic-Games_Account_Switcher-Globals.csproj", "{5ACA23EB-2EF2-4256-A168-E02E71D89FBB}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "runas", "runas\runas.csproj", "{2C8D51E2-3B55-4EBF-A6D9-9B824AB2D456}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1EFC2E49-9A26-4470-B133-A7EA11F3FBF0}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{1EFC2E49-9A26-4470-B133-A7EA11F3FBF0}.Debug|x64.ActiveCfg = Debug|x64
+		{1EFC2E49-9A26-4470-B133-A7EA11F3FBF0}.Debug|x64.Build.0 = Debug|x64
+		{1EFC2E49-9A26-4470-B133-A7EA11F3FBF0}.Release|Any CPU.ActiveCfg = Release|x64
+		{1EFC2E49-9A26-4470-B133-A7EA11F3FBF0}.Release|x64.ActiveCfg = Release|x64
+		{1EFC2E49-9A26-4470-B133-A7EA11F3FBF0}.Release|x64.Build.0 = Release|x64
+		{5ACA23EB-2EF2-4256-A168-E02E71D89FBB}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{5ACA23EB-2EF2-4256-A168-E02E71D89FBB}.Debug|x64.ActiveCfg = Debug|x64
+		{5ACA23EB-2EF2-4256-A168-E02E71D89FBB}.Debug|x64.Build.0 = Debug|x64
+		{5ACA23EB-2EF2-4256-A168-E02E71D89FBB}.Release|Any CPU.ActiveCfg = Release|x64
+		{5ACA23EB-2EF2-4256-A168-E02E71D89FBB}.Release|x64.ActiveCfg = Release|x64
+		{5ACA23EB-2EF2-4256-A168-E02E71D89FBB}.Release|x64.Build.0 = Release|x64
+		{2C8D51E2-3B55-4EBF-A6D9-9B824AB2D456}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{2C8D51E2-3B55-4EBF-A6D9-9B824AB2D456}.Debug|x64.ActiveCfg = Debug|x64
+		{2C8D51E2-3B55-4EBF-A6D9-9B824AB2D456}.Debug|x64.Build.0 = Debug|x64
+		{2C8D51E2-3B55-4EBF-A6D9-9B824AB2D456}.Release|Any CPU.ActiveCfg = Release|x64
+		{2C8D51E2-3B55-4EBF-A6D9-9B824AB2D456}.Release|x64.ActiveCfg = Release|x64
+		{2C8D51E2-3B55-4EBF-A6D9-9B824AB2D456}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3E9BFC04-84A9-4B21-9651-680E0D3D4979}
+	EndGlobalSection
+EndGlobal

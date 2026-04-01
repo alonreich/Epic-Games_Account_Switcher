@@ -1,0 +1,161 @@
+<Window x:Class="Epic_Games_Account_Switcher_Client.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Epic_Games_Account_Switcher_Client"
+        mc:Ignorable="d"
+        Title="Epic Games Account Switcher" Height="650" Width="1000"
+        Background="#1F2335" WindowStyle="None" AllowsTransparency="True"
+        ResizeMode="CanResizeWithGrip" Icon="favicon.ico">
+    <Window.Resources>
+        <local:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <local:InverseBooleanToEnabledConverter x:Key="InverseBooleanToEnabledConverter"/>
+
+        <Style x:Key="AccountCardStyle" TargetType="ListBoxItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <StackPanel Margin="15" Width="220">
+                            <!-- The 3D Card Button -->
+                            <Button Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand" Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="CardOuter" Background="Transparent" Padding="0,0,6,6">
+                                            <Grid>
+                                                <!-- Shadow Border -->
+                                                <Border x:Name="ShadowBorder" Background="Black" CornerRadius="12" Opacity="0.3" Margin="6,6,0,0"/>
+                                                <!-- Main Card -->
+                                                <Border x:Name="CardBorder" Background="#292E42" CornerRadius="12" Padding="20" BorderThickness="1" BorderBrush="#414868">
+                                                    <StackPanel Orientation="Vertical">
+                                                        <Border Height="6" Background="{Binding AccentColor}" CornerRadius="3" Margin="0,0,0,15" VerticalAlignment="Top"/>
+                                                        
+                                                        <Ellipse Width="150" Height="150" Margin="0,0,0,15" Stroke="{Binding AccentColor}" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality">
+                                                            <Ellipse.Fill>
+                                                                <ImageBrush ImageSource="{Binding ProfileImagePath}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                            </Ellipse.Fill>
+                                                        </Ellipse>
+                                                        <TextBlock Text="{Binding Name}" Foreground="White" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="{Binding Email}" Foreground="#7AA2F7" FontSize="12" FontWeight="Normal" HorizontalAlignment="Center" TextAlignment="Center" Opacity="0.9"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="CardBorder" Property="Background" Value="#3B4261"/>
+                                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{Binding AccentColor}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="CardBorder" Property="Margin" Value="4,4,0,0"/>
+                                                <Setter TargetName="ShadowBorder" Property="Visibility" Value="Collapsed"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <Button.ContextMenu>
+                                    <ContextMenu Background="#24283B" Foreground="White" BorderBrush="#414868">
+                                        <MenuItem Header="EDIT" Command="{Binding PlacementTarget.Tag.EditCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" FontWeight="Bold"/>
+                                        <Separator Background="#414868"/>
+                                        <MenuItem Header="DELETE" Command="{Binding PlacementTarget.Tag.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="#F7768E"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
+
+                            <!-- Description (Outside the square) -->
+                            <TextBlock Text="{Binding Description}" Foreground="#737AA2" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" Margin="10,10,10,0" Height="40" TextTrimming="CharacterEllipsis" FontStyle="Italic"/>
+                        </StackPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#24283B" MouseLeftButtonDown="TitleBar_MouseDown">
+            <Grid>
+                <TextBlock Text="EPIC GAMES ACCOUNT SWITCHER" VerticalAlignment="Center" Margin="15,0" Foreground="#737AA2" FontSize="12" FontWeight="Bold"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="" FontFamily="Segoe MDL2 Assets" Width="40" Background="Transparent" Foreground="White" BorderThickness="0" Click="Minimize_Click" Cursor="Hand"/>
+                    <Button Content="" FontFamily="Segoe MDL2 Assets" Width="40" Background="Transparent" Foreground="#F7768E" BorderThickness="0" Click="Close_Click" Cursor="Hand"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Padding="30,20">
+            <Grid>
+                <StackPanel>
+                    <TextBlock Text="Select your Account" Foreground="White" FontSize="28" FontWeight="Light"/>
+                    <TextBlock Text="Click a card to switch instantly. Right-click to edit." Foreground="#737AA2" FontSize="14" Margin="0,5,0,0"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button Content="🚀 Launch Epic Games" Command="{Binding LaunchEpicCommand}" Padding="20,10" Background="Transparent" Foreground="#7AA2F7" BorderBrush="#7AA2F7" BorderThickness="1" FontWeight="Bold" Margin="0,0,10,0" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanToEnabledConverter}}" Cursor="Hand">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+                    <Button Content="+ Capture Login" Padding="15,10" Background="Transparent" Foreground="#737AA2" BorderBrush="#414868" BorderThickness="1" FontWeight="Bold" Margin="0,0,15,0" Click="Capture_Click" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanToEnabledConverter}}" Cursor="Hand" FontSize="11">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+                    <Button Content="+ Add Account" Command="{Binding AddAccountCommand}" Padding="25,10" Background="#9ECE6A" Foreground="Black" FontWeight="Bold" BorderThickness="0" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanToEnabledConverter}}" Cursor="Hand" FontSize="16">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <ListBox Grid.Row="2" ItemsSource="{Binding Accounts}" ItemContainerStyle="{StaticResource AccountCardStyle}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Margin="20,0" HorizontalAlignment="Center"/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+        </ListBox>
+
+        <!-- Footer Buttons (Backup/Restore) -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,20">
+            <Button Content="RESTORE" Command="{Binding RestoreCommand}" Width="100" Height="32" Margin="0,0,10,0" Background="Transparent" Foreground="#737AA2" BorderBrush="#414868" BorderThickness="1" Cursor="Hand" FontSize="11" FontWeight="Bold"/>
+            <Button Content="BACKUP" Command="{Binding BackupCommand}" Width="100" Height="32" Background="#363952" Foreground="White" BorderBrush="#414868" BorderThickness="1" Cursor="Hand" FontSize="11" FontWeight="Bold"/>
+        </StackPanel>
+
+        <Grid Grid.RowSpan="3" Background="#AA16161E" Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <ProgressBar IsIndeterminate="True" Width="100" Height="2" Background="Transparent" Foreground="#7AA2F7" BorderThickness="0"/>
+                <TextBlock Text="Loading accounts..." Foreground="#737AA2" Margin="0,10" HorizontalAlignment="Center" FontSize="12"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.RowSpan="3" Background="#AA16161E" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <ProgressBar IsIndeterminate="True" Width="200" Height="4" Background="Transparent" Foreground="#7AA2F7" BorderThickness="0"/>
+                <TextBlock Text="{Binding BusyStatus}" Foreground="White" Margin="0,15" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="2" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,30" Background="#24283B" BorderBrush="#7AA2F7" BorderThickness="1" CornerRadius="8" Padding="20,12" Visibility="{Binding IsToastVisible, Converter={StaticResource BooleanToVisibilityConverter}}" MaxWidth="500">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="15" Opacity="0.3" ShadowDepth="0"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="" FontFamily="Segoe MDL2 Assets" Foreground="#7AA2F7" VerticalAlignment="Center" Margin="0,0,12,0" FontSize="16"/>
+                <TextBlock Text="{Binding ToastMessage}" Foreground="White" FontSize="14" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

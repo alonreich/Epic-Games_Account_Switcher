@@ -1,0 +1,61 @@
+<Window x:Class="Epic_Games_Account_Switcher_Client.CaptureAccountWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Account Wizard" Height="670" Width="570"
+        Background="#1F2335" WindowStyle="None" AllowsTransparency="True"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
+    <Border BorderBrush="#7AA2F7" BorderThickness="1" CornerRadius="12" Background="#1F2335">
+        <Grid Margin="30">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="ACCOUNT WIZARD" Foreground="White" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,25"/>
+
+            <!-- Profile Picture with Pencil Icon -->
+            <Grid Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,30">
+                <Ellipse Width="150" Height="150" Stroke="#7AA2F7" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality">
+                    <Ellipse.Fill>
+                        <ImageBrush x:Name="ProfileImageBrush" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Ellipse.Fill>
+                </Ellipse>
+
+                <Button Click="SelectImage_Click" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="35" Height="35" Background="#7AA2F7" BorderThickness="0" Cursor="Hand">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="18"/>
+                        </Style>
+                    </Button.Resources>
+                    <TextBlock Text="✎" Foreground="Black" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                </Button>
+            </Grid>
+
+            <!-- Fields -->
+            <StackPanel Grid.Row="2" VerticalAlignment="Top">
+                <TextBlock Text="Friendly Name" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
+                <TextBox x:Name="AccountNameInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Margin="0,0,0,20" VerticalContentAlignment="Center" FontSize="14" CaretBrush="White"/>
+
+                <TextBlock Text="Connected Email" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
+                <TextBox x:Name="AccountEmailInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Margin="0,0,0,20" VerticalContentAlignment="Center" FontSize="14" IsReadOnly="False" BorderThickness="1" CaretBrush="White"/>
+
+                <TextBlock Text="Description" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
+                <TextBox x:Name="AccountDescriptionInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Height="100" TextWrapping="Wrap" AcceptsReturn="True" VerticalContentAlignment="Top" FontSize="14" CaretBrush="White"/>
+            </StackPanel>
+
+            <!-- Footer Buttons -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                <Button Content="CANCEL" Click="Cancel_Click" Width="120" Height="40" Margin="0,0,20,0" Background="Transparent" Foreground="#F7768E" BorderBrush="#F7768E" BorderThickness="1" Cursor="Hand"/>
+                <Button Content="SAVE CHANGES" Click="Capture_Click" Width="180" Height="40" Background="#7AA2F7" Foreground="Black" FontWeight="Bold" BorderThickness="0" Cursor="Hand">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="4"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

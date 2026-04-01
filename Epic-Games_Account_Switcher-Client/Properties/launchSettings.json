@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Epic-Games_Account_Switcher-Client": {
+      "commandName": "Project",
+      "remoteDebugEnabled": false,
+      "authenticationMode": "Windows",
+      "remoteDebugMachine": ""
+    }
+  }
+}
