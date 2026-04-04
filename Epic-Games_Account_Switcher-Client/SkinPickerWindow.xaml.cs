@@ -20,27 +20,43 @@ namespace Epic_Games_Account_Switcher_Client
         {
             try
             {
-                // Look in the application's base directory
+                var skinFiles = new List<string>();
+
+                
                 string skinsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skins_Icons");
-                if (!Directory.Exists(skinsDir))
+                if (Directory.Exists(skinsDir))
                 {
-                    // Fallback to current directory for development
-                    skinsDir = Path.GetFullPath("Skins_Icons");
+                    skinFiles.AddRange(Directory.GetFiles(skinsDir, "*.*"));
                 }
 
-                if (!Directory.Exists(skinsDir)) return;
+                
+                string projectSkinsDir = Path.GetFullPath("Payload\\Skins_Icons");
+                if (Directory.Exists(projectSkinsDir))
+                {
+                    skinFiles.AddRange(Directory.GetFiles(projectSkinsDir, "*.*"));
+                }
 
-                var files = Directory.GetFiles(skinsDir, "*.*")
-                    .Where(f => f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || 
-                                f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || 
-                                f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) || 
+                
+                string externalSkinsDir = Path.GetFullPath("Skin_Icons");
+                if (Directory.Exists(externalSkinsDir))
+                {
+                    skinFiles.AddRange(Directory.GetFiles(externalSkinsDir, "*.*"));
+                }
+
+                var files = skinFiles
+                    .Where(f => f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
                                 f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
                     .Select(f => new SkinItem { FullPath = f })
                     .ToList();
 
+                if (files.Count == 0) return;
+
                 SkinsList.ItemsSource = files;
 
-                // Pre-select Default_Skin_Guy if it exists, otherwise first item
+                
                 var defaultGuy = files.FirstOrDefault(f => f.FullPath.Contains("Default_Skin_Guy"));
                 if (defaultGuy != null)
                 {
@@ -77,7 +93,7 @@ namespace Epic_Games_Account_Switcher_Client
             }
             else
             {
-                // Fallback to first item if somehow nothing is selected
+                
                 if (SkinsList.Items.Count > 0)
                 {
                     SelectedSkinPath = ((SkinItem)SkinsList.Items[0]).FullPath;

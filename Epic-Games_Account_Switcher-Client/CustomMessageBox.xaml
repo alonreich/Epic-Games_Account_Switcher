@@ -18,7 +18,7 @@
 			<RowDefinition Height="40px"/>
 		</Grid.RowDefinitions>
 
-		<!-- Row 0: Header -->
+		
         <Border Name="HeaderBg" MouseDown="DragWindow" Grid.Row="0" Style="{StaticResource Headerbar}" Background="#14151E" Height="30" Panel.ZIndex="3"/>
         <Label Panel.ZIndex="3" IsHitTestVisible="False" Style="{StaticResource HeaderbarLabel}" Name="HeaderInstruction" Grid.Row="0" VerticalAlignment="Center" Foreground="White" HorizontalAlignment="Center" Content="Error message"/>
         <Button x:Name="BtnMin" Style="{StaticResource BtnMin}" Panel.ZIndex="3" Grid.Row="0" Content="-" HorizontalAlignment="Right" Margin="0 0 30px 0" Width="30px" Height="30px" Foreground="white" BorderThickness="0" Click="BtnMinimize"></Button>

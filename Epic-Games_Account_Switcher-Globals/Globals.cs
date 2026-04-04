@@ -34,23 +34,10 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             get
             {
-                // 1. Explicit Portable Marker
-                if (File.Exists(Path.Combine(AppDataFolder, ".portable")))
-                {
-                    return AppDataFolder;
-                }
-
-                // 2. Fallback to LocalAppData if installed to Program Files, or if running from a root drive (e.g. C:\)
-                // AppContext.BaseDirectory.Length <= 3 covers "C:\", "D:\", etc.
-                if (InstalledToProgramFiles() || AppContext.BaseDirectory.Length <= 3)
-                {
-                    var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Epic-Games_Account_Switcher");
-                    if (!Directory.Exists(path)) Directory.CreateDirectory(path);
-                    return path;
-                }
-
-                // 3. Default to AppDataFolder (Legacy Portable)
-                return AppDataFolder;
+                
+                var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Epic-Games_Account_Switcher");
+                if (!Directory.Exists(path)) Directory.CreateDirectory(path);
+                return path;
             }
         }
 
@@ -70,7 +57,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 string logPath = GetLogPath();
                 FileInfo fi = new FileInfo(logPath);
                 
-                // If log exceeds 5MB, clear it (Circular behavior)
+                
                 if (fi.Exists && fi.Length > 5 * 1024 * 1024)
                 {
                     File.WriteAllText(logPath, $"--- Log reset at {DateTime.Now} due to size limit (5MB) ---\n");
@@ -89,17 +76,6 @@ namespace Epic_Games_Account_Switcher_Globals
         public static void DebugWriteLine(string msg)
         {
             if (VerboseMode) WriteToLog("[DEBUG] " + msg);
-        }
-
-        public static string GetCleanFilePath(string path) => path.Replace("\"", "");
-
-        public static string ExpandEnvironmentVariables(string path) => Environment.ExpandEnvironmentVariables(path);
-
-        public static async Task DownloadFileAsync(string url, string path)
-        {
-            using var client = new HttpClient();
-            var bytes = await client.GetByteArrayAsync(url);
-            await File.WriteAllBytesAsync(path, bytes);
         }
 
         public static void ForceDeleteDirectory(string path)
@@ -137,12 +113,6 @@ namespace Epic_Games_Account_Switcher_Globals
             try { File.WriteAllText(Path.Combine(UserDataFolder, "LastError.txt"), e.ExceptionObject.ToString()); } catch { }
         }
 
-        public static bool StartProgram(string path, string args = "", bool admin = false, bool wait = false)
-        {
-            try { var si = new ProcessStartInfo { FileName = path, Arguments = args, UseShellExecute = true, Verb = admin ? "runas" : "" }; var p = Process.Start(si); if (wait) p?.WaitForExit(); return true; }
-            catch { return false; }
-        }
-
         public static bool IsProcessRunning(string name)
         {
             try { return Process.GetProcessesByName(name).Any(p => p.Id != Environment.ProcessId); }
@@ -154,7 +124,7 @@ namespace Epic_Games_Account_Switcher_Globals
             try 
             {
                 var currentId = Environment.ProcessId;
-                // Retry loop to handle processes that are just starting up or stuck
+                
                 for (int i = 0; i < 3; i++)
                 {
                     var processes = Process.GetProcessesByName(name).Where(p => p.Id != currentId).ToList();
@@ -173,7 +143,7 @@ namespace Epic_Games_Account_Switcher_Globals
                         }
                     }
                     
-                    if (i < 2) Thread.Sleep(500); // Short pause before retry
+                    if (i < 2) Thread.Sleep(500); 
                 }
             }
             catch (Exception ex) { WriteToLog($"Failed to kill process {name}", ex); }

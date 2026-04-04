@@ -15,7 +15,7 @@
 
             <TextBlock Text="ACCOUNT WIZARD" Foreground="White" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,25"/>
 
-            <!-- Profile Picture with Pencil Icon -->
+            
             <Grid Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,30">
                 <Ellipse Width="150" Height="150" Stroke="#7AA2F7" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality">
                     <Ellipse.Fill>
@@ -33,9 +33,9 @@
                 </Button>
             </Grid>
 
-            <!-- Fields -->
+            
             <StackPanel Grid.Row="2" VerticalAlignment="Top">
-                <TextBlock Text="Friendly Name" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
+                <TextBlock Text="Friendly Name *" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
                 <TextBox x:Name="AccountNameInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Margin="0,0,0,20" VerticalContentAlignment="Center" FontSize="14" CaretBrush="White"/>
 
                 <TextBlock Text="Connected Email" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
@@ -45,7 +45,7 @@
                 <TextBox x:Name="AccountDescriptionInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Height="100" TextWrapping="Wrap" AcceptsReturn="True" VerticalContentAlignment="Top" FontSize="14" CaretBrush="White"/>
             </StackPanel>
 
-            <!-- Footer Buttons -->
+            
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
                 <Button Content="CANCEL" Click="Cancel_Click" Width="120" Height="40" Margin="0,0,20,0" Background="Transparent" Foreground="#F7768E" BorderBrush="#F7768E" BorderThickness="1" Cursor="Hand"/>
                 <Button Content="SAVE CHANGES" Click="Capture_Click" Width="180" Height="40" Background="#7AA2F7" Foreground="Black" FontWeight="Bold" BorderThickness="0" Cursor="Hand">

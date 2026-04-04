@@ -61,10 +61,10 @@ namespace Epic_Games_Account_Switcher_Client
             set { _isLoading = value; OnPropertyChanged(); }
         }
 
-        // Event to request the UI to show the Capture Window
+        
         public event System.Func<AccountMetadata, Task<bool>> RequestCapture;
 
-        // Event to request the UI to show an instruction message box
+        
         public event System.Func<string, string, Task> RequestInstruction;
 
         public class AccountMetadata
@@ -76,42 +76,66 @@ namespace Epic_Games_Account_Switcher_Client
         }
 
         private ICommand _addAccountCommand;
-        public ICommand AddAccountCommand => _addAccountCommand ??= new RelayCommand(async (obj) =>
+        public ICommand AddAccountCommand => _addAccountCommand ??= new AsyncRelayCommand(AddAccountAsync, (obj) => !IsBusy && !IsLoading);
+
+        private async Task AddAccountAsync(object _)
         {
-            if (IsBusy) return;
+            if (IsBusy || IsLoading) return;
 
-            // 1. Launch Epic
-            Process.Start(new ProcessStartInfo
+            try
             {
-                FileName = "com.epicgames.launcher://",
-                UseShellExecute = true
-            });
+                IsBusy = true;
+                BusyStatus = "Detecting current Epic login...";
 
-            // 2. Show Instructions
-            if (RequestInstruction != null)
-            {
-                await RequestInstruction("Add New Account", "1. The Epic Games Launcher is opening.\n2. Please LOG IN to the account you want to add.\n3. Once you are logged in and seeing your Library, click OK below.");
-            }
-
-            // 3. Trigger Capture
-            var detected = AccountService.GetDetectedMetadata();
-            if (string.IsNullOrEmpty(detected.Id))
-            {
-                if (RequestInstruction != null) await RequestInstruction("Detection Failed", "Could not detect a logged-in account. Please make sure you are logged in to Epic Games and try again.");
-                return;
-            }
-
-            if (RequestCapture != null)
-            {
-                await RequestCapture(new AccountMetadata
+                var detected = AccountService.GetDetectedMetadata();
+                if (string.IsNullOrWhiteSpace(detected.Id))
                 {
-                    Name = detected.Name,
-                    Email = detected.Email,
-                    ImagePath = "pack://application:,,,/Skins_Icons/Default_Skin_Guy.jpg"
-                });
-                LoadAccounts();
+                    BusyStatus = "Opening Epic Games Launcher...";
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "com.epicgames.launcher://",
+                        UseShellExecute = true
+                    });
+
+                    BusyStatus = "Waiting for Epic login...";
+                    detected = await AccountService.WaitForDetectedMetadata(120, 1500);
+                }
+
+                IsBusy = false;
+                BusyStatus = "";
+
+                if (string.IsNullOrWhiteSpace(detected.Id))
+                {
+                    if (RequestInstruction != null)
+                        await RequestInstruction("Detection Failed", "Could not detect a logged-in Epic account in time. Please login in Epic Games Launcher, then try Capture again.");
+                    return;
+                }
+
+                if (RequestCapture != null)
+                {
+                    var captured = await RequestCapture(new AccountMetadata
+                    {
+                        Name = "",
+                        Email = detected.Email,
+                        ImagePath = AccountService.GetDefaultProfileImagePath()
+                    });
+
+                    if (captured)
+                        await LoadAccountsAsync();
+                }
             }
-        }, (obj) => !IsBusy && !IsLoading);
+            catch (System.Exception ex)
+            {
+                Globals.WriteToLog("[ERROR] Add account flow failed.", ex);
+                if (RequestInstruction != null)
+                    await RequestInstruction("Error", "An unexpected error happened while trying to capture account data.");
+            }
+            finally
+            {
+                IsBusy = false;
+                BusyStatus = "";
+            }
+        }
 
         private System.Threading.CancellationTokenSource _toastCts;
         public async void ShowToast(string message, int durationMs = 3000)
@@ -131,19 +155,8 @@ namespace Epic_Games_Account_Switcher_Client
             catch (System.Exception) { IsToastVisible = false; }
         }
 
-        private ICommand _launchEpicCommand;
-        public ICommand LaunchEpicCommand => _launchEpicCommand ??= new RelayCommand((obj) =>
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "com.epicgames.launcher://",
-                UseShellExecute = true
-            });
-            ShowToast("Launching Epic Games Launcher...");
-        }, (obj) => !IsBusy);
-
         private ICommand _switchCommand;
-        public ICommand SwitchCommand => _switchCommand ??= new RelayCommand(async (obj) =>
+        public ICommand SwitchCommand => _switchCommand ??= new AsyncRelayCommand(async (obj) =>
         {
             if (obj is Account acc) await SwitchAccount(acc);
         }, (obj) => !IsBusy && !IsLoading);
@@ -188,57 +201,61 @@ namespace Epic_Games_Account_Switcher_Client
         }, (obj) => !IsBusy && !IsLoading);
 
         private ICommand _restoreCommand;
-        public ICommand RestoreCommand => _restoreCommand ??= new RelayCommand(async (obj) =>
+        public ICommand RestoreCommand => _restoreCommand ??= new AsyncRelayCommand(RestoreAccountsAsync, (obj) => !IsBusy && !IsLoading);
+
+        private async Task RestoreAccountsAsync(object _)
         {
             var openDialog = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "Account Backup (*.zip, *.json)|*.zip;*.json"
             };
 
-            if (openDialog.ShowDialog() == true)
+            if (openDialog.ShowDialog() != true) return;
+
+            try
             {
-                try
+                if (openDialog.FileName.EndsWith(".zip", System.StringComparison.OrdinalIgnoreCase))
                 {
-                    if (openDialog.FileName.EndsWith(".zip", System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        AccountService.RestoreAccounts(openDialog.FileName);
-                        LoadAccounts();
-                        ShowToast("Full restore completed!");
-                    }
-                    else
-                    {
-                        // Legacy JSON restore
-                        var imported = Newtonsoft.Json.JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(openDialog.FileName));
-                        if (imported == null) return;
-
-                        var current = AccountService.GetAccounts();
-                        bool changed = false;
-
-                        foreach (var imp in imported)
-                        {
-                            var existing = current.FirstOrDefault(a => a.Id == imp.Id);
-                            if (existing != null)
-                            {
-                                var res = MessageBox.Show($"Account '{imp.Name}' ({imp.Email}) already exists.\n\nDo you want to overwrite it with the backup data?", "Duplicate Detected", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                                if (res == MessageBoxResult.No) continue;
-                                
-                                current.Remove(existing);
-                            }
-                            current.Add(imp);
-                            changed = true;
-                        }
-
-                        if (changed)
-                        {
-                            AccountService.SaveAccounts(current);
-                            LoadAccounts();
-                            ShowToast("JSON restore completed!");
-                        }
-                    }
+                    AccountService.RestoreAccounts(openDialog.FileName);
+                    await LoadAccountsAsync();
+                    ShowToast("Full restore completed!");
+                    return;
                 }
-                catch (System.Exception ex) { MessageBox.Show("Restore failed: " + ex.Message); }
+
+                
+                var imported = Newtonsoft.Json.JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(openDialog.FileName));
+                if (imported == null) return;
+
+                var current = AccountService.GetAccounts();
+                bool changed = false;
+
+                foreach (var imp in imported)
+                {
+                    var existing = current.FirstOrDefault(a => a.Id == imp.Id);
+                    if (existing != null)
+                    {
+                        var res = MessageBox.Show($"Account '{imp.Name}' ({imp.Email}) already exists.\n\nDo you want to overwrite it with the backup data?", "Duplicate Detected", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                        if (res == MessageBoxResult.No) continue;
+
+                        current.Remove(existing);
+                    }
+
+                    current.Add(imp);
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    AccountService.SaveAccounts(current);
+                    await LoadAccountsAsync();
+                    ShowToast("JSON restore completed!");
+                }
             }
-        }, (obj) => !IsBusy && !IsLoading);
+            catch (System.Exception ex)
+            {
+                MessageBox.Show("Restore failed: " + ex.Message);
+            }
+        }
 
         private ICommand _deleteCommand;
         public ICommand DeleteCommand => _deleteCommand ??= new RelayCommand((obj) =>
@@ -257,10 +274,12 @@ namespace Epic_Games_Account_Switcher_Client
 
         public MainViewModel()
         {
-            // Initial load moved to Loaded event in MainWindow
+            
         }
 
-        public async void LoadAccounts()
+        public void LoadAccounts() => _ = LoadAccountsAsync();
+
+        public async Task LoadAccountsAsync()
         {
             Globals.WriteToLog("[UI] Loading accounts list from disk...");
             IsLoading = true;
@@ -294,7 +313,7 @@ namespace Epic_Games_Account_Switcher_Client
                 return;
             }
 
-            // Check for unsaved login
+            
             var currentId = AccountService.GetCurrentAccountId();
             Globals.WriteToLog($"[CHECK] Current Active ID in registry: {currentId ?? "None"}");
 
@@ -319,9 +338,9 @@ namespace Epic_Games_Account_Switcher_Client
                     {
                         captureSuccess = await RequestCapture(new AccountMetadata 
                         { 
-                            Name = detected.Name, 
+                            Name = "", 
                             Email = detected.Email,
-                            ImagePath = "pack://application:,,,/Skins_Icons/Default_Skin_Guy.jpg"
+                            ImagePath = AccountService.GetDefaultProfileImagePath()
                         });
                     }
                     
@@ -331,7 +350,7 @@ namespace Epic_Games_Account_Switcher_Client
                         MessageBox.Show("Capture failed or cancelled. Switch aborted to prevent data loss.");
                         return;
                     }
-                    LoadAccounts();
+                    await LoadAccountsAsync();
                 }
                 else
                 {
@@ -415,6 +434,52 @@ namespace Epic_Games_Account_Switcher_Client
         {
             add => CommandManager.RequerySuggested += value;
             remove => CommandManager.RequerySuggested -= value;
+        }
+    }
+
+    public class AsyncRelayCommand : ICommand
+    {
+        private readonly System.Func<object, Task> _execute;
+        private readonly System.Predicate<object> _canExecute;
+        private bool _isExecuting;
+
+        public AsyncRelayCommand(System.Func<object, Task> execute, System.Predicate<object> canExecute = null)
+        {
+            _execute = execute;
+            _canExecute = canExecute;
+        }
+
+        public bool CanExecute(object parameter)
+        {
+            return !_isExecuting && (_canExecute == null || _canExecute(parameter));
+        }
+
+        public async void Execute(object parameter)
+        {
+            if (!CanExecute(parameter)) return;
+
+            _isExecuting = true;
+            RaiseCanExecuteChanged();
+            try
+            {
+                await _execute(parameter);
+            }
+            finally
+            {
+                _isExecuting = false;
+                RaiseCanExecuteChanged();
+            }
+        }
+
+        public event System.EventHandler CanExecuteChanged;
+
+        private void RaiseCanExecuteChanged()
+        {
+            Application.Current?.Dispatcher?.Invoke(() =>
+            {
+                CanExecuteChanged?.Invoke(this, System.EventArgs.Empty);
+                CommandManager.InvalidateRequerySuggested();
+            });
         }
     }
 }

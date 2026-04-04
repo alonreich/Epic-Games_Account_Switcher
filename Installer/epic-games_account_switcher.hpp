@@ -1,20 +1,20 @@
-// Epic-Games_Account_Switcher - A Super fast account switcher
-// Copyright (C) 2019-2025 TroubleChute (Wesley Pyburn)
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// Goal of this project:
-// To allow users to start the program regardless of .NET version.
-// If .NET is missing > Open installer, then after install relaunch.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #pragma once
 
@@ -130,9 +130,9 @@ inline bool download_file(const char* url, const char* dest) {
 		curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_bar);
 		curl_easy_setopt(curl, CURLOPT_FRESH_CONNECT, true);
 		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
-		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true); // Follows 301 redirects, like in the WebView2 link
+		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true); 
 		const CURLcode res = curl_easy_perform(curl);
-		/* always cleanup */
+		
 		curl_easy_cleanup(curl);
 		fclose(fp);
 
@@ -154,9 +154,9 @@ inline bool file_exists(const std::string& name) {
 
 #pragma region Runtime Operations
 
-/// <summary>
-/// Checks if winget is installed and available.
-/// </summary>
+
+
+
 inline bool is_winget_available()
 {
 	STARTUPINFO si = { sizeof(STARTUPINFO) };
@@ -166,12 +166,12 @@ inline bool is_winget_available()
 	si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 	PROCESS_INFORMATION pi;
 	
-	// Use cmd.exe to run winget (winget might not be directly in PATH)
+	
 	wstring cmd_line = L"cmd.exe /c winget --version";
 	wchar_t* cmd_line_writable = new wchar_t[cmd_line.length() + 1];
 	wcscpy_s(cmd_line_writable, cmd_line.length() + 1, cmd_line.c_str());
 	
-	// Create process with CREATE_NO_WINDOW to hide the window
+	
 	bool success = CreateProcessW(nullptr, cmd_line_writable, nullptr, nullptr, FALSE, 
 		CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, nullptr, nullptr, &si, &pi);
 	
@@ -179,7 +179,7 @@ inline bool is_winget_available()
 	
 	if (success)
 	{
-		WaitForSingleObject(pi.hProcess, 5000); // Wait up to 5 seconds
+		WaitForSingleObject(pi.hProcess, 5000); 
 		DWORD exit_code;
 		GetExitCodeProcess(pi.hProcess, &exit_code);
 		CloseHandle(pi.hProcess);
@@ -189,9 +189,9 @@ inline bool is_winget_available()
 	return false;
 }
 
-/// <summary>
-/// Checks if a winget package is installed.
-/// </summary>
+
+
+
 inline bool is_winget_package_installed(const string& package_id)
 {
 	STARTUPINFO si = { sizeof(STARTUPINFO) };
@@ -215,7 +215,7 @@ inline bool is_winget_package_installed(const string& package_id)
 		CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, nullptr, nullptr, &si, &pi))
 	{
 		CloseHandle(h_write);
-		WaitForSingleObject(pi.hProcess, 10000); // Wait up to 10 seconds
+		WaitForSingleObject(pi.hProcess, 10000); 
 		
 		char buffer[4096];
 		DWORD bytes_read;
@@ -226,12 +226,12 @@ inline bool is_winget_package_installed(const string& package_id)
 			output += buffer;
 		}
 		
-		// Check exit code and output
-		// Exit code 0 typically means package was found
+		
+		
 		DWORD exit_code;
 		GetExitCodeProcess(pi.hProcess, &exit_code);
 		
-		// Package is installed if exit code is 0 and output contains the package ID
+		
 		installed = (exit_code == 0) && (output.find(package_id) != string::npos);
 		
 		CloseHandle(h_read);
@@ -248,9 +248,9 @@ inline bool is_winget_package_installed(const string& package_id)
 	return installed;
 }
 
-/// <summary>
-/// Installs a package using winget.
-/// </summary>
+
+
+
 inline bool install_winget_package(const string& package_id, const string& display_name)
 {
 	cout << "Installing " << display_name << " via winget..." << endl;
@@ -296,9 +296,9 @@ inline bool install_winget_package(const string& package_id, const string& displ
 	return false;
 }
 
-/// <summary>
-/// Installs specified runtime.
-/// </summary>
+
+
+
 inline void install_runtime(const string& path, const string& name, const bool& passive)
 {
 	cout << "Installing: " << name << endl;
@@ -317,7 +317,7 @@ inline void download_install_missing_runtimes()
 {
 	const string operating_path = get_operating_path();
 
-	/* Warn about runtime downloads */
+	
 	if (!min_webview_met || !min_aspcore_met || !min_desktop_runtime_met || !min_vc_met)
 	{
 		cout << "One or more runtimes were not installed:" << endl;
@@ -345,7 +345,7 @@ inline void download_install_missing_runtimes()
 
 		wait_for_input();
 
-		// Check if winget is available
+		
 		bool use_winget = is_winget_available();
 		if (use_winget)
 		{
@@ -356,7 +356,7 @@ inline void download_install_missing_runtimes()
 			cout << "winget not available. Falling back to direct download..." << endl << endl;
 		}
 
-		/* Download/Install runtimes */
+		
 		bool w_runtime_install = false,
 			d_runtime_install = false,
 			a_runtime_install = false,
@@ -378,7 +378,7 @@ inline void download_install_missing_runtimes()
 			}
 		}
 
-		// WebView2 - no winget package, always use download method
+		
 		if (!min_webview_met)
 		{
 			if (!use_winget)
@@ -394,7 +394,7 @@ inline void download_install_missing_runtimes()
 			}
 		}
 
-		// Desktop Runtime - use winget if available
+		
 		if (!min_desktop_runtime_met)
 		{
 			if (use_winget)
@@ -421,7 +421,7 @@ inline void download_install_missing_runtimes()
 			}
 		}
 
-		// ASP.NET Core Runtime - use winget if available
+		
 		if (!min_aspcore_met)
 		{
 			if (use_winget)
@@ -449,7 +449,7 @@ inline void download_install_missing_runtimes()
 			}
 		}
 
-		// VC++ Redistributable - use winget if available (install both x64 and x86)
+		
 		if (!min_vc_met)
 		{
 			if (use_winget)
@@ -481,7 +481,7 @@ inline void download_install_missing_runtimes()
 					cout << "C++ Redistributable 2015-2022 (x86) is already installed via winget." << endl;
 				}
 				
-				// If either was installed, mark as installed
+				
 				if (vc_x64_installed || vc_x86_installed || c_runtime_install)
 				{
 					c_runtime_install = true;
@@ -502,14 +502,14 @@ inline void download_install_missing_runtimes()
 
 		cout << endl;
 
-		// Install downloaded runtimes (only if not using winget)
+		
 		if (!use_winget && (w_runtime_install || d_runtime_install || a_runtime_install || c_runtime_install))
 		{
 			cout << "------------------------------------------------------------------------" << endl << endl <<
 				"One or more are ready for install. If and when prompted if you would like to install, click 'Yes'." << endl << endl;
 
 			if (w_runtime_install)
-				install_runtime(w_runtime_local, w_runtime_name, false); // Does not support "/passive"
+				install_runtime(w_runtime_local, w_runtime_name, false); 
 
 			if (d_runtime_install)
 				install_runtime(d_runtime_local, d_runtime_name, true);
@@ -544,9 +544,9 @@ inline void download_install_missing_runtimes()
 }
 
 
-/// <summary>
-/// Downloads and installs latest C++ runtime, if not installed already
-/// </summary>
+
+
+
 inline void verify_vc()
 {
 	cout << "Downloading C++ Redistributable 2015-2022" << endl;
@@ -577,9 +577,9 @@ inline void verify_vc()
 		install_runtime(c_runtime_local, c_runtime_name, true);
 }
 
-/// <summary>
-/// Downloads and installs latest .NEt runtime, if not installed already
-/// </summary>
+
+
+
 inline void verify_net()
 {
 	cout << "Checking computer for .NET Runtimes. Currently installed:" << endl;

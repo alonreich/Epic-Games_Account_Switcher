@@ -27,7 +27,7 @@ namespace Epic_Games_Account_Switcher_Client
                 try { File.WriteAllText(Path.Combine(Globals.UserDataFolder, "Crash.txt"), ev.ExceptionObject.ToString()); } catch { }
             };
 
-            // Initialize UI Resources
+            
             Resources["HeaderbarBackground"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#14151E"));
             Resources["HeaderbarForeground"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#14151E"));
             Resources["MainBackground"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#00000000"));
@@ -52,18 +52,9 @@ namespace Epic_Games_Account_Switcher_Client
                 return; 
             }
 
-            // Improve portable experience: don't nag if running from a non-program files folder that the user likely chose
-            string currentDir = AppContext.BaseDirectory.TrimEnd('\\');
-            bool inDownloads = currentDir.Contains("Downloads", StringComparison.OrdinalIgnoreCase);
-            bool inDesktop = currentDir.Contains("Desktop", StringComparison.OrdinalIgnoreCase);
-            bool inUserFolder = currentDir.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), StringComparison.OrdinalIgnoreCase);
             
-            bool shouldNagInstall = !Globals.InstalledToProgramFiles() && 
-                                    !e.Args.Contains("--portable") && 
-                                    !File.Exists(Path.Combine(AppContext.BaseDirectory, ".portable")) &&
-                                    !inDownloads && !inDesktop;
-
-            if (shouldNagInstall) { PerformSmartInstall(); return; }
+            bool mustInstall = !Globals.InstalledToProgramFiles();
+            if (mustInstall) { PerformSmartInstall(); return; }
 
             Globals.CreateDataFolder(false);
             Directory.SetCurrentDirectory(Globals.UserDataFolder);
@@ -79,25 +70,68 @@ namespace Epic_Games_Account_Switcher_Client
 
         public static void IsRunningAlready()
         {
-            try { if (!Mutex.WaitOne(TimeSpan.Zero, true)) { NativeFuncs.BringToFront(); Environment.Exit(1056); } }
+            try 
+            { 
+                if (!Mutex.WaitOne(TimeSpan.Zero, true)) 
+                { 
+                    MessageBox.Show("An \"Epic Games Account Switcher\" is instance already running. Please close off any instance of Epic \"Games Account Switcher\" and then try again.", "Already Running", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    NativeFuncs.BringToFront(); 
+                    Environment.Exit(1056); 
+                } 
+            }
             catch (AbandonedMutexException) { }
         }
 
         private void PerformSmartInstall()
         {
-            if (!Environment.GetCommandLineArgs().Contains("--installing"))
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var targetDir = Path.Combine(programFiles, "Epic-Games_Account_Switcher");
+            var targetExePath = Path.Combine(targetDir, "Epic-Games_Account_Switcher.exe");
+
+            bool IsInstalledInAppWiz()
             {
-                var result = MessageBox.Show("Install Epic-Games_Account_Switcher to Program Files?\n\nSelecting 'No' will enable Portable Mode and this message won't appear again.", "Install", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (result == MessageBoxResult.No)
+                const string uninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Epic-Games_Account_Switcher";
+                try
                 {
-                    // Create a marker file to prevent future nagging
-                    try { File.WriteAllText(Path.Combine(AppContext.BaseDirectory, ".portable"), ""); } catch { }
-                    Process.Start(new ProcessStartInfo { FileName = Environment.ProcessPath, Arguments = "--portable", UseShellExecute = true });
+                    using var hklm64 = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
+                    using var key64 = hklm64.OpenSubKey(uninstallKey);
+                    if (key64 != null) return true;
+                }
+                catch { }
+
+                try
+                {
+                    using var hklm32 = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry32);
+                    using var key32 = hklm32.OpenSubKey(uninstallKey);
+                    if (key32 != null) return true;
+                }
+                catch { }
+
+                return false;
+            }
+
+            bool alreadyInstalled = Directory.Exists(targetDir) || File.Exists(targetExePath) || IsInstalledInAppWiz();
+
+            if (!Environment.GetCommandLineArgs().Contains("--installing") && alreadyInstalled)
+            {
+                var choice = MessageBox.Show(
+                    "Epic Games Account Switcher is already installed.\n\n" +
+                    "YES = Reinstall/overwrite existing installation\n" +
+                    "NO = Cancel",
+                    "Existing Installation Detected",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (choice != MessageBoxResult.Yes)
+                {
                     try { Mutex.ReleaseMutex(); } catch { }
                     Environment.Exit(0);
                     return;
                 }
+            }
 
+            if (!Environment.GetCommandLineArgs().Contains("--installing"))
+            {
                 if (!Globals.IsAdministrator)
                 {
                     try 
@@ -105,24 +139,34 @@ namespace Epic_Games_Account_Switcher_Client
                         Process.Start(new ProcessStartInfo { FileName = Environment.ProcessPath, Arguments = "--installing", UseShellExecute = true, Verb = "runas" }); 
                         try { Mutex.ReleaseMutex(); } catch { }
                         Environment.Exit(0); 
-                    } catch { return; }
+                    }
+                    catch
+                    {
+                        MessageBox.Show("Administrator approval is required to install Epic Games Account Switcher. Portable mode is disabled.", "Installation Required", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        try { Mutex.ReleaseMutex(); } catch { }
+                        Environment.Exit(1);
+                        return;
+                    }
                 }
+            }
+
+            if (!Globals.IsAdministrator)
+            {
+                MessageBox.Show("Administrator privileges are required to install Epic Games Account Switcher.", "Installation Required", MessageBoxButton.OK, MessageBoxImage.Error);
+                try { Mutex.ReleaseMutex(); } catch { }
+                Environment.Exit(1);
+                return;
             }
 
             try
             {
                 Globals.KillProcess("Epic-Games_Account_Switcher", true);
-
-                var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-                var targetDir = Path.Combine(programFiles, "Epic-Games_Account_Switcher");
                 
                 if (Directory.Exists(targetDir))
                 {
                     try { Globals.ForceDeleteDirectory(targetDir); } catch { }
                 }
                 Directory.CreateDirectory(targetDir);
-                
-                var targetExePath = Path.Combine(targetDir, "Epic-Games_Account_Switcher.exe");
                 
                 Globals.CopyFilesRecursive(AppDomain.CurrentDomain.BaseDirectory, targetDir, true);
                 if (File.Exists(Environment.ProcessPath)) File.Copy(Environment.ProcessPath, targetExePath, true);
@@ -145,7 +189,7 @@ namespace Epic_Games_Account_Switcher_Client
                     key.SetValue("InstallLocation", targetDir);
                 }
 
-                // Register protocol
+                
                 using (var key = Microsoft.Win32.Registry.ClassesRoot.CreateSubKey("epic-switcher"))
                 {
                     key.SetValue("", "URL:epic-switcher Protocol");
@@ -185,7 +229,16 @@ namespace Epic_Games_Account_Switcher_Client
 
             try
             {
-                // 1. Identify paths before anything else
+                
+                try 
+                {
+                    string downloadsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                    string backupFile = Path.Combine(downloadsFolder, "Epic-Games_Account_Switcher_Backup.zip");
+                    AccountService.BackupAccounts(backupFile);
+                }
+                catch { }
+
+                
                 string installPath = "";
                 string regPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Epic-Games_Account_Switcher";
                 
@@ -195,7 +248,7 @@ namespace Epic_Games_Account_Switcher_Client
                     installPath = key?.GetValue("InstallLocation")?.ToString() ?? "";
                 }
 
-                // 2. Aggressive Kill (excluding current process)
+                
                 var currentPid = Process.GetCurrentProcess().Id;
                 string[] processesToKill = { "Epic-Games_Account_Switcher", "runas" };
                 foreach (var name in processesToKill)
@@ -207,7 +260,7 @@ namespace Epic_Games_Account_Switcher_Client
                     }
                 }
 
-                // 3. Robust Registry Purge (All Views)
+                
                 string[] keysToDelete = {
                     regPath,
                     @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Epic-Games_Account_Switcher",
@@ -230,7 +283,7 @@ namespace Epic_Games_Account_Switcher_Client
                 }
                 try { Microsoft.Win32.Registry.ClassesRoot.DeleteSubKeyTree("epic-switcher", false); } catch { }
 
-                // 4. Shortcut Removal
+                
                 string[] locations = {
                     Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
                     Environment.GetFolderPath(Environment.SpecialFolder.Programs),
@@ -248,10 +301,10 @@ namespace Epic_Games_Account_Switcher_Client
                     } catch { }
                 }
 
-                // 5. Success Message (Critical for PCA and User Feedback)
+                
                 MessageBox.Show("Epic Games Account Switcher has been successfully uninstalled.\n\nRemaining temporary files will be cleaned up automatically.", "Uninstall Complete", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                // 6. Final File Wipe via Background Script
+                
                 var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 var mainDataFolder = Path.Combine(localAppData, "Epic-Games_Account_Switcher");
 

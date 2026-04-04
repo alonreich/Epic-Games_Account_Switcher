@@ -1,18 +1,18 @@
-// Epic-Games_Account_Switcher - A Super fast account switcher
-// Copyright (C) 2019-2025 TroubleChute (Wesley Pyburn)
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// Just note that this requires curl to be installed. I used "vcpkg install curl[openssl]:x64-windows-static" in Microsoft's vcpkg to accomplish that.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #include "Epic-Games_Account_Switcher.hpp"
 #include <iostream>
@@ -67,14 +67,14 @@ bool move_file(const fs::path& src, const fs::path& dest) {
 			}
 			fs::copy_file(src, dest, fs::copy_options::overwrite_existing);
 			fs::remove(src);
-			return true;  // Success
+			return true;  
 		}
 		catch (const fs::filesystem_error& e) {
 			log("Attempt " + std::to_string(attempt + 1) + " to move " + src.string() + " failed: " + e.what());
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	}
-	return false;  // Failed after retries
+	return false;  
 }
 
 void move_recursive(const fs::path& from, const fs::path& to) {
@@ -101,7 +101,7 @@ void move_recursive(const fs::path& from, const fs::path& to) {
 			}
 		}
 
-		// After successful move, remove the source directory
+		
 		fs::remove_all(from);
 
 	}
@@ -130,7 +130,7 @@ int finalizeUpdate(std::string sfrom, std::string sto) {
 
 	move_recursive(from, to);
 
-	// Launch the main program from sto/Epic-Games_Account_Switcher.exe in sto
+	
 	std::string exe_name = "Epic-Games_Account_Switcher.exe";
 	std::string operating_path = sto;
 	if (operating_path.back() != '\\') operating_path += '\\';
@@ -146,17 +146,17 @@ int finalizeUpdate(std::string sfrom, std::string sto) {
 
 int main(int argc, char* argv[])
 {
-	// Goal of this application:
-	// - Check for the existence of required runtimes, and install them if missing. [First run ever on a computer]
-	// --- [Unlikely] Maybe in the future: Verify application folders, and handle zipping and sending error logs? Possibly just the first or none of these.
+	
+	
+	
 	const string operating_path = get_operating_path();
 	SetConsoleTitle(_T("Epic-Games_Account_Switcher - Runtime installer"));
 	cout << "Welcome to the Epic-Games_Account_Switcher - Runtime installer" << endl <<
 		"------------------------------------------------------------------------" << endl << endl;
 
-	// Argument was supplied...
-	// Check if need to install anything.
-	// Otherwise, launch that, assuming it is a program.
+	
+	
+	
 	if (argc > 1)
 	{
 		if (args_contain("finalizeupdate", argc, argv))
@@ -175,7 +175,7 @@ int main(int argc, char* argv[])
 
 		if (args_contain("net", argc, argv))
 		{
-			min_vc_met = true; // Skip over this. Not needed unless CEF enabled --> Checked elsewhere.
+			min_vc_met = true; 
 			verify_net();
 			if (argc > 2)
 				launch_Epic-Games_Account_Switcher_program(argv[argc - 1]);
@@ -243,7 +243,7 @@ int main(int argc, char* argv[])
 
 	cout << "Currently installed runtimes:" << endl;
 
-	/* Find installed runtimes */
+	
 	find_installed_net_runtimes(false, min_webview_met, min_desktop_runtime_met, min_aspcore_met);
 	find_installed_c_runtimes(min_vc_met);
 
@@ -251,7 +251,7 @@ int main(int argc, char* argv[])
 
 	download_install_missing_runtimes();
 
-	// Launch main program:
+	
 	if (!args_contain("nostart", argc, argv)) {
 		string exe_name = "Epic-Games_Account_Switcher.exe";
 
