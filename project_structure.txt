@@ -1,44 +1,187 @@
-# EPIC GAMES ACCOUNT SWITCHER: PROJECT STRUCTURE & GUIDELINES
+# EPIC GAMES ACCOUNT SWITCHER - COMPREHENSIVE PROJECT STRUCTURE (AI AGENT GUIDE)
 
-## COMPILATION MANDATES
-- THE APP MUST ALWAYS BE COMPILED AS A SINGLE-FILE INSTALLATION (.EXE).
-- PRODUCING MULTIPLE FILES OR FOLDERS IN THE COMPILED DIRECTORY IS A CRITICAL FAILURE.
-- TARGET ARCHITECTURE: x64 ONLY.
-- DEPENDENCIES: .NET 8.0 Runtime.
-
-## ARCHITECTURAL OVERVIEW (PURE WPF)
-The application has been migrated from a Blazor/WebView2 hybrid to a **Pure WPF (Native Windows)** architecture. This was done to eliminate browser dependencies, resolve permission issues in Program Files, and improve performance.
-
-### 1. Epic-Games_Account_Switcher-Client (WPF App)
-- **MainWindow.xaml**: The native Windows UI shell. Uses a modern, high-performance card-based layout with deterministic account colors.
-- **MainViewModel.cs**: Handles UI logic, data binding (MVVM), and real-time status updates via `BusyStatus`.
-- **App.xaml.cs**: Handles "Smart Install", elevation, and singleton process management.
-- **NO MORE WEBVIEW2**: The application is strictly native WPF. All legacy Chromium/WebView2 files have been purged.
-
-### 2. Epic-Games_Account_Switcher-Globals (Shared Logic)
-- **AccountService.cs**: The core "engine". Handles process termination, registry swapping, and safe "temporary-then-swap" file copying for account switching and capture.
-- **AccountModel.cs**: Data structure for Epic Games accounts, including visual properties like `AccentColor`.
-- **Globals.cs**: Shared utilities for file management, encryption, and logging.
-- **Registry.cs**: Safe registry reading/writing utilities.
-
-### 3. SingleFilePacker (.NET Utility)
-- **Role**: A bootstrapper that bundles the entire `Payload` directory into a single `.zip` resource within the final EXE.
-- **Function**: On launch, it extracts the payload to a temporary directory and executes the main WPF client.
-
-### 4. Installer (C++ Bootstrapper)
-- Handles runtime checks and initial setup.
-- Bundled via NSIS for the final setup experience.
-
-## DATA STORAGE GUIDELINES
-- **Portable Mode**: If run from a user-owned folder, data is stored in the local directory.
-- **Installed Mode**: If run from `C:\Program Files`, data is strictly stored in:
-  `%LOCALAPPDATA%\Epic-Games_Account_Switcher\LoginCache\Epic_Games`
-- This separation avoids Windows permission errors and ensures data persistence across updates.
-
-## OTHER ASSETS
-- **other/**: Contains web infrastructure (PHP/API) and legacy website files. These are not part of the core desktop application logic.
+## 1) PROJECT PURPOSE
+Epic Games Account Switcher is a Windows-focused account/session switcher for Epic Games Launcher.
+Core goals:
+- Capture currently logged-in Epic account session into local managed storage.
+- Switch between saved account sessions safely and quickly.
+- Present account cards in a modern WPF UI.
+- Package final distribution as a single EXE for simple delivery.
 
 
-## CRITICAL GUIDELINES
-- **Zero tolorance for junk left over resudes files or folder which are no longer in use for the project
-- **Delete any files or folders which are not in use, or you had created for a temporary task/use.
+## 2) SOLUTION / TOP-LEVEL MODULES
+
+### A) Epic-Games_Account_Switcher-Client (WPF UI)
+Primary desktop application (UI + interaction orchestration).
+Important files:
+- App.xaml / App.xaml.cs
+  - Entry point logic.
+  - Install-mode enforcement, elevation flow, uninstall flow.
+  - Single-instance mutex checks.
+- MainWindow.xaml / MainWindow.xaml.cs
+  - Main account cards screen.
+  - Drag-and-drop card reordering with animated layout transitions.
+  - Capture flow trigger and top-level window controls.
+- MainViewModel.cs
+  - Main MVVM logic, commands, async operations.
+  - Account load/switch/backup/restore command handling.
+- CaptureAccountWindow.xaml / .cs
+  - Modal wizard to capture current account metadata and profile image.
+- SkinPickerWindow.xaml / .cs
+  - Skin/image picker; loads from runtime and fallback directories.
+- CustomMessageBox.xaml / .cs
+  - Unified custom prompt UI.
+
+
+### B) Epic-Games_Account_Switcher-Globals (Shared Core Logic)
+Reusable shared logic used by client and runtime operations.
+Important files:
+- AccountService.cs
+  - Core session engine:
+    - Detect current Epic account identity.
+    - Capture current session files and registry state.
+    - Switch to saved sessions with rollback protection.
+    - Backup/restore account package.
+- AccountModel.cs
+  - Account entity model used in UI and persistence.
+- Globals.cs
+  - Common utilities: logging, file ops, process handling, shortcuts.
+- Registry.cs
+  - Registry read/write helpers and key path helpers.
+- AppSettings.cs
+  - App settings persistence for window config and behavior.
+- Strings.resx / Strings.Designer.cs
+  - Localized/static string resources used by app.
+
+
+### C) runas (Auxiliary process)
+Small helper process/project used for elevated/isolated execution scenarios.
+
+
+### D) SingleFilePacker (Pack + bootstrap runtime)
+Creates and uses packed payload archive for single-file distribution.
+Important file:
+- SingleFilePacker/Program.cs
+  - --pack mode: creates Payload.zip from Payload directory.
+  - Runtime mode: extracts payload to runtime location and launches main app.
+
+
+### E) Installer (C++ redistributable/bootstrap installer)
+C++ bootstrapper component with runtime checks and installation metadata.
+Important files:
+- Installer.cpp
+- epic-games_account_switcher.hpp
+- runtime_check.hpp
+- versions.h
+- Installer.vcxproj
+- Installer.rc
+
+
+### F) Payload (runtime publish content)
+Staging folder for all files required by packaged app runtime.
+Contains:
+- Main app binaries
+- dependencies (*.dll, runtimeconfig, deps)
+- localized folders
+- Skins_Icons and runas payload
+
+
+### G) compiled (final delivery output)
+Final expected output location for deliverable build artifact.
+Required deliverable pattern:
+- compiled/Epic-Games_Account_Switcher.exe
+
+
+## 3) BUILD + PACKAGING PIPELINE (CURRENT EXPECTED FLOW)
+1. Build solution:
+   dotnet build Epic-Games_Account_Switcher.sln -c Release -p:Platform=x64
+2. Publish client into Payload:
+   dotnet publish Epic-Games_Account_Switcher-Client/... -o Payload
+3. Publish runas into Payload/runas:
+   dotnet publish runas/runas.csproj ... -o Payload/runas
+4. Pack payload zip:
+   dotnet run --project SingleFilePacker/SingleFilePacker.csproj -c Release -- --pack
+5. Publish SingleFilePacker as final single EXE to compiled:
+   dotnet publish SingleFilePacker/SingleFilePacker.csproj ... -o compiled
+
+Result should be a single-file app in compiled folder.
+
+
+## 4) RUNTIME DATA + STORAGE MODEL
+
+### User data root
+- %LOCALAPPDATA%\Epic-Games_Account_Switcher
+
+### Important runtime files/folders
+- Crash.txt (unhandled crash output)
+- logs/main-log.txt (operational logging)
+- LoginCache/Epic_Games/accounts.json (persisted account list)
+- LoginCache/Epic_Games/<AccountId>/... (captured per-account session data)
+
+
+## 5) ACCOUNT SWITCH ENGINE (HIGH LEVEL)
+- Detect metadata from registry + Epic launcher files/logs.
+- Capture current session (webcache/session folders + selected registry values).
+- Save atomically with temp/swap patterns to reduce corruption risk.
+- On switch:
+  - close Epic processes,
+  - save current active snapshot,
+  - restore selected account snapshot,
+  - apply registry identity values,
+  - relaunch Epic launcher URI.
+- Includes rollback/safety backup strategy if switch fails mid-operation.
+
+
+## 6) UI/UX IMPLEMENTATION NOTES (CURRENT STATE)
+- Account cards render in WPF with custom templates.
+- Active card indicator strip uses distinct active/non-active colors.
+- Context menu supports edit/delete actions.
+- Drag-and-drop reorder supported with throttled preview moves and animated wrap panel transitions.
+- Capture wizard requires friendly-name input and supports custom profile image selection.
+
+
+## 7) INSTALLER / INSTALL MODE BEHAVIOR
+- App enforces installed mode (Program Files path checks in startup flow).
+- Existing installation detection includes path + AppWiz registry checks.
+- Reinstall/overwrite confirmation dialog logic exists when install is already present.
+- Uninstall path includes shortcut/registry cleanup and data cleanup script flow.
+
+
+## 8) REPOSITORY HOTSPOTS FOR FUTURE AGENTS
+If behavior breaks, check these first:
+- Capture/switch failures:
+  - Epic-Games_Account_Switcher-Globals/AccountService.cs
+- Startup/install issues:
+  - Epic-Games_Account_Switcher-Client/App.xaml.cs
+- UI command/interaction issues:
+  - Epic-Games_Account_Switcher-Client/MainViewModel.cs
+  - Epic-Games_Account_Switcher-Client/MainWindow.xaml(.cs)
+- Packaging/single-file output issues:
+  - SingleFilePacker/Program.cs
+  - Payload content and publish commands
+
+
+## 9) CONSTRAINTS + EXPECTATIONS FOR CHANGES
+- Target OS: Windows.
+- Target architecture: x64.
+- Maintain single-file deliverable behavior to compiled folder.
+- Prefer safe file replacement (temp + swap) for session-critical operations.
+- Preserve account JSON shape and registry swap semantics unless intentionally migrating format.
+- Keep UI interactions non-blocking where possible (async + busy indicators).
+
+
+## 10) QUICK OPERATIONAL CHECKLIST FOR AN AI AGENT
+Before coding:
+1. Read App.xaml.cs, MainViewModel.cs, MainWindow.xaml.cs, AccountService.cs.
+2. Confirm current build compiles.
+
+When modifying functionality:
+1. Apply targeted changes.
+2. Rebuild solution (Release x64).
+3. Re-run full packaging pipeline to compiled.
+4. Verify compiled/Epic-Games_Account_Switcher.exe exists and is updated.
+
+When debugging crashes:
+1. Inspect %LOCALAPPDATA%\Epic-Games_Account_Switcher\Crash.txt
+2. Inspect %LOCALAPPDATA%\Epic-Games_Account_Switcher\logs\main-log.txt
+3. Correlate stack frame to file/line in Client or Globals.

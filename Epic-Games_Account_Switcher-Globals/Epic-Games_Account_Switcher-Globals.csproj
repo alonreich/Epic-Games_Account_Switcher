@@ -3,12 +3,12 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>Epic_Games_Account_Switcher_Globals</RootNamespace>
-    <Copyright>Copyright © TroubleChute (Wesley Pyburn) 2019-2025</Copyright>
-    <Authors>TroubleChute (Wesley Pyburn)</Authors>
-    <Company>TroubleChute (Wesley Pyburn)</Company>
-    <PackageProjectUrl>https://github.com/EPIC-GAMES_ACCOUNT_SWITCHERCo/Epic-Games_Account_Switcher</PackageProjectUrl>
-    <PackageIcon>Epic-Games_Account_SwitcherAccSw-Icon-100x100.png</PackageIcon>
-    <RepositoryUrl>https://github.com/EPIC-GAMES_ACCOUNT_SWITCHERCo/Epic-Games_Account_Switcher</RepositoryUrl>
+    <Copyright>Copyright © Epic-Games_Account_Switcher Team 2019-2026</Copyright>
+    <Authors>Epic-Games_Account_Switcher Team</Authors>
+    <Company>Epic-Games_Account_Switcher Team</Company>
+    <PackageProjectUrl>https://github.com/alonreich/Epic-Games_Account_Switcher</PackageProjectUrl>
+    <PackageIcon>Epic-Games_Account_Switcher.png</PackageIcon>
+    <RepositoryUrl>https://github.com/alonreich/Epic-Games_Account_Switcher</RepositoryUrl>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
   </PropertyGroup>
@@ -42,7 +42,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\Epic-Games_Account_Switcher-Server\wwwroot\img\Epic-Games_Account_SwitcherAccSw-Icon-100x100.png">
+    <None Include="..\Application_Icons\Epic-Games_Account_Switcher.png">
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>

@@ -9,7 +9,7 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <ApplicationIcon>new_icon.ico</ApplicationIcon>
+    <ApplicationIcon>..\Application_Icons\Epic-Games_Account_Switcher.ico</ApplicationIcon>
     <AssemblyName>Epic-Games_Account_Switcher</AssemblyName>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>

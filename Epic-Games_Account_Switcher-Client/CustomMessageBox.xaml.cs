@@ -5,7 +5,7 @@ using System.Windows.Input;
 namespace Epic_Games_Account_Switcher_Client
 {
 
-    public partial class CustomMessageBox
+    public partial class CustomMessageBox : Window
     {
         private void BtnExit(object sender, RoutedEventArgs e) =>
             Close();
@@ -89,4 +89,5 @@ namespace Epic_Games_Account_Switcher_Client
         }
     }
 }
+
 

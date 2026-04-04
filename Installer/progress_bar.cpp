@@ -8,11 +8,11 @@ ProgressBar::ProgressBar(unsigned long n_, const char* description_, std::ostrea
 	out = &out_;
 	unit_bar = "=";
 	unit_space = " ";
-	desc_width = std::strlen(description);	// character width of description field
+	desc_width = std::strlen(description);	
 }
 void ProgressBar::SetFrequencyUpdate(unsigned long frequency_update_) {
 	if (frequency_update_ > n) {
-		frequency_update = n;	 // prevents crash if freq_updates_ > n_
+		frequency_update = n;	 
 	}
 	else {
 		frequency_update = frequency_update_;
@@ -30,7 +30,7 @@ int ProgressBar::GetConsoleWidth() {
 }
 int ProgressBar::GetBarLength() const
 {
-	// get console width and according adjust the length of the progress bar
+	
 	const int bar_length = static_cast<int>((static_cast<double>(GetConsoleWidth()) - static_cast<double>(desc_width) - CHARACTER_WIDTH_PERCENTAGE) / 2.);
 	return bar_length;
 }
@@ -45,15 +45,15 @@ void ProgressBar::Progressed(unsigned long idx_)
 {
 	try {
 		if (idx_ > n) throw idx_;
-		// determines whether to update the progress bar from frequency_update
+		
 		if ((idx_ != n) && (idx_ % (n / frequency_update) != 0)) return;
-		// calculate the size of the progress bar
+		
 		const int bar_size = GetBarLength();
-		// calculate percentage of progress
+		
 		const double progress_percent = idx_ * TOTAL_PERCENTAGE / n;
-		// calculate the percentage value of a unit bar
+		
 		const double percent_per_unit_bar = TOTAL_PERCENTAGE / bar_size;
-		// display progress bar
+		
 		*out << " " << description << " [";
 		for (int bar_length = 0; bar_length <= bar_size - 1; ++bar_length) {
 			if (bar_length * percent_per_unit_bar < progress_percent) {

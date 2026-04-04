@@ -5,8 +5,8 @@
     <RootNamespace>Epic_Games_Account_Switcher_Client</RootNamespace>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationIcon>new_icon.ico</ApplicationIcon>
-    <Version>2026.03.25</Version>
+    <ApplicationIcon>..\Application_Icons\Epic-Games_Account_Switcher.ico</ApplicationIcon>
+    <Version>2026.04.01.1310</Version>
     <Authors>Epic-Games_Account_Switcher Team</Authors>
     <Product>Epic-Games_Account_Switcher</Product>
     <AssemblyName>Epic-Games_Account_Switcher</AssemblyName>
@@ -14,10 +14,7 @@
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Resource Include="favicon.ico" />
-    <Resource Include="new_icon.ico" />
-  </ItemGroup>
+
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.5" />
@@ -25,6 +22,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Epic-Games_Account_Switcher-Globals\Epic-Games_Account_Switcher-Globals.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="..\Application_Icons\Epic-Games_Account_Switcher.ico">
+      <Link>Application_Icons\Epic-Games_Account_Switcher.ico</Link>
+    </Resource>
   </ItemGroup>
 
   <Target Name="CopySkins" AfterTargets="Build">
