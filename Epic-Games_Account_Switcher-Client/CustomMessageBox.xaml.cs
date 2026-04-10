@@ -1,18 +1,14 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 
 namespace Epic_Games_Account_Switcher_Client
 {
-
     public partial class CustomMessageBox : Window
     {
-        private void BtnExit(object sender, RoutedEventArgs e) =>
-            Close();
-        private void BtnMinimize(object sender, RoutedEventArgs e) =>
-            WindowHandling.BtnMinimize(sender, e, this);
-        private void DragWindow(object sender, MouseButtonEventArgs e) =>
-            WindowHandling.DragWindow(sender, e, this);
+        private void BtnExit(object sender, RoutedEventArgs e) => Close();
+        private void BtnMinimize(object sender, RoutedEventArgs e) => WindowHandling.BtnMinimize(sender, e, this);
+        private void DragWindow(object sender, MouseButtonEventArgs e) => WindowHandling.DragWindow(sender, e, this);
 
         public CustomMessageBox(string title, string text)
         {
@@ -20,10 +16,42 @@ namespace Epic_Games_Account_Switcher_Client
             Title = title;
             HeaderInstruction.Content = title;
             Message.Text = text;
+            
+            // If the message is short, center it for better aesthetics
+            if (text.Length < 100 && !text.Contains("\n"))
+            {
+                Message.TextAlignment = TextAlignment.Center;
+            }
+        }
+
+        public CustomMessageBox(string title, string text, string okText, string noText) : this(title, text)
+        {
+            ButtonOk.Content = okText;
+            ButtonNo.Content = noText;
+            ButtonNo.Visibility = Visibility.Visible;
+        }
+
+        public CustomMessageBox(string title, string text, string okText, string noText, string cancelText) : this(title, text, okText, noText)
+        {
+            ButtonCancel.Content = cancelText;
+            ButtonCancel.Visibility = Visibility.Visible;
         }
 
         private void ButtonOk_OnClick(object sender, RoutedEventArgs e)
         {
+            DialogResult = true;
+            Close();
+        }
+
+        private void ButtonNo_OnClick(object sender, RoutedEventArgs e)
+        {
+            DialogResult = false;
+            Close();
+        }
+
+        private void ButtonCancel_OnClick(object sender, RoutedEventArgs e)
+        {
+            DialogResult = null;
             Close();
         }
     }
@@ -89,5 +117,3 @@ namespace Epic_Games_Account_Switcher_Client
         }
     }
 }
-
-

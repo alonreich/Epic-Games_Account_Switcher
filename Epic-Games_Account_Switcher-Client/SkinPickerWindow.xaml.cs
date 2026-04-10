@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using Epic_Games_Account_Switcher_Globals;
 
 namespace Epic_Games_Account_Switcher_Client
 {
@@ -20,55 +21,67 @@ namespace Epic_Games_Account_Switcher_Client
         {
             try
             {
-                var skinFiles = new List<string>();
+                var skinMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-                
-                string skinsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skins_Icons");
-                if (Directory.Exists(skinsDir))
+                // Paths to scan
+                var searchPaths = new List<string>
                 {
-                    skinFiles.AddRange(Directory.GetFiles(skinsDir, "*.*"));
+                    Path.Combine(Globals.UserDataFolder, "Skin_Icons"),
+                    Path.Combine(baseDir, "Skin_Icons"),
+                    Path.Combine(baseDir, "..", "Payload", "Skin_Icons"),
+                    @"C:\Full_Control\Epic-Games_Account_Switcher\Skin_Icons"
+                };
+
+                foreach (var path in searchPaths)
+                {
+                    if (!Directory.Exists(path)) continue;
+
+                    var files = Directory.GetFiles(path, "*.*")
+                        .Where(f => f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase));
+
+                    foreach (var file in files)
+                    {
+                        var fileName = Path.GetFileName(file);
+                        // Favor earlier paths (UserData) if duplicate filename found
+                        if (!skinMap.ContainsKey(fileName))
+                        {
+                            skinMap[fileName] = file;
+                        }
+                    }
                 }
 
-                
-                string projectSkinsDir = Path.GetFullPath("Payload\\Skins_Icons");
-                if (Directory.Exists(projectSkinsDir))
-                {
-                    skinFiles.AddRange(Directory.GetFiles(projectSkinsDir, "*.*"));
-                }
+                Globals.WriteToLog($"[UI] Total unique skins identified: {skinMap.Count}");
 
-                
-                string externalSkinsDir = Path.GetFullPath("Skin_Icons");
-                if (Directory.Exists(externalSkinsDir))
-                {
-                    skinFiles.AddRange(Directory.GetFiles(externalSkinsDir, "*.*"));
-                }
-
-                var files = skinFiles
-                    .Where(f => f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                                f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                                f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                                f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                var finalItems = skinMap.Values
                     .Select(f => new SkinItem { FullPath = f })
+                    .OrderBy(s => Path.GetFileName(s.FullPath))
                     .ToList();
 
-                if (files.Count == 0) return;
+                if (finalItems.Count == 0)
+                {
+                    Globals.WriteToLog("[ERROR] No skin icons found in any search path!");
+                    return;
+                }
 
-                SkinsList.ItemsSource = files;
+                SkinsList.ItemsSource = finalItems;
 
-                
-                var defaultGuy = files.FirstOrDefault(f => f.FullPath.Contains("Default_Skin_Guy"));
+                var defaultGuy = finalItems.FirstOrDefault(f => f.FullPath.Contains("Default_Skin_Guy"));
                 if (defaultGuy != null)
                 {
                     SkinsList.SelectedItem = defaultGuy;
                 }
-                else if (files.Count > 0)
+                else if (finalItems.Count > 0)
                 {
                     SkinsList.SelectedIndex = 0;
                 }
             }
             catch (Exception ex)
             {
+                Globals.WriteToLog("[ERROR] Critical error loading skin picker.", ex);
                 MessageBox.Show("Error loading skins: " + ex.Message);
             }
         }

@@ -14,19 +14,22 @@ namespace Epic_Games_Account_Switcher_Client
         public string ProfileImagePath { get; private set; }
 
         public string AccountEmail { get; private set; }
+        public string AccountPassword { get; private set; }
 
-        public CaptureAccountWindow(string name = "", string description = "", string email = "", string imagePath = "")
+        public CaptureAccountWindow(string name = "", string description = "", string email = "", string imagePath = "", string password = "")
         {
             InitializeComponent();
             
             AccountName = name;
             AccountDescription = description;
             AccountEmail = email;
+            AccountPassword = password;
             ProfileImagePath = string.IsNullOrWhiteSpace(imagePath) ? AccountService.GetDefaultProfileImagePath() : imagePath;
 
             AccountNameInput.Text = string.IsNullOrEmpty(name) ? "" : name;
             AccountDescriptionInput.Text = description;
             AccountEmailInput.Text = string.IsNullOrWhiteSpace(email) || email == "N/A" ? "" : email;
+            AccountPasswordInput.Password = string.IsNullOrWhiteSpace(password) ? "" : password;
 
             UpdateProfileImage();
             AccountNameInput.Focus();
@@ -38,9 +41,9 @@ namespace Epic_Games_Account_Switcher_Client
             {
                 ProfileImagePath,
                 AccountService.GetDefaultProfileImagePath(),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skins_Icons", "Default_Skin_Guy.jpg"),
-                Path.GetFullPath("Payload\\Skins_Icons\\Default_Skin_Guy.jpg"),
-                Path.GetFullPath("Skin_Icons\\Default_Skin_Guy.jpg")
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons", "Lizard_Skin.jpg"),
+                Path.GetFullPath("Payload\\Skin_Icons\\Lizard_Skin.jpg"),
+                Path.GetFullPath("Skin_Icons\\Lizard_Skin.jpg")
             };
 
             foreach (var candidate in candidates)
@@ -96,6 +99,7 @@ namespace Epic_Games_Account_Switcher_Client
             AccountName = friendlyName;
             AccountDescription = AccountDescriptionInput.Text ?? string.Empty;
             AccountEmail = AccountEmailInput.Text?.Trim() ?? string.Empty;
+            AccountPassword = AccountPasswordInput.Password ?? string.Empty;
             ProfileImagePath = string.IsNullOrWhiteSpace(ProfileImagePath) ? AccountService.GetDefaultProfileImagePath() : ProfileImagePath;
 
             DialogResult = true;

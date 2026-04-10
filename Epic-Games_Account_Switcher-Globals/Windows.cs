@@ -1,4 +1,4 @@
-﻿
+
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Threading;
+using System.Text;
 
 namespace Epic_Games_Account_Switcher_Globals
 {
@@ -54,6 +55,28 @@ namespace Epic_Games_Account_Switcher_Globals
         public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, int wParam, int lParam);
         [DllImport("user32.dll")]
         public static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern int GetWindowText(IntPtr hWnd, StringBuilder strText, int maxCount);
+
+        [DllImport("user32.dll")]
+        public static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
+
+        [DllImport("user32.dll")]
+        public static extern bool GetWindowRect(IntPtr hWnd, out Rect lpRect);
+
+        [DllImport("user32.dll")]
+        public static extern bool ClientToScreen(IntPtr hWnd, ref System.Drawing.Point lpPoint);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
+        public static extern IntPtr GetForegroundWindow();
 
         public struct TokenPrivileges
         {
@@ -416,15 +439,22 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public static bool AttachToConsole(int dwProcessId) => NativeMethods.AttachConsole(dwProcessId);
 
+        private const int SwRestore = 9;
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
         public static bool BringToFront()
         {
+            var currentPid = Process.GetCurrentProcess().Id;
+            var proc = Process.GetProcessesByName("Epic-Games_Account_Switcher")
+                .FirstOrDefault(p => p.Id != currentPid);
 
-            var proc = Process.GetProcessesByName("Epic-Games_Account_Switcher").FirstOrDefault();
             if (proc == null || proc.MainWindowHandle == IntPtr.Zero) return false;
-            const int swRestore = 9;
+
             var hwnd = proc.MainWindowHandle;
-            ShowWindow(hwnd);
-            _ = NativeMethods.ShowWindow(hwnd, swRestore);
+            ShowWindowAsync(hwnd, 5);           
+            ShowWindowAsync(hwnd, SwRestore);
             _ = NativeMethods.SetForegroundWindow(hwnd);
             return true;
         }
