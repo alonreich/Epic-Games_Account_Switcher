@@ -1,4 +1,4 @@
-﻿<Window x:Class="Epic_Games_Account_Switcher_Client.CustomMessageBox"
+<Window x:Class="Epic_Games_Account_Switcher_Client.CustomMessageBox"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -36,6 +36,10 @@
 			</Canvas>
             <TextBlock Name="Message" Grid.Column="1" Style="{StaticResource ErrorMessageBox}" Margin="15,0,15,0" />
 		</Grid>
-        <Button Grid.Row="2" Name="ButtonOk" Margin="0 0 15,10" Style="{StaticResource OkButton}" Click="ButtonOk_OnClick">OK</Button>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0 0 15,10">
+            <Button Name="ButtonOk" Margin="10,0,0,0" Style="{StaticResource OkButton}" Click="ButtonOk_OnClick">OK</Button>
+            <Button Name="ButtonNo" Margin="10,0,0,0" Style="{StaticResource OkButton}" Click="ButtonNo_OnClick" Visibility="Collapsed">NO</Button>
+            <Button Name="ButtonCancel" Margin="10,0,0,0" Style="{StaticResource OkButton}" Click="ButtonCancel_OnClick" Visibility="Collapsed">CANCEL</Button>
+        </StackPanel>
 	</Grid>
 </Window>

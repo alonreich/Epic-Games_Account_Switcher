@@ -39,7 +39,7 @@ namespace Epic_Games_Account_Switcher_Globals
         }
 
         [SupportedOSPlatform("windows")]
-        public static bool TryReadRegistryKey(string encodedPath, out dynamic result)
+        public static bool TryReadRegistryKey(string encodedPath, out string result)
         {
             result = null;
             var (rootKey, path, subKey) = ExplodeRegistryKey(encodedPath);
@@ -47,17 +47,28 @@ namespace Epic_Games_Account_Switcher_Globals
 
             try
             {
-                var val = rootKey.OpenSubKey(path)?.GetValue(subKey);
-                if (val != null)
+                using var key = rootKey.OpenSubKey(path);
+                if (key == null) return false;
+
+                // Check if value exists to avoid exception in GetValueKind
+                if (key.GetValue(subKey) == null) return false;
+
+                var kind = key.GetValueKind(subKey);
+                var val = key.GetValue(subKey);
+
+                if (val == null) return false;
+
+                result = kind switch
                 {
-                    result = val;
-                    return true;
-                }
-                return false;
+                    RegistryValueKind.Binary => "bin:" + BitConverter.ToString((byte[])val).Replace("-", ""),
+                    RegistryValueKind.DWord => "dw:" + val,
+                    _ => "sz:" + val
+                };
+
+                return true;
             }
-            catch (Exception e)
+            catch
             {
-                WriteToLog("TryReadRegistryKey failed", e);
                 return false;
             }
         }
@@ -72,6 +83,35 @@ namespace Epic_Games_Account_Switcher_Globals
         }
 
         [SupportedOSPlatform("windows")]
+        public static bool DeleteRegistryValue(string encodedPath)
+        {
+            var (rootKey, path, subKey) = ExplodeRegistryKey(encodedPath);
+            if (rootKey == null || path == null || subKey == null) return false;
+
+            try
+            {
+                using var key = rootKey.OpenSubKey(path, true);
+                if (key == null) 
+                {
+                    Globals.WriteToLog($"[REG] Skipping deletion: Key path not found ({path})");
+                    return true;
+                }
+                
+                if (key.GetValue(subKey) != null)
+                {
+                    key.DeleteValue(subKey, false);
+                    Globals.WriteToLog($"[REG] Successfully deleted value: {subKey} from {path}");
+                }
+                return true;
+            }
+            catch (Exception e)
+            {
+                Globals.WriteToLog($"[REG] ERROR: Failed to delete value {subKey} from {path}", e);
+                return false;
+            }
+        }
+
+        [SupportedOSPlatform("windows")]
         public static bool SetRegistryKey(string encodedPath, string value = "")
         {
             var (rootKey, path, subKey) = ExplodeRegistryKey(encodedPath);
@@ -80,17 +120,42 @@ namespace Epic_Games_Account_Switcher_Globals
             try
             {
                 using var key = rootKey.CreateSubKey(path);
-                if (value.StartsWith("(hex)"))
+                if (key == null) 
                 {
-                    value = value[6..];
-                    key?.SetValue(subKey, StringToByteArray(value));
+                    Globals.WriteToLog($"[REG] ERROR: Could not create/open registry path: {path}");
+                    return false;
+                }
+
+                if (string.IsNullOrEmpty(value))
+                {
+                    key.SetValue(subKey, "");
+                    Globals.WriteToLog($"[REG] Set {subKey} to empty string.");
+                    return true;
+                }
+
+                if (value.StartsWith("bin:"))
+                {
+                    key.SetValue(subKey, StringToByteArray(value[4..]), RegistryValueKind.Binary);
+                }
+                else if (value.StartsWith("dw:"))
+                {
+                    if (int.TryParse(value[3..], out int intVal))
+                        key.SetValue(subKey, intVal, RegistryValueKind.DWord);
+                }
+                else if (value.StartsWith("sz:"))
+                {
+                    key.SetValue(subKey, value[3..], RegistryValueKind.String);
                 }
                 else
-                    key?.SetValue(subKey, value);
+                {
+                    key.SetValue(subKey, value, RegistryValueKind.String);
+                }
+
+                Globals.WriteToLog($"[REG] Successfully restored identity key: {subKey}");
             }
             catch (Exception e)
             {
-                WriteToLog("SetRegistryKey failed", e);
+                Globals.WriteToLog($"[REG] ERROR: Failed to set key {subKey} at {path}", e);
                 return false;
             }
 

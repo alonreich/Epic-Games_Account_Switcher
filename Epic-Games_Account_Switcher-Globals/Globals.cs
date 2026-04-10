@@ -45,9 +45,17 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public static string GetLogPath()
         {
-            var logsFolder = Path.Combine(UserDataFolder, "logs");
-            if (!Directory.Exists(logsFolder)) try { Directory.CreateDirectory(logsFolder); } catch { }
-            return Path.Combine(logsFolder, "main-log.txt");
+            try
+            {
+                var exePath = Process.GetCurrentProcess().MainModule.FileName;
+                var installDir = Path.GetDirectoryName(exePath);
+                var logName = Path.GetFileNameWithoutExtension(exePath) + ".log";
+                return Path.Combine(installDir, logName);
+            }
+            catch
+            {
+                return Path.Combine(UserDataFolder, "Epic-Games_Account_Switcher.log");
+            }
         }
 
         public static void WriteToLog(string msg, Exception ex = null)
@@ -57,10 +65,27 @@ namespace Epic_Games_Account_Switcher_Globals
                 string logPath = GetLogPath();
                 FileInfo fi = new FileInfo(logPath);
                 
-                
                 if (fi.Exists && fi.Length > 5 * 1024 * 1024)
                 {
-                    File.WriteAllText(logPath, $"--- Log reset at {DateTime.Now} due to size limit (5MB) ---\n");
+                    // "new data deletes old data" - Keep the last 1MB of logs to maintain context
+                    try
+                    {
+                        byte[] buffer = new byte[1024 * 1024]; // 1MB
+                        using (var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                        {
+                            fs.Seek(-buffer.Length, SeekOrigin.End);
+                            fs.Read(buffer, 0, buffer.Length);
+                        }
+                        string tail = Encoding.UTF8.GetString(buffer);
+                        int firstNewline = tail.IndexOf('\n');
+                        if (firstNewline != -1) tail = tail.Substring(firstNewline + 1);
+
+                        File.WriteAllText(logPath, $"--- Log Rotated at {DateTime.Now} (Size > 5MB) ---\n" + tail);
+                    }
+                    catch
+                    {
+                        File.WriteAllText(logPath, $"--- Log reset at {DateTime.Now} due to size limit (5MB) ---\n");
+                    }
                 }
 
                 string content = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {msg}" + (ex != null ? $"\n[EXCEPTION] {ex.Message}\nStack: {ex.StackTrace}" : "") + "\n";
@@ -81,12 +106,31 @@ namespace Epic_Games_Account_Switcher_Globals
         public static void ForceDeleteDirectory(string path)
         {
             if (!Directory.Exists(path)) return;
-            var directory = new DirectoryInfo(path) { Attributes = FileAttributes.Normal };
-            foreach (var info in directory.GetFileSystemInfos("*", SearchOption.AllDirectories))
+            WriteToLog($"[IO] Force Deleting Directory: {path}");
+
+            for (int i = 0; i < 5; i++)
             {
-                info.Attributes = FileAttributes.Normal;
+                try
+                {
+                    var directory = new DirectoryInfo(path) { Attributes = FileAttributes.Normal };
+                    foreach (var info in directory.GetFileSystemInfos("*", SearchOption.AllDirectories))
+                    {
+                        info.Attributes = FileAttributes.Normal;
+                    }
+                    directory.Delete(true);
+                    return;
+                }
+                catch (IOException)
+                {
+                    if (i == 4) throw;
+                    Thread.Sleep(500 * (i + 1));
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    if (i == 4) throw;
+                    Thread.Sleep(500 * (i + 1));
+                }
             }
-            directory.Delete(true);
         }
 
         public static void CreateDataFolder(bool overwrite)
@@ -132,7 +176,11 @@ namespace Epic_Games_Account_Switcher_Globals
 
                     foreach (var p in processes) 
                     {
-                        try { p.Kill(true); } catch { } 
+                        try 
+                        {
+                            WriteToLog($"[PROC] Terminating process: {p.ProcessName} (PID: {p.Id})");
+                            p.Kill(true); 
+                        } catch { } 
                     }
 
                     if (wait)
@@ -160,6 +208,30 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public static bool DeleteFile(string path, bool throwErr = false) { try { if (File.Exists(path)) File.Delete(path); return true; } catch (IOException) { return false; } catch (Exception) { if (throwErr) throw; return false; } }
 
+        public static async Task<T> RetryAsync<T>(Func<Task<T>> action, int maxRetries = 5, int delayMs = 500, bool throwOnFailure = false)
+        {
+            for (int i = 0; i < maxRetries; i++)
+            {
+                try { return await action(); }
+                catch (IOException) when (i < maxRetries - 1) { await Task.Delay(delayMs * (i + 1)); }
+                catch (UnauthorizedAccessException) when (i < maxRetries - 1) { await Task.Delay(delayMs * (i + 1)); }
+            }
+            if (throwOnFailure) return await action();
+            try { return await action(); } catch { return default; }
+        }
+
+        public static async Task RetryActionAsync(Func<Task> action, int maxRetries = 5, int delayMs = 500, bool throwOnFailure = false)
+        {
+            for (int i = 0; i < maxRetries; i++)
+            {
+                try { await action(); return; }
+                catch (IOException) when (i < maxRetries - 1) { await Task.Delay(delayMs * (i + 1)); }
+                catch (UnauthorizedAccessException) when (i < maxRetries - 1) { await Task.Delay(delayMs * (i + 1)); }
+            }
+            if (throwOnFailure) await action();
+            else try { await action(); } catch { }
+        }
+
         public static string ReadAllText(string f) { using var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite); using var tr = new StreamReader(fs); return tr.ReadToEnd(); }
 
         public static async Task<bool> CopyFilesRecursiveAsync(string inputFolder, string outputFolder, bool overwrite = true, List<string> excludeFolders = null)
@@ -168,6 +240,7 @@ namespace Epic_Games_Account_Switcher_Globals
             {
                 try
                 {
+                    WriteToLog($"[IO] Recursive Copy (Async): {inputFolder} -> {outputFolder}");
                     inputFolder = Path.GetFullPath(inputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
                     outputFolder = Path.GetFullPath(outputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
                     Directory.CreateDirectory(outputFolder);
@@ -188,18 +261,23 @@ namespace Epic_Games_Account_Switcher_Globals
                         string df = Path.Combine(outputFolder, rd);
                         if (overwrite || !File.Exists(df))
                         {
-                            try { File.Copy(f, df, overwrite); } catch (IOException) { }
+                            File.Copy(f, df, overwrite);
                         }
                     }
                     return true;
                 }
-                catch { return false; }
+                catch (Exception ex)
+                {
+                    WriteToLog($"[ERROR] Recursive copy (Async) failed: {inputFolder}", ex);
+                    throw;
+                }
             });
         }
 
         public static bool CopyFilesRecursive(string inputFolder, string outputFolder, bool overwrite = true, List<string> excludeFolders = null)
         {
             try {
+                WriteToLog($"[IO] Recursive Copy: {inputFolder} -> {outputFolder}");
                 inputFolder = Path.GetFullPath(inputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
                 outputFolder = Path.GetFullPath(outputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
                 Directory.CreateDirectory(outputFolder);
@@ -216,10 +294,13 @@ namespace Epic_Games_Account_Switcher_Globals
                     string rd = f.Substring(inputFolder.Length);
                     if (excludeFolders != null && excludeFolders.Any(ex => rd.Contains(ex, StringComparison.OrdinalIgnoreCase))) continue;
                     string df = Path.Combine(outputFolder, rd); 
-                    if (overwrite || !File.Exists(df)) try { File.Copy(f, df, overwrite); } catch (IOException) { } 
+                    if (overwrite || !File.Exists(df)) File.Copy(f, df, overwrite); 
                 }
                 return true;
-            } catch { return false; }
+            } catch (Exception ex) { 
+                WriteToLog($"[ERROR] Recursive copy failed: {inputFolder}", ex);
+                throw;
+            }
         }
 
         public static void CreateShortcut(string targetPath, string shortcutPath, string description, string args = "", string iconPath = "")

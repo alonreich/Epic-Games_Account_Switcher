@@ -34,7 +34,6 @@ namespace Epic_Games_Account_Switcher_Client
             DataContext = ViewModel;
 
             ViewModel.RequestCapture += ViewModel_RequestCapture;
-            ViewModel.RequestInstruction += ViewModel_RequestInstruction;
             Loaded += MainWindow_Loaded;
 
             
@@ -53,15 +52,6 @@ namespace Epic_Games_Account_Switcher_Client
             }
         }
 
-
-        private async Task ViewModel_RequestInstruction(string title, string message)
-        {
-            await Dispatcher.InvokeAsync(() =>
-            {
-                new CustomMessageBox(title, message).ShowDialog();
-            });
-        }
-
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             ViewModel.LoadAccounts();
@@ -69,7 +59,7 @@ namespace Epic_Games_Account_Switcher_Client
 
         private async Task<bool> ViewModel_RequestCapture(MainViewModel.AccountMetadata metadata)
         {
-            var captureWin = new CaptureAccountWindow(metadata.Name, metadata.Description, metadata.Email, metadata.ImagePath) { Owner = this };
+            var captureWin = new CaptureAccountWindow(metadata.Name, "", metadata.Email, metadata.ImagePath, "") { Owner = this };
             if (captureWin.ShowDialog() == true)
             {
                 return await ExecuteCapture(captureWin);
@@ -89,7 +79,7 @@ namespace Epic_Games_Account_Switcher_Client
 
         private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ChangedButton == MouseButton.Left) DragMove();
+            // Handled by WindowChrome CaptionHeight
         }
 
         private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
@@ -208,8 +198,27 @@ namespace Epic_Games_Account_Switcher_Client
 
             if (_didPreviewReorder)
             {
-                AccountService.SaveAccounts(ViewModel.Accounts.ToList());
-                ViewModel.ShowToast("Account order updated!");
+                                                                                           
+                var currentOrder = ViewModel.Accounts.ToList();
+                bool orderChanged = false;
+                if (currentOrder.Count != _orderBeforeDrag.Count) orderChanged = true;
+                else
+                {
+                    for (int i = 0; i < currentOrder.Count; i++)
+                    {
+                        if (currentOrder[i].Id != _orderBeforeDrag[i].Id)
+                        {
+                            orderChanged = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (orderChanged)
+                {
+                    AccountService.SaveAccounts(currentOrder);
+                    ViewModel.ShowToast("Account order updated!");
+                }
             }
 
             e.Handled = true;
@@ -277,16 +286,6 @@ namespace Epic_Games_Account_Switcher_Client
             return null;
         }
 
-        private async void Capture_Click(object sender, RoutedEventArgs e)
-        {
-            var detected = AccountService.GetDetectedMetadata();
-            var captureWin = new CaptureAccountWindow("", "", detected.Email, AccountService.GetDefaultProfileImagePath()) { Owner = this };
-            if (captureWin.ShowDialog() == true)
-            {
-                await ExecuteCapture(captureWin);
-            }
-        }
-
         private async Task<bool> ExecuteCapture(CaptureAccountWindow captureWin)
         {
             ViewModel.IsBusy = true;
@@ -298,6 +297,7 @@ namespace Epic_Games_Account_Switcher_Client
                     captureWin.AccountEmail, 
                     captureWin.ProfileImagePath, 
                     captureWin.AccountDescription,
+                    captureWin.AccountPassword,
                     (status) => 
                     {
                         Dispatcher.Invoke(() => ViewModel.BusyStatus = status);
@@ -305,14 +305,14 @@ namespace Epic_Games_Account_Switcher_Client
                     {
                         return await Dispatcher.InvokeAsync(() => 
                         {
-                            var result = MessageBox.Show($"Account '{existingName}' already exists for this Epic ID.\n\nDo you want to overwrite it with the current login data?", "Overwrite Account?", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                            return result == MessageBoxResult.Yes;
+                            var result = new CustomMessageBox("Overwrite Account?", $"Account '{existingName}' already exists for this Epic ID.\n\nDo you want to overwrite it with the current login data?", "Overwrite", "Cancel").ShowDialog();
+                            return result == true;
                         });
                     });
 
                 if (success)
                 {
-                    ViewModel.LoadAccounts();
+                    await ViewModel.LoadAccountsAsync();
                     ViewModel.ShowToast($"Account '{captureWin.AccountName}' captured successfully!");
                     return true;
                 }
