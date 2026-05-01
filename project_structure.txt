@@ -1,57 +1,47 @@
 # EPIC GAMES ACCOUNT SWITCHER - ARCHITECTURAL GUIDE & PROJECT STRUCTURE
 
 ## 1) PROJECT OVERVIEW
-Epic Games Account Switcher is a high-stability session manager for the Epic Games Launcher. It enables instant account switching without password or 2FA prompts by performing deep clones of authentication tokens, web cache, and registry identifiers.
+Epic Games Account Switcher is a high-performance, atomic session manager for the Epic Games Launcher. It achieves "Zero-UI" authentication by performing surgical injections of session tokens, web cache state, and registry identifiers, bypassing all login and 2FA prompts.
 
-## 2) MODULE BREAKDOWN
+## 2) PROJECT STATUS (2026-04-27)
+- **Stability**: Build pipeline is 100% stabilized with intelligent pre-flight checks in `Build.cmd`.
+- **Architecture**: Atomic directory swapping implemented in `AccountService.cs` to prevent session corruption.
+- **Hygiene**: Dead code (including legacy CV-based AutoLogin) has been purged. Redundant path logic consolidated into class properties.
+- **Verification**: Session validity (OAuth expiration) is verified before restoration to guarantee success.
 
-### A) Epic-Games_Account_Switcher-Client (WPF / MVVM)
-Primary UI application orchestrating the session swaps.
-- **AutoLoginService.cs**: A robust fail-safe/fallback mechanism. If the primary deep-clone session swap fails to bypass authentication, this service uses computer vision (OpenCV) and human-emulated input to automatically navigate the login UI and enter credentials. It acts as a "rescue" system to ensure the user is never locked out of their account.
-- **MainViewModel.cs**: The brain of the UI.
-  - **Optimized Monitor**: Background timer (5s) checks if `EpicGamesLauncher.exe` is running before performing heavy metadata detection.
-  - **Zero-Click Capture**: Automatically terminates the launcher and all helper processes (`EpicWebHelper`, `EOSUserHelper`, etc.) during account capture to ensure no file locks.
-  - **Unified Messaging**: Must ALWAYS use `CustomMessageBox` for consistency.
-- **MainWindow.xaml.cs**: Handles high-performance drag-and-drop card reordering and UI animations (`AnimatedWrapPanel`).
-- **App.xaml.cs**: Single-instance mutex logic with native window focus (`BringToFront`). Handles the smart-install/uninstall flow.
+## 3) AI AGENT MINIMAP (NAVIGATION & PURPOSE)
+| Path | Purpose / Role |
+| :--- | :--- |
+| `.\Build.cmd` | Main build entry point. Handles cleaning, publishing, and resource packing with 10s timeouts. |
+| `.\project_structure.txt` | This guide. Root reference for project goals and navigation. |
+| `Epic-Games_Account_Switcher-Client\` | **WPF UI Layer**. Orchestrates user interactions and visual state. |
+| `  - App.xaml.cs` | App lifecycle, smart upgrade/uninstall logic, and single-instance mutex. |
+| `  - MainViewModel.cs` | Brain of the UI. Manages background monitoring and command routing. |
+| `  - MainWindow.xaml` | Primary dashboard. Contains the account card grid and reordering logic. |
+| `  - CustomMessageBox.xaml` | Mandated UI for all user notifications. Styles match the app theme. |
+| `  - CaptureAccountWindow.xaml` | Wizard for adding new accounts or editing existing profile metadata. |
+| `Epic-Games_Account_Switcher-Globals\` | **Core Logic Layer**. Platform-agnostic session engine. |
+| `  - AccountService.cs` | **Critical Engine**. Handles atomic directory moves and deep session clones. |
+| `  - AccountModel.cs` | Definition of the `Account` object, including token and registry storage. |
+| `  - AppSettings.cs` | Singleton managing `appsettings.json` and critical registry key lists. |
+| `  - Globals.cs` | Robust I/O helpers (`ForceDeleteDirectory`) and asynchronous retry loops. |
+| `  - Windows.cs` | P/Invoke bridge for native Win32 interactions (focus, focus, clipboard). |
+| `  - Registry.cs` | Encapsulated logic for reading/writing complex registry value types. |
+| `  - CredentialService.cs` | Manages tokens stored in the Windows Credential Manager (Vault). |
+| `SingleFilePacker\` | Build-time tool for bundling the `Payload` folder into the final distribution EXE. |
+| `runas\` | Helper utility to request admin elevation during the install/uninstall flow. |
+| `Skin_Icons\` | Repository of default profile images available to the end user. |
 
-### B) Epic-Games_Account_Switcher-Globals (Shared Core)
-- **AccountService.cs**: The Session Persistence Engine.
-  - **Deep Capture**: Clones `LoginCache.json`, `PersistentAuthStorage.json`, AND `PersistentAuthStorage.bin`.
-  - **Multi-WebCache**: Captures ALL `webcache*` directory variants into a unified `WebCaches/` storage folder.
-  - **EOS Deep Clone**: Captures `Epic Online Services`, `EOSOverlay`, `EOSUserHelper`, and `EpicOnlineServicesUserHelper` from both `Local/Epic Games` and `Local/` root.
-  - **Registry Engine**: Swaps critical identifiers like `AccountId`, `DeviceId`, and `EpicAccountId` via `RegistryData` dictionaries.
-  - **Lazy Detection**: `GetDetectedMetadata` uses a lightweight cache. It only re-scans logs/INI files if the Registry `AccountId` has actually changed.
-- **Globals.cs**:
-  - **Bulletproof I/O**: `ForceDeleteDirectory` uses a 5-step retry loop with attribute resetting to overcome transient antivirus/system locks.
-  - `RetryActionAsync`: Exponential backoff for all asynchronous file moves.
-- **AppSettings.cs**: Stores the `RegistryKeysToSwap` list. Any new Epic login tokens found in the future must be added here.
+## 4) CORE ARCHITECTURAL PRINCIPLES
+1. **Atomicity**: Session restoration MUST use `Directory.Move` on prepared temporary structures. Never copy files into an active launcher folder one by one.
+2. **Zero-UI Mandate**: Any prompt for email/password from the launcher is a logic failure. Verify tokens in `PersistentAuthStorage.json` before restoration.
+3. **Deterministic Lifecycle**: Epic processes must be identified by installation path and terminated definitively before any file I/O begins.
+4. **Path Management**: Always use the consolidated properties (`LocalAppData`, `EpicSavedPath`) in `AccountService.cs` to ensure path consistency.
+5. **No Halt Build**: The build script is designed for automated pipelines; use `timeout /t 10` instead of `pause`.
 
-### C) Support Tools
-- **runas**: Small utility for elevated command execution.
-- **SingleFilePacker**: Bundles the `Payload` folder into a single executable.
-- **Installer**: C++ bootstrapper for runtime checks.
-
-## 3) SESSION DATA MODEL
-Stored in: `%LOCALAPPDATA%\Epic-Games_Account_Switcher\LoginCache\Epic_Games\`
-- `accounts.json`: Metadata (Name, Email, RegistryData).
-- `<AccountId>/`:
-  - `LoginCache.json`, `Config/`, `Data/`, etc.
-  - `WebCaches/`: Subfolders containing all captured `webcache*` variants.
-  - `EOS_Data/`: Deep clones of all Epic Online Services directories.
-
-## 4) STABILITY & UX MANDATES (FOR AGENTS)
-1. **Never Prompt for Closure**: Use `EnsureEpicIsClosed` to terminate processes automatically.
-2. **Handle All Cache Variants**: Epic frequently renames `webcache` folders (e.g., `webcache_4147`). Always iterate and capture all matches.
-3. **Consistency**: Never use standard `MessageBox.Show`. Always use `CustomMessageBox`.
-4. **I/O Safety**: Use `Globals.ForceDeleteDirectory` instead of standard `Directory.Delete` to prevent crash-on-lock.
-5. **Registry Prefixes**: The registry engine uses type prefixes (`sz:`, `dw:`, `bin:`). Always strip or handle these when comparing raw IDs.
-
-## 5) FLUENT UPGRADE PROCEDURE
-When a newer version of the application is run on a system with an existing installation, it performs a 4-stage "Fluent Upgrade":
-1. **BACKUP**: Current user data (accounts, settings, skins) is backed up to a temporary ZIP file.
-2. **WIPE**: The old version is thoroughly uninstalled. All remnants (Program Files, Registry keys, logs, and temp files) are purged to ensure a clean state.
-3. **INSTALL**: The new version is installed to Program Files, and shortcuts/registry protocols are re-registered.
-4. **RESTORE**: The user's data is automatically restored from the temporary backup.
-
-This ensures a seamless transition with zero data loss. If any stage fails, the user is notified with a detailed error dialog and a report is saved to `UpgradeError.txt`.
+## 5) DATA MODEL (%LOCALAPPDATA%\Epic-Games_Account_Switcher\)
+- `LoginCache\Epic_Games\accounts.json`: Global account registry.
+- `LoginCache\Epic_Games\<Id>\`:
+  - `Saved\`: Cloned authentication and config files.
+  - `EOS_Data\`: Cloned Epic Online Services local state.
+  - `Roaming_Data\`: Cloned AppData/Roaming state for the launcher.

@@ -38,7 +38,7 @@
                 <TextBlock Text="Friendly Name *" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
                 <TextBox x:Name="AccountNameInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Margin="0,0,0,20" VerticalContentAlignment="Center" FontSize="14" CaretBrush="White"/>
 
-                <TextBlock Text="Connected Email" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
+                <TextBlock Text="Connected Email *" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
                 <TextBox x:Name="AccountEmailInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Margin="0,0,0,20" VerticalContentAlignment="Center" FontSize="14" IsReadOnly="False" BorderThickness="1" CaretBrush="White"/>
 
                 <TextBlock Text="Fallback Password (Optional)" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>

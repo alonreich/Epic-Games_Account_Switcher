@@ -164,13 +164,13 @@ int main(int argc, char* argv[])
 			std::string from = argv[2];
 			std::string to = argv[3];
 			finalizeUpdate(from, to);
-			exit(1);
+			return 0;
 		}
 
 		if (args_contain("vc", argc, argv))
 		{
 			verify_vc();
-			exit(1);
+			return 0;
 		}
 
 		if (args_contain("net", argc, argv))
@@ -179,7 +179,7 @@ int main(int argc, char* argv[])
 			verify_net();
 			if (argc > 2)
 				launch_Epic-Games_Account_Switcher_program(argv[argc - 1]);
-			exit(1);
+			return 0;
 		}
 
 		if (!args_contain("nostart", argc, argv))

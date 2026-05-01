@@ -1,134 +1,87 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO.Compression;
+using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Runtime.InteropServices;
-using Newtonsoft.Json;
 using Microsoft.Win32;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using SharpCompress.Archives;
+using SharpCompress.Common;
 
 namespace Epic_Games_Account_Switcher_Globals
 {
     public class AccountService
     {
-        private static readonly object AccountsFileLock = new();
-        private static readonly SemaphoreSlim SessionOperationLock = new(1, 1);
+        private sealed class SessionValidationResult
+        {
+            public bool IsValid { get; set; }
+            public string Message { get; set; }
+            public string AccountId { get; set; }
+            public DateTime? ExpiresUtc { get; set; }
+        }
 
-        private static string BaseDataPath => Path.Combine(Globals.UserDataFolder, "LoginCache", "Epic_Games");
-        private static string AccountsJsonPath => Path.Combine(BaseDataPath, "accounts.json");
-        private static List<string> RegistryKeysToSwap => AppSettings.Instance.RegistryKeysToSwap;
+        private static readonly object AccountsFileLock = new object();
+        private static readonly SemaphoreSlim SessionOperationLock = new SemaphoreSlim(1, 1);
+        private static string BaseDataPath { get { return Path.Combine(Globals.UserDataFolder, "EG"); } }
+        private static string AccountsJsonPath { get { return Path.Combine(BaseDataPath, "accounts.json"); } }
+        private static List<string> RegistryKeysToSwap { get { return AppSettings.Instance.RegistryKeysToSwap; } }
+        private static string LocalAppData { get { return Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData); } }
+        private static string RoamingAppData { get { return Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); } }
+        private static string CommonAppData { get { return Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData); } }
+        private static string EpicSavedPath { get { return Path.Combine(LocalAppData, "EpicGamesLauncher", "Saved"); } }
+        private static string EpicConfigPath { get { return Path.Combine(EpicSavedPath, "Config"); } }
+        private static string ProgramDataManifestsPath { get { return Path.Combine(CommonAppData, "Epic", "EpicGamesLauncher", "Data", "Manifests"); } }
+
+        private static readonly string[] AuthFiles = { "PersistentAuthStorage.json", "Config\\Windows\\PersistentAuthStorage.json" };
+        private static readonly string[] AuthBinaryFiles = { "PersistentAuthStorage.bin", "Config\\Windows\\PersistentAuthStorage.bin" };
+        private static readonly string[] SessionItemsToCapture = { "Config", "Common", "SocialCache", "WebCaches", "Manifests", "Data", "UserVaultSettings", "PersistentStorage", "Portal", "Overlay", "LoginCache.json", "Engine.ini" };
+        private static readonly string[] EOSFoldersToCapture = { "Epic Online Services", "EOSOverlay", "EOSUserHelper", "EpicOnlineServicesUserHelper", "EpicOnlineServices", "EpicGamesLauncher\\Data", "EpicGamesLauncher\\Saved\\SocialCache" };
+        private static readonly string[] RegistryRootsToCapture = { @"HKCU\Software\Epic Games\Unreal Engine\Identifiers", @"HKCU\Software\Epic Games\Unreal Engine\EOS", @"HKCU\Software\Epic Games\EOS", @"HKCU\Software\Epic Games\EpicGamesLauncher" };
 
         public static string GetDefaultProfileImagePath()
         {
-            var candidates = new[]
-            {
-                Path.Combine(Globals.UserDataFolder, "Skin_Icons", "Default_Skin_Guy.jpg"),
-                Path.Combine(AppContext.BaseDirectory, "Skin_Icons", "Default_Skin_Guy.jpg"),
-                Path.Combine(AppContext.BaseDirectory, "Skin_Icons", "Lizard_Skin.jpg"),
-                Path.Combine(Path.GetFullPath("Payload\\Skin_Icons"), "Default_Skin_Guy.jpg"),
-                Path.Combine(Path.GetFullPath("Skin_Icons"), "Default_Skin_Guy.jpg")
-            };
-
-            foreach (var candidate in candidates)
-            {
-                if (File.Exists(candidate)) return candidate;
-            }
-
-            return candidates[0];
+            var cands = new[] { Path.Combine(Globals.UserDataFolder, "Skin_Icons", "Default_Skin_Girl.jpg"), Path.Combine(Globals.UserDataFolder, "Skin_Icons", "Default_Skin_Guy.jpg"), Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons", "Default_Skin_Guy.jpg"), Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons", "Lizard_Skin.jpg") };
+            foreach (var c in cands) if (File.Exists(c)) return c;
+            return cands[0];
         }
 
-        private static string NormalizeProfileImagePath(string profileImagePath)
+        private static string NormalizeProfileImagePath(string path)
         {
-            if (string.IsNullOrWhiteSpace(profileImagePath)) return GetDefaultProfileImagePath();
-
+            if (string.IsNullOrWhiteSpace(path)) return GetDefaultProfileImagePath();
             try
             {
-                // 1. If it exists as is, use it
-                if (File.Exists(profileImagePath)) return Path.GetFullPath(profileImagePath);
-                
-                var fileName = Path.GetFileName(profileImagePath);
-
-                // 2. Try UserData (The new permanent home)
-                var userCandidate = Path.Combine(Globals.UserDataFolder, "Skin_Icons", fileName);
-                if (File.Exists(userCandidate)) return userCandidate;
-
-                // 3. Try AppDir
-                var baseCandidate = Path.Combine(AppContext.BaseDirectory, "Skin_Icons", fileName);
-                if (File.Exists(baseCandidate)) return baseCandidate;
-
-                // 4. Try legacy relative path check
-                if (!Path.IsPathRooted(profileImagePath))
-                {
-                    var relUserCandidate = Path.Combine(Globals.UserDataFolder, profileImagePath);
-                    if (File.Exists(relUserCandidate)) return relUserCandidate;
-
-                    var relBaseCandidate = Path.Combine(AppContext.BaseDirectory, profileImagePath);
-                    if (File.Exists(relBaseCandidate)) return relBaseCandidate;
-                }
+                if (File.Exists(path)) return Path.GetFullPath(path);
+                var fn = Path.GetFileName(path);
+                var uC = Path.Combine(Globals.UserDataFolder, "Skin_Icons", fn);
+                if (File.Exists(uC)) return uC;
+                var bC = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons", fn);
+                if (File.Exists(bC)) return bC;
             }
             catch { }
-
             return GetDefaultProfileImagePath();
         }
-
-        private static readonly string[] SessionFoldersToCapture =
-        {
-            "Config",
-            "Common",
-            "SocialCache",
-            "WebCaches",
-            "Manifests",
-            "Data",
-            "UserVaultSettings",
-            "PersistentStorage",
-            "Portal",
-            "Overlay",
-            "LoginCache.json",
-            "Engine.ini",
-            "EpicGamesLauncher"
-        };
-
-        private static string GetLocalAppDataPath()
-        {
-            return Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        }
-
-        private static class NativeMethods
-        {
-            [DllImport("shell32.dll")]
-            public static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid rfid, uint dwFlags, IntPtr hToken, out IntPtr pszPath);
-        }
-
-        private static readonly string[] EOSFoldersToCapture =
-        {
-            "Epic Online Services",
-            "EOSOverlay",
-            "EOSUserHelper",
-            "EpicOnlineServicesUserHelper",
-            "EpicOnlineServices",
-            "EpicGamesLauncher\\Data",
-            "EpicGamesLauncher\\Saved\\SocialCache"
-        };
 
         public static List<Account> GetAccounts()
         {
             lock (AccountsFileLock)
             {
                 if (!File.Exists(AccountsJsonPath)) return new List<Account>();
-
                 try
                 {
-                    var accounts = JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(AccountsJsonPath)) ?? new List<Account>();
-                    foreach (var acc in accounts) NormalizeAccount(acc);
-                    return accounts;
+                    var accs = JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(AccountsJsonPath)) ?? new List<Account>();
+                    foreach (var a in accs) NormalizeAccount(a);
+                    return accs;
                 }
                 catch (Exception ex)
                 {
-                    Globals.WriteToLog("Failed to load accounts", ex);
+                    Globals.WriteToLog("[ACC] Failed to load accounts.json", ex);
                     return new List<Account>();
                 }
             }
@@ -139,517 +92,1167 @@ namespace Epic_Games_Account_Switcher_Globals
             lock (AccountsFileLock)
             {
                 Directory.CreateDirectory(BaseDataPath);
-                foreach (var acc in accounts) NormalizeAccount(acc);
-
-                var tmpPath = AccountsJsonPath + ".tmp";
-                File.WriteAllText(tmpPath, JsonConvert.SerializeObject(accounts, Formatting.Indented));
-
-                if (File.Exists(AccountsJsonPath)) File.Delete(AccountsJsonPath);
-                File.Move(tmpPath, AccountsJsonPath);
+                foreach (var a in accounts) NormalizeAccount(a);
+                var tmp = AccountsJsonPath + ".tmp_" + Guid.NewGuid().ToString("N");
+                File.WriteAllText(tmp, JsonConvert.SerializeObject(accounts, Formatting.Indented));
+                AtomicReplaceFile(tmp, AccountsJsonPath);
             }
         }
 
-        private static void NormalizeAccount(Account acc)
+        private static void NormalizeAccount(Account a)
         {
-            if (acc == null) return;
-
-            acc.Name ??= "Unknown Account";
-            acc.Email ??= "Unknown Email";
-            acc.Description ??= string.Empty;
-            acc.AccentColor = string.IsNullOrWhiteSpace(acc.AccentColor) ? "#7AA2F7" : acc.AccentColor;
-            acc.ProfileImagePath = NormalizeProfileImagePath(acc.ProfileImagePath);
-            acc.RegistryData ??= new Dictionary<string, string>();
-            acc.Credentials ??= new List<CredentialService.SavedCredential>();
+            if (a == null) return;
+            if (a.Name == null) a.Name = "Unknown Account";
+            if (a.Email == null) a.Email = "Unknown Email";
+            if (a.Description == null) a.Description = string.Empty;
+            a.AccentColor = string.IsNullOrWhiteSpace(a.AccentColor) ? "#7AA2F7" : a.AccentColor;
+            a.ProfileImagePath = NormalizeProfileImagePath(a.ProfileImagePath);
+            if (a.RegistryData == null) a.RegistryData = new Dictionary<string, string>();
+            if (a.Credentials == null) a.Credentials = new List<CredentialService.SavedCredential>();
+            if (a.RememberMeDataByPath == null) a.RememberMeDataByPath = new Dictionary<string, string>();
+            if (a.LauncherWindowSettingsByPath == null) a.LauncherWindowSettingsByPath = new Dictionary<string, string>();
         }
 
-        private static string GetEpicSavedPath()
+        private static bool IsSessionValid(string folder)
         {
-            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return Path.Combine(localAppData, "EpicGamesLauncher", "Saved");
+            return ValidateSession(folder, null).IsValid;
         }
 
-        private static List<string> GetAllEpicWebCachePaths(string epicSavedPath)
+        private static SessionValidationResult ValidateSession(string folder, string expectedAccountId)
         {
-            if (!Directory.Exists(epicSavedPath)) return new List<string>();
-            
-            // Modern Epic Launcher uses "webcache" (no suffix) as primary
-            // We capture anything containing "webcache" or "web_cache" to be safe
-            var candidates = Directory.GetDirectories(epicSavedPath, "*web*cache*", SearchOption.AllDirectories)
-                .Where(d => !d.Contains("SocialCache", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-                
-            return candidates;
-        }
-
-        private static string GetRememberMeDataSurgically()
-        {
+            var result = new SessionValidationResult { IsValid = false, Message = "No readable auth state was found. [v1.0.1]" };
             try
             {
-                var epicSavedPath = GetEpicSavedPath();
-                var epicConfigPath = Path.Combine(epicSavedPath, "Config");
-                if (!Directory.Exists(epicConfigPath)) return null;
-
-                var iniFiles = Directory.GetFiles(epicConfigPath, "GameUserSettings.ini", SearchOption.AllDirectories);
-                foreach (var ini in iniFiles)
+                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
                 {
-                    var lines = File.ReadAllLines(ini);
-                    bool inRM = false;
-                    foreach (var line in lines)
-                    {
-                        var trimmed = line.Trim();
-                        if (trimmed == "[RememberMe]") inRM = true;
-                        else if (trimmed.StartsWith("[")) inRM = false;
+                    result.Message = "Session folder does not exist: " + folder + " [v1.0.1]";
+                    return result;
+                }
 
-                        if (inRM && trimmed.StartsWith("Data=", StringComparison.OrdinalIgnoreCase))
+                var accountId = expectedAccountId ?? GetCurrentAccountId();
+                var hasLegacyJson = AuthFiles.Any(f => File.Exists(Path.Combine(folder, f)));
+                var hasModernBinary = !string.IsNullOrEmpty(accountId) && File.Exists(Path.Combine(folder, "Data", "OC_" + accountId + ".dat"));
+
+                if (!hasLegacyJson && !hasModernBinary)
+                {
+                    result.Message = "Authentication state file is missing. (Checked legacy JSON and modern binary blobs for ID: " + (accountId ?? "NULL") + ") [v1.0.1]";
+                    return result;
+                }
+
+                if (hasModernBinary)
+                {
+                    result.IsValid = true;
+                    result.AccountId = accountId;
+                    result.Message = "Modern binary auth blob detected. [v1.0.1]";
+                    return result;
+                }
+
+                var authPaths = AuthFiles.Select(f => Path.Combine(folder, f)).Where(File.Exists).ToList();
+                var allAccountIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                DateTime? bestExpiry = null;
+                var unreadable = new List<string>();
+                foreach (var p in authPaths)
+                {
+                    try
+                    {
+                        var json = File.ReadAllText(p);
+                        if (string.IsNullOrWhiteSpace(json)) continue;
+                        var token = JsonConvert.DeserializeObject<JToken>(json);
+                        var expiries = new List<DateTime>();
+                        var accountIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        CollectAuthFacts(token, expiries, accountIds);
+                        foreach (var id in accountIds) if (!string.IsNullOrWhiteSpace(id)) allAccountIds.Add(id.Trim());
+                        foreach (var exp in expiries)
                         {
-                            return trimmed.Substring(5).Trim();
+                            var utc = exp.Kind == DateTimeKind.Utc ? exp : exp.ToUniversalTime();
+                            if (!bestExpiry.HasValue || utc > bestExpiry.Value) bestExpiry = utc;
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        unreadable.Add(Path.GetFileName(p) + ": " + ex.Message);
                     }
                 }
+                if (!bestExpiry.HasValue)
+                {
+                    result.Message = "No future auth expiration could be read." + (unreadable.Count > 0 ? " Errors: " + string.Join("; ", unreadable.ToArray()) : "") + " [v1.0.1]";
+                    return result;
+                }
+                result.ExpiresUtc = bestExpiry.Value;
+                if (bestExpiry.Value <= DateTime.UtcNow.AddMinutes(5))
+                {
+                    result.Message = "Auth token expires too soon: " + bestExpiry.Value.ToString("o") + " [v1.0.1]";
+                    return result;
+                }
+                if (!string.IsNullOrWhiteSpace(expectedAccountId) && allAccountIds.Count > 0 && !allAccountIds.Contains(expectedAccountId))
+                {
+                    result.Message = "Auth blob account id mismatch. Expected " + expectedAccountId + ". Found " + string.Join(",", allAccountIds.ToArray()) + " [v1.0.1]";
+                    return result;
+                }
+                result.IsValid = true;
+                result.AccountId = allAccountIds.FirstOrDefault();
+                result.Message = "Auth blob is valid until " + bestExpiry.Value.ToString("o") + " [v1.0.1]";
+                return result;
             }
-            catch { }
-            return null;
+            catch (Exception ex)
+            {
+                result.Message = ex.Message + " [v1.0.1]";
+                Globals.WriteToLog("[AUTH-CHECK] Validation error in " + folder, ex);
+                return result;
+            }
         }
 
-        private static void SetRememberMeDataSurgically(string data)
+        private static void CollectAuthFacts(JToken token, List<DateTime> expiries, HashSet<string> accountIds)
         {
+            if (token == null) return;
+            var prop = token as JProperty;
+            if (prop != null)
+            {
+                var name = prop.Name ?? "";
+                var value = prop.Value == null ? null : prop.Value.ToString();
+                if (IsAccountIdName(name) && !string.IsNullOrWhiteSpace(value)) accountIds.Add(value.Trim());
+                if (IsExpirationName(name))
+                {
+                    DateTime exp;
+                    if (TryParseExpiration(value, out exp)) expiries.Add(exp);
+                }
+            }
+            foreach (var child in token.Children()) CollectAuthFacts(child, expiries, accountIds);
+        }
+
+        private static bool IsAccountIdName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            var n = name.Replace("_", "").Replace("-", "").ToLowerInvariant();
+            return n == "accountid" || n == "epicaccountid" || n == "userid";
+        }
+
+        private static bool IsExpirationName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            var n = name.Replace("_", "").Replace("-", "").ToLowerInvariant();
+            return n == "expiresat" || n == "expires" || n == "expiration" || n == "expirationtime" || n == "expireat";
+        }
+
+        private static bool TryParseExpiration(string value, out DateTime expirationUtc)
+        {
+            expirationUtc = DateTime.MinValue;
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            DateTime parsed;
+            if (DateTime.TryParse(value, null, DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out parsed))
+            {
+                expirationUtc = parsed.Kind == DateTimeKind.Utc ? parsed : parsed.ToUniversalTime();
+                return true;
+            }
+            long number;
+            if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out number))
+            {
+                try
+                {
+                    if (number > 1000000000000L) expirationUtc = DateTimeOffset.FromUnixTimeMilliseconds(number).UtcDateTime;
+                    else if (number > 1000000000L) expirationUtc = DateTimeOffset.FromUnixTimeSeconds(number).UtcDateTime;
+                    return expirationUtc > DateTime.UtcNow.AddYears(-10);
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        private static Dictionary<string, string> GetRememberMeDataByPath()
+        {
+            return CaptureIniValuesByPath("RememberMe", "Data");
+        }
+
+        private static Dictionary<string, string> GetLauncherWindowSettingsByPath()
+        {
+            return CaptureIniValuesByPath("WindowSettings", "MainLauncherWindow");
+        }
+
+        private static Dictionary<string, string> CaptureIniValuesByPath(string section, string key)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                var epicSavedPath = GetEpicSavedPath();
-                var epicConfigPath = Path.Combine(epicSavedPath, "Config");
-                if (!Directory.Exists(epicConfigPath)) return;
-
-                var iniFiles = Directory.GetFiles(epicConfigPath, "GameUserSettings.ini", SearchOption.AllDirectories);
-                foreach (var ini in iniFiles)
+                if (!Directory.Exists(EpicConfigPath)) return result;
+                var files = Directory.GetFiles(EpicConfigPath, "GameUserSettings.ini", SearchOption.AllDirectories);
+                foreach (var ini in files)
                 {
-                    var lines = File.ReadAllLines(ini).ToList();
-                    int rmIndex = -1;
-                    int dataIndex = -1;
-                    int enableIndex = -1;
-
-                    for (int i = 0; i < lines.Count; i++)
-                    {
-                        var trimmed = lines[i].Trim();
-                        if (trimmed == "[RememberMe]") rmIndex = i;
-                        else if (rmIndex != -1 && (trimmed.StartsWith("Data=", StringComparison.OrdinalIgnoreCase) || trimmed.StartsWith("Enable=", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            if (trimmed.StartsWith("Data=", StringComparison.OrdinalIgnoreCase)) dataIndex = i;
-                            if (trimmed.StartsWith("Enable=", StringComparison.OrdinalIgnoreCase)) enableIndex = i;
-                        }
-                        else if (rmIndex != -1 && trimmed.StartsWith("[")) break;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(data))
-                    {
-                        Globals.WriteToLog($"[SWITCH] Clearing RememberMe INI data for this account: {ini}");
-                        if (dataIndex != -1) lines[dataIndex] = "Data=";
-                        if (enableIndex != -1) lines[enableIndex] = "Enable=False";
-                    }
-                    else
-                    {
-                        Globals.WriteToLog($"[SWITCH] Restoring RememberMe token in: {ini}");
-                        if (dataIndex != -1)
-                        {
-                            lines[dataIndex] = "Data=" + data;
-                            if (enableIndex != -1) lines[enableIndex] = "Enable=True";
-                        }
-                        else if (rmIndex != -1)
-                        {
-                            lines.Insert(rmIndex + 1, "Data=" + data);
-                            lines.Insert(rmIndex + 2, "Enable=True");
-                        }
-                        else
-                        {
-                            lines.Add("");
-                            lines.Add("[RememberMe]");
-                            lines.Add("Data=" + data);
-                            lines.Add("Enable=True");
-                        }
-                    }
-
-                    File.WriteAllLines(ini, lines);
+                    var lines = File.ReadAllLines(ini);
+                    var val = GetIniValue(lines, section, key);
+                    if (!string.IsNullOrWhiteSpace(val)) result[MakeRelativePath(EpicConfigPath, ini)] = val;
                 }
             }
             catch (Exception ex)
             {
-                Globals.WriteToLog("[ERROR] Failed to set RememberMe data surgically.", ex);
+                Globals.WriteToLog("[INI] Failed to capture " + section + ":" + key, ex);
             }
+            return result;
         }
 
-        private static string GetLauncherWindowSettingsSurgically()
+        private static bool SetRememberMeDataSurgically(Account account)
         {
-            try
+            if (account == null) return true;
+            var values = account.RememberMeDataByPath ?? new Dictionary<string, string>();
+            if (values.Count == 0 && !string.IsNullOrWhiteSpace(account.RememberMeData))
             {
-                var epicSavedPath = GetEpicSavedPath();
-                var epicConfigPath = Path.Combine(epicSavedPath, "Config");
-                if (!Directory.Exists(epicConfigPath)) return null;
-
-                var iniFiles = Directory.GetFiles(epicConfigPath, "GameUserSettings.ini", SearchOption.AllDirectories);
-                foreach (var ini in iniFiles)
-                {
-                    var lines = File.ReadAllLines(ini);
-                    bool inWS = false;
-                    foreach (var line in lines)
-                    {
-                        var trimmed = line.Trim();
-                        if (trimmed == "[WindowSettings]") inWS = true;
-                        else if (trimmed.StartsWith("[")) inWS = false;
-
-                        if (inWS && trimmed.StartsWith("MainLauncherWindow=", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return trimmed.Substring("MainLauncherWindow=".Length).Trim();
-                        }
-                    }
-                }
+                values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var ini in GetGameUserSettingsFiles()) values[MakeRelativePath(EpicConfigPath, ini)] = account.RememberMeData;
             }
-            catch { }
-            return null;
+            if (values.Count == 0) return true;
+            foreach (var kv in values)
+            {
+                var ini = Path.Combine(EpicConfigPath, kv.Key);
+                ApplyRememberMeToIni(ini, kv.Value);
+            }
+            return VerifyRememberMeApplied(account);
         }
 
-        private static void SetLauncherWindowSettingsSurgically(string data)
+        private static bool SetLauncherWindowSettingsSurgically(Account account)
         {
-            if (string.IsNullOrWhiteSpace(data)) return;
+            if (account == null) return true;
+            var values = account.LauncherWindowSettingsByPath ?? new Dictionary<string, string>();
+            if (values.Count == 0 && !string.IsNullOrWhiteSpace(account.LauncherWindowSettings))
+            {
+                values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var ini in GetGameUserSettingsFiles()) values[MakeRelativePath(EpicConfigPath, ini)] = account.LauncherWindowSettings;
+            }
+            foreach (var kv in values)
+            {
+                var ini = Path.Combine(EpicConfigPath, kv.Key);
+                ApplyIniValuesAtomic(ini, "WindowSettings", new Dictionary<string, string> { { "MainLauncherWindow", kv.Value } });
+            }
+            return true;
+        }
 
+        private static void SetEmailSurgically(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email)) return;
             try
             {
-                var epicSavedPath = GetEpicSavedPath();
-                var epicConfigPath = Path.Combine(epicSavedPath, "Config");
-                if (!Directory.Exists(epicConfigPath)) return;
-
-                var iniFiles = Directory.GetFiles(epicConfigPath, "GameUserSettings.ini", SearchOption.AllDirectories);
-                foreach (var ini in iniFiles)
+                foreach (var ini in GetGameUserSettingsFiles())
                 {
-                    var lines = File.ReadAllLines(ini).ToList();
-                    int wsIndex = -1;
-                    int dataIndex = -1;
-
-                    for (int i = 0; i < lines.Count; i++)
-                    {
-                        var trimmed = lines[i].Trim();
-                        if (trimmed == "[WindowSettings]") wsIndex = i;
-                        else if (wsIndex != -1 && trimmed.StartsWith("MainLauncherWindow=", StringComparison.OrdinalIgnoreCase))
-                        {
-                            dataIndex = i;
-                            break;
-                        }
-                        else if (wsIndex != -1 && trimmed.StartsWith("[")) break;
-                    }
-
-                    if (dataIndex != -1)
-                    {
-                        lines[dataIndex] = "MainLauncherWindow=" + data;
-                    }
-                    else if (wsIndex != -1)
-                    {
-                        lines.Insert(wsIndex + 1, "MainLauncherWindow=" + data);
-                    }
-                    else
-                    {
-                        lines.Add("");
-                        lines.Add("[WindowSettings]");
-                        lines.Add("MainLauncherWindow=" + data);
-                    }
-
-                    File.WriteAllLines(ini, lines);
+                    ApplyIniValuesAtomic(ini, "", new Dictionary<string, string> { { "LastCheckedEmail", email } });
                 }
             }
             catch (Exception ex)
             {
-                Globals.WriteToLog("[ERROR] Failed to set Launcher Window Settings surgically.", ex);
+                Globals.WriteToLog("[INI] Failed to set email metadata", ex);
             }
+        }
+
+        private static IEnumerable<string> GetGameUserSettingsFiles()
+        {
+            if (!Directory.Exists(EpicConfigPath)) return new string[0];
+            return Directory.GetFiles(EpicConfigPath, "GameUserSettings.ini", SearchOption.AllDirectories);
+        }
+
+        private static void ApplyRememberMeToIni(string ini, string data)
+        {
+            ApplyIniValuesAtomic(ini, "RememberMe", new Dictionary<string, string> { { "Data", data }, { "Enable", "True" } });
+        }
+
+        private static void ApplyIniValuesAtomic(string ini, string section, Dictionary<string, string> values)
+        {
+            if (string.IsNullOrWhiteSpace(ini) || values == null || values.Count == 0) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(ini));
+            var lines = File.Exists(ini) ? File.ReadAllLines(ini).ToList() : new List<string>();
+            foreach (var kv in values) SetIniValue(lines, section, kv.Key, kv.Value);
+            AtomicWriteAllLines(ini, lines);
+        }
+
+        private static string GetIniValue(IList<string> lines, string section, string key)
+        {
+            var inSection = string.IsNullOrEmpty(section);
+            foreach (var raw in lines)
+            {
+                var t = raw.Trim();
+                if (!string.IsNullOrEmpty(section))
+                {
+                    if (t.Equals("[" + section + "]", StringComparison.OrdinalIgnoreCase)) { inSection = true; continue; }
+                    if (inSection && t.StartsWith("[", StringComparison.Ordinal) && t.EndsWith("]", StringComparison.Ordinal)) break;
+                }
+                if (inSection && t.StartsWith(key + "=", StringComparison.OrdinalIgnoreCase)) return t.Substring(key.Length + 1).Trim();
+            }
+            return null;
+        }
+
+        private static void SetIniValue(List<string> lines, string section, string key, string value)
+        {
+            if (lines == null) return;
+            var keyPrefix = key + "=";
+            if (string.IsNullOrEmpty(section))
+            {
+                for (var i = 0; i < lines.Count; i++)
+                {
+                    if (lines[i].Trim().StartsWith(keyPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        lines[i] = keyPrefix + value;
+                        return;
+                    }
+                }
+                lines.Add(keyPrefix + value);
+                return;
+            }
+            var sectionHeader = "[" + section + "]";
+            var sectionIndex = -1;
+            var insertIndex = lines.Count;
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var t = lines[i].Trim();
+                if (t.Equals(sectionHeader, StringComparison.OrdinalIgnoreCase))
+                {
+                    sectionIndex = i;
+                    insertIndex = i + 1;
+                    continue;
+                }
+                if (sectionIndex != -1 && t.StartsWith("[", StringComparison.Ordinal) && t.EndsWith("]", StringComparison.Ordinal))
+                {
+                    insertIndex = i;
+                    break;
+                }
+                if (sectionIndex != -1)
+                {
+                    insertIndex = i + 1;
+                    if (t.StartsWith(keyPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        lines[i] = keyPrefix + value;
+                        return;
+                    }
+                }
+            }
+            if (sectionIndex == -1)
+            {
+                if (lines.Count > 0 && !string.IsNullOrWhiteSpace(lines[lines.Count - 1])) lines.Add("");
+                lines.Add(sectionHeader);
+                lines.Add(keyPrefix + value);
+            }
+            else
+            {
+                lines.Insert(insertIndex, keyPrefix + value);
+            }
+        }
+
+        private static bool VerifyRememberMeApplied(Account account)
+        {
+            if (account == null) return true;
+            var expected = account.RememberMeDataByPath ?? new Dictionary<string, string>();
+            if (expected.Count == 0 && !string.IsNullOrWhiteSpace(account.RememberMeData))
+            {
+                expected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var ini in GetGameUserSettingsFiles()) expected[MakeRelativePath(EpicConfigPath, ini)] = account.RememberMeData;
+            }
+            if (expected.Count == 0) return true;
+            foreach (var kv in expected)
+            {
+                var ini = Path.Combine(EpicConfigPath, kv.Key);
+                if (!File.Exists(ini))
+                {
+                    Globals.WriteToLog("[VERIFY] RememberMe target missing: " + ini);
+                    return false;
+                }
+                var lines = File.ReadAllLines(ini);
+                var data = GetIniValue(lines, "RememberMe", "Data");
+                var enable = GetIniValue(lines, "RememberMe", "Enable");
+                if (!string.Equals(data, kv.Value, StringComparison.Ordinal) || !string.Equals(enable, "True", StringComparison.OrdinalIgnoreCase))
+                {
+                    Globals.WriteToLog("[VERIFY] RememberMe mismatch in " + ini);
+                    return false;
+                }
+            }
+            return true;
         }
 
         public static string GetCurrentAccountId()
         {
             try
             {
-                if (Globals.TryReadRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:AccountId", out var accountId))
-                    return accountId?.ToString()?.Replace("sz:", "");
+                string id;
+                if (Globals.TryReadRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:AccountId", out id)) return id == null ? null : id.Replace("sz:", "");
             }
             catch { }
-
             return null;
         }
 
-        private static void SetEmailSurgically(string email)
-        {
-            try
-            {
-                var epicSavedPath = GetEpicSavedPath();
-                var epicConfigPath = Path.Combine(epicSavedPath, "Config");
-                if (!Directory.Exists(epicConfigPath)) return;
-
-                var iniFiles = Directory.GetFiles(epicConfigPath, "GameUserSettings.ini", SearchOption.AllDirectories);
-                foreach (var ini in iniFiles)
-                {
-                    var lines = File.ReadAllLines(ini).ToList();
-                    bool found = false;
-                    string emailToSet = string.IsNullOrWhiteSpace(email) ? "" : email;
-
-                    for (int i = 0; i < lines.Count; i++)
-                    {
-                        if (lines[i].Trim().StartsWith("LastCheckedEmail=", StringComparison.OrdinalIgnoreCase))
-                        {
-                            lines[i] = "LastCheckedEmail=" + emailToSet;
-                            found = true;
-                        }
-                    }
-                    if (!found)
-                    {
-                        lines.Add("LastCheckedEmail=" + emailToSet);
-                    }
-                    File.WriteAllLines(ini, lines);
-                }
-            }
-            catch (Exception ex) { Globals.WriteToLog("[ERROR] SetEmailSurgically failed.", ex); }
-        }
+        private static string GetShortId() { return Guid.NewGuid().ToString("N").Substring(0, 8); }
 
         private static async Task<bool> EnsureEpicIsClosed(int timeoutMs = 60000)
         {
             var sw = Stopwatch.StartNew();
-            var processesToKill = new[] 
-            { 
-                "EpicGamesLauncher", "EpicWebHelper", "EpicGamesLauncherService", 
-                "EOSUserHelper", "EpicOnlineServicesUserHelper", "EpicOnlineServices", 
-                "CrashReportClient", "UnrealCEFSubProcess", "EOSOverlay", "SocialService",
-                "EpicOnlineServicesHost", "SocialServiceHelper", "EpicOnlineServicesOverlay",
-                "FortniteClient-Win64-Shipping", "UnrealEditor", "Epic Games Launcher"
-            };
-            bool didKillAny = false;
-
+            var epicPaths = GetEpicInstallPaths();
+            Globals.WriteToLog("[KILL] Starting Epic process cleanup...");
             while (sw.ElapsedMilliseconds < timeoutMs)
             {
-                var anyRunning = false;
-                foreach (var procName in processesToKill)
+                var active = GetEpicProcesses(epicPaths);
+                if (active.Count == 0)
                 {
-                    if (Globals.IsProcessRunning(procName))
+                    if (VerifyWritableStateRoots())
                     {
-                        anyRunning = true;
-                        didKillAny = true;
-                        Globals.KillProcess(procName, true);
+                        await Task.Delay(2000);
+                        return true;
                     }
+                    await Task.Delay(1000);
+                    continue;
                 }
-
-                if (!anyRunning)
+                foreach (var p in active)
                 {
-                    if (didKillAny) await Task.Delay(500); // Only wait briefly if we actually killed something
-                    return true;
+                    try
+                    {
+                        var pid = p.Id;
+                        var name = p.ProcessName;
+                        var psi = new ProcessStartInfo("taskkill", "/F /T /PID " + pid) { CreateNoWindow = true, UseShellExecute = false };
+                        Process.Start(psi)?.WaitForExit(5000);
+                        if (name.IndexOf("EpicGamesLauncher", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            var psi2 = new ProcessStartInfo("taskkill", "/F /IM EpicGamesLauncher.exe") { CreateNoWindow = true, UseShellExecute = false };
+                            Process.Start(psi2)?.WaitForExit(5000);
+                        }
+                        Globals.WriteToLog("[KILL] Terminated: " + name + " (" + pid + ")");
+                    }
+                    catch { }
+                    finally { try { p.Dispose(); } catch { } }
                 }
-
-                await Task.Delay(2000);
+                try { Process.Start(new ProcessStartInfo("taskkill", "/F /IM EpicGamesLauncher.exe /IM EpicWebHelper.exe /IM EOSUserHelper.exe") { CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(2000); } catch { }
+                await Task.Delay(1000);
             }
-
             return false;
+        }
+
+        private static List<string> GetEpicInstallPaths()
+        {
+            var result = new List<string>();
+            try
+            {
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
+                {
+                    var loc = key == null ? null : key.GetValue("InstallLocation");
+                    if (loc != null) result.Add(loc.ToString().TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant());
+                }
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
+                {
+                    var loc = key == null ? null : key.GetValue("InstallLocation");
+                    if (loc != null) result.Add(loc.ToString().TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant());
+                }
+            }
+            catch { }
+            return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private static List<Process> GetEpicProcesses(List<string> epicPaths)
+        {
+            var active = new List<Process>();
+            foreach (var p in Process.GetProcesses())
+            {
+                try
+                {
+                    var n = p.ProcessName.ToLowerInvariant();
+                    if (n.Contains("epicgames") || n.Contains("epicwebhelper") || n.Contains("epiconlineservices") || n.Contains("eosuserhelper") || n.Contains("eosoverlay") || n.Contains("fortnite"))
+                    {
+                        active.Add(p);
+                        continue;
+                    }
+                    var path = "";
+                    try { if (p.MainModule != null) path = p.MainModule.FileName; } catch { }
+                    var lower = string.IsNullOrWhiteSpace(path) ? "" : path.ToLowerInvariant();
+                    if (epicPaths.Any(ep => lower.StartsWith(ep, StringComparison.OrdinalIgnoreCase))) active.Add(p);
+                    else p.Dispose();
+                }
+                catch { try { p.Dispose(); } catch { } }
+            }
+            return active;
+        }
+
+        private static bool VerifyWritableStateRoots()
+        {
+            var roots = new List<string> { EpicSavedPath, Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher") };
+            if (Directory.Exists(ProgramDataManifestsPath)) roots.Add(ProgramDataManifestsPath);
+            foreach (var rel in EOSFoldersToCapture)
+            {
+                roots.Add(Path.Combine(LocalAppData, "Epic Games", rel));
+                roots.Add(Path.Combine(LocalAppData, rel));
+            }
+            var ok = true;
+            foreach (var root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!Directory.Exists(root)) continue;
+                ok = ok && ProbeDirectoryWritable(root);
+            }
+            return ok;
+        }
+
+        private static bool ProbeDirectoryWritable(string root)
+        {
+            try
+            {
+                Directory.CreateDirectory(root);
+                var probe = Path.Combine(root, ".epic_switcher_probe_" + Guid.NewGuid().ToString("N"));
+                File.WriteAllText(probe, "probe");
+                File.Delete(probe);
+                foreach (var f in Directory.GetFiles(root, "*", SearchOption.TopDirectoryOnly))
+                {
+                    using (var fs = new FileStream(f, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
+                }
+                return true;
+            }
+            catch { return false; }
         }
 
         private static async Task<bool> SafeDeleteDirectoryAsync(string path, int retries = 10)
         {
             if (!Directory.Exists(path)) return true;
-            await Globals.RetryActionAsync(async () => Globals.ForceDeleteDirectory(path), retries, 500);
+            await Globals.RetryActionAsync(() => { Globals.ForceDeleteDirectory(path); return Task.FromResult(0); }, retries, 500, true);
             return !Directory.Exists(path);
         }
 
-        private static async Task<bool> SafeReplaceDirectoryAsync(string sourceDir, string targetDir)
+        private static async Task<bool> SafeReplaceDirectoryAsync(string source, string target)
         {
-            if (!Directory.Exists(sourceDir)) return true;
-            Globals.WriteToLog($"[FILE] Moving Directory: {sourceDir} -> {targetDir}");
-
-            var tempTarget = targetDir + "_swap_tmp";
-            await SafeDeleteDirectoryAsync(tempTarget);
-
-            Directory.CreateDirectory(tempTarget);
-            await Globals.RetryAsync(async () => await Globals.CopyFilesRecursiveAsync(sourceDir, tempTarget, true));
-
-            await SafeDeleteDirectoryAsync(targetDir);
-            await Globals.RetryActionAsync(async () => 
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(targetDir) ?? string.Empty);
-                Directory.Move(tempTarget, targetDir);
-            });
+            if (!Directory.Exists(source)) return true;
+            var tmp = target + "_t" + GetShortId();
+            await SafeDeleteDirectoryAsync(tmp);
+            await CopyDirectoryStrictAsync(source, tmp);
+            await SafeDeleteDirectoryAsync(target);
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            Directory.Move(tmp, target);
             return true;
         }
 
         private static async Task SafeReplaceFileAsync(string source, string target)
         {
             if (!File.Exists(source)) return;
-            Globals.WriteToLog($"[FILE] Moving File: {source} -> {target}");
-
-            await Globals.RetryActionAsync(async () =>
+            await Globals.RetryActionAsync(() =>
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(target) ?? string.Empty);
+                Directory.CreateDirectory(Path.GetDirectoryName(target));
+                var tmp = target + ".t" + GetShortId();
+                File.Copy(source, tmp, true);
+                AtomicReplaceFile(tmp, target);
+                return Task.FromResult(0);
+            }, 5, 500, true);
+        }
 
-                var tempTarget = target + ".swap_tmp";
-                if (File.Exists(tempTarget)) File.Delete(tempTarget);
+        private static async Task CopyDirectoryStrictAsync(string source, string dest)
+        {
+            var success = await Globals.RetryAsync(async () =>
+            {
+                return await Globals.CopyFilesRecursiveAsync(source, dest, true);
+            }, 5, 1000, true);
+            if (!success) throw new IOException("Recursive copy failed from " + source + " to " + dest + ". [MAX_PATH? LOCK?]");
+        }
 
-                File.Copy(source, tempTarget, true);
-                if (File.Exists(target)) File.Delete(target);
-                File.Move(tempTarget, target);
+        private static async Task CaptureSessionToFolder(string source, string dest)
+        {
+            await SafeDeleteDirectoryAsync(dest);
+            Directory.CreateDirectory(dest);
+            foreach (var f in AuthFiles.Concat(AuthBinaryFiles))
+            {
+                var s = Path.Combine(source, f);
+                if (File.Exists(s)) await SafeReplaceFileAsync(s, Path.Combine(dest, f));
+            }
+            foreach (var item in SessionItemsToCapture)
+            {
+                var sPath = Path.Combine(source, item);
+                var dPath = Path.Combine(dest, item);
+                if (Directory.Exists(sPath)) await CopyDirectoryStrictAsync(sPath, dPath);
+                else if (File.Exists(sPath)) await SafeReplaceFileAsync(sPath, dPath);
+            }
+            var eosDest = Path.Combine(dest, "EOS_Data");
+            foreach (var rel in EOSFoldersToCapture)
+            {
+                var sPath = Path.Combine(LocalAppData, "Epic Games", rel);
+                var isRoot = false;
+                if (!Directory.Exists(sPath)) { sPath = Path.Combine(LocalAppData, rel); isRoot = true; }
+                if (Directory.Exists(sPath))
+                {
+                    var dPath = Path.Combine(eosDest, rel);
+                    await CopyDirectoryStrictAsync(sPath, dPath);
+                    if (isRoot) File.WriteAllText(dPath + ".is_root", "");
+                }
+            }
+            var rDest = Path.Combine(dest, "Roaming_Data");
+            var rSrc = Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher");
+            if (Directory.Exists(rSrc)) await CopyDirectoryStrictAsync(rSrc, Path.Combine(rDest, "EpicGamesLauncher"));
+            if (Directory.Exists(ProgramDataManifestsPath)) await CopyDirectoryStrictAsync(ProgramDataManifestsPath, Path.Combine(dest, "ProgramData_Data", "Manifests"));
+        }
+
+        public static async Task<Tuple<bool, string>> CaptureCurrentAccount(string nameOverride = null, string emailOverride = null, string imagePathOverride = null, string descriptionOverride = null, string passwordOverride = null, Action<string> progress = null, Func<string, Task<bool>> confirmOverwrite = null, bool forceOverwrite = false)
+        {
+            await SessionOperationLock.WaitAsync();
+            try
+            {
+                _lastDetected = new Tuple<string, string, string>(null, "N/A", "N/A");
+                var det = await GetDetectedMetadataAsync();
+                if (string.IsNullOrWhiteSpace(det.Item1)) return new Tuple<bool, string>(false, "No Epic Games account is currently logged in.");
+                progress?.Invoke("Closing Epic Games...");
+                if (!await EnsureEpicIsClosed()) return new Tuple<bool, string>(false, "Could not close all Epic Games processes. Please close the Launcher manually and try again.");
+                var liveValidation = ValidateSession(EpicSavedPath, det.Item1);
+                if (!liveValidation.IsValid) return new Tuple<bool, string>(false, "Current session is invalid: " + liveValidation.Message);
+                var accounts = GetAccounts();
+                var existing = accounts.FirstOrDefault(a => a.Id == det.Item1);
+                if (existing != null && !forceOverwrite)
+                {
+                    if (confirmOverwrite == null || !await confirmOverwrite(existing.Name)) return new Tuple<bool, string>(false, "Capture cancelled by user.");
+                }
+                var acc = existing ?? new Account(det.Item1, nameOverride ?? (det.Item2 == "N/A" ? "Epic Account" : det.Item2));
+                if (!string.IsNullOrWhiteSpace(nameOverride)) acc.Name = nameOverride.Trim();
+                else if (!string.IsNullOrWhiteSpace(det.Item2) && det.Item2 != "N/A") acc.Name = det.Item2;
+                if (emailOverride != null) acc.Email = emailOverride.Trim();
+                else if (!string.IsNullOrWhiteSpace(det.Item3) && det.Item3 != "N/A") acc.Email = det.Item3;
+                if (descriptionOverride != null) acc.Description = descriptionOverride;
+                if (passwordOverride != null) acc.Password = passwordOverride;
+                if (!string.IsNullOrWhiteSpace(imagePathOverride)) acc.ProfileImagePath = imagePathOverride;
+                acc.ProfileImagePath = NormalizeProfileImagePath(acc.ProfileImagePath);
+                acc.AccentColor = GetDeterministicColor(acc.Name ?? acc.Id);
+                acc.LastPlayed = DateTime.Now;
+                progress?.Invoke("Capturing session...");
+                var target = Path.Combine(BaseDataPath, acc.Id);
+                var tmp = target + "_n" + GetShortId();
+                await CaptureSessionToFolder(EpicSavedPath, tmp);
+                var capturedValidation = ValidateSession(tmp, acc.Id);
+                if (!capturedValidation.IsValid) { await SafeDeleteDirectoryAsync(tmp); return new Tuple<bool, string>(false, "Failed to verify captured session: " + capturedValidation.Message); }
+                acc.RegistryData = CaptureRegistryData();
+                acc.Credentials = CredentialService.CaptureCredentials();
+                acc.RememberMeDataByPath = GetRememberMeDataByPath();
+                acc.RememberMeData = acc.RememberMeDataByPath.Values.FirstOrDefault();
+                acc.LauncherWindowSettingsByPath = GetLauncherWindowSettingsByPath();
+                acc.LauncherWindowSettings = acc.LauncherWindowSettingsByPath.Values.FirstOrDefault();
+                if (Directory.Exists(target)) await SafeDeleteDirectoryAsync(target);
+                Directory.Move(tmp, target);
+                if (existing == null) accounts.Add(acc);
+                SaveAccounts(accounts);
+                return new Tuple<bool, string>(true, null);
+            }
+            catch (Exception ex) { Globals.WriteToLog("[CAPTURE] Fatal error", ex); return new Tuple<bool, string>(false, "An unexpected error occurred: " + ex.Message); }
+            finally { SessionOperationLock.Release(); }
+        }
+
+        private static async Task RefreshSnapshotOfCurrentSavedAccount(List<Account> accounts, string switchingToAccountId, string currentAccountIdHint, Action<string> progress)
+        {
+            var curId = string.IsNullOrWhiteSpace(currentAccountIdHint) ? GetCurrentAccountId() : currentAccountIdHint;
+            if (string.IsNullOrWhiteSpace(curId)) curId = accounts.FirstOrDefault(a => a.IsActive)?.Id;
+            if (string.IsNullOrWhiteSpace(curId) || string.Equals(curId, switchingToAccountId, StringComparison.OrdinalIgnoreCase)) return;
+            var acc = accounts.FirstOrDefault(a => string.Equals(a.Id, curId, StringComparison.OrdinalIgnoreCase));
+            if (acc == null) return;
+            var liveValidation = ValidateSession(EpicSavedPath, curId);
+            if (!liveValidation.IsValid) return;
+            progress?.Invoke("Saving current session...");
+            acc.RegistryData = CaptureRegistryData();
+            acc.Credentials = CredentialService.CaptureCredentials();
+            acc.RememberMeDataByPath = GetRememberMeDataByPath();
+            acc.RememberMeData = acc.RememberMeDataByPath.Values.FirstOrDefault();
+            acc.LauncherWindowSettingsByPath = GetLauncherWindowSettingsByPath();
+            acc.LauncherWindowSettings = acc.LauncherWindowSettingsByPath.Values.FirstOrDefault();
+            acc.LastPlayed = DateTime.Now;
+            var target = Path.Combine(BaseDataPath, acc.Id);
+            var tmp = target + "_r" + GetShortId();
+            await CaptureSessionToFolder(EpicSavedPath, tmp);
+            var capturedValidation = ValidateSession(tmp, acc.Id);
+            if (!capturedValidation.IsValid) { await SafeDeleteDirectoryAsync(tmp); return; }
+            if (Directory.Exists(target)) await SafeDeleteDirectoryAsync(target);
+            Directory.Move(tmp, target);
+            SaveAccounts(accounts);
+        }
+
+        private static void MarkActiveAccount(List<Account> accounts, string activeId)
+        {
+            foreach (var acc in accounts) acc.IsActive = string.Equals(acc.Id, activeId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static void AutoLaunchEpicLauncher()
+        {
+            if (Globals.IsProcessRunning("EpicGamesLauncher")) return;
+            try
+            {
+                var loc = "";
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
+                    if (key != null) loc = key.GetValue("InstallLocation") == null ? null : key.GetValue("InstallLocation").ToString();
+                if (string.IsNullOrEmpty(loc))
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
+                        if (key != null) loc = key.GetValue("InstallLocation") == null ? null : key.GetValue("InstallLocation").ToString();
+                }
+                if (!string.IsNullOrEmpty(loc))
+                {
+                    var exe = Path.Combine(loc, "Launcher", "Portal", "Binaries", "Win32", "EpicGamesLauncher.exe");
+                    if (File.Exists(exe)) { Process.Start(new ProcessStartInfo { FileName = exe, Arguments = "-minimized -silent", UseShellExecute = true }); return; }
+                }
+                Process.Start(new ProcessStartInfo { FileName = "com.epicgames.launcher://", UseShellExecute = true });
+            }
+            catch { }
+        }
+
+        public static async Task<bool> SwitchToAccount(string accId, Action<string> progress = null)
+        {
+            await SessionOperationLock.WaitAsync();
+            try
+            {
+                var accs = GetAccounts();
+                var t = accs.FirstOrDefault(a => string.Equals(a.Id, accId, StringComparison.OrdinalIgnoreCase));
+                if (t == null) return false;
+                NormalizeAccount(t);
+                var src = Path.Combine(BaseDataPath, t.Id);
+                if (!Directory.Exists(src)) return false;
+                var sourceValidation = ValidateSession(src, t.Id);
+                if (!sourceValidation.IsValid) return false;
+                var curB = GetCurrentAccountId();
+                progress?.Invoke("Closing Epic Games...");
+                if (!await EnsureEpicIsClosed()) return false;
+                await RefreshSnapshotOfCurrentSavedAccount(accs, t.Id, curB, progress);
+                var rbB = Path.Combine(BaseDataPath, "_switch_rb");
+                var tmpB = Path.Combine(BaseDataPath, "_tmp_res" + GetShortId());
+                var registryRollback = CaptureRegistryData();
+                var credentialRollback = CredentialService.CaptureCredentials();
+                try
+                {
+                    progress?.Invoke("Preparing session...");
+                    if (Directory.Exists(rbB)) await SafeDeleteDirectoryAsync(rbB);
+                    Directory.CreateDirectory(rbB);
+                    Directory.CreateDirectory(tmpB);
+                    var tS = Path.Combine(tmpB, "Saved");
+                    Directory.CreateDirectory(tS);
+                    foreach (var item in SessionItemsToCapture)
+                    {
+                        var s = Path.Combine(src, item);
+                        var d = Path.Combine(tS, item);
+                        if (Directory.Exists(s)) await CopyDirectoryStrictAsync(s, d);
+                        else if (File.Exists(s)) await SafeReplaceFileAsync(s, d);
+                    }
+                    foreach (var f in AuthFiles.Concat(AuthBinaryFiles))
+                    {
+                        var sf = Path.Combine(src, f);
+                        if (File.Exists(sf)) await SafeReplaceFileAsync(sf, Path.Combine(tS, f));
+                    }
+                    var tE = Path.Combine(tmpB, "EOS_Data");
+                    var sE = Path.Combine(src, "EOS_Data");
+                    if (Directory.Exists(sE)) await CopyDirectoryStrictAsync(sE, tE);
+                    var tR = Path.Combine(tmpB, "Roaming_Data");
+                    var sR = Path.Combine(src, "Roaming_Data");
+                    if (Directory.Exists(sR)) await CopyDirectoryStrictAsync(sR, tR);
+                    var tP = Path.Combine(tmpB, "ProgramData_Data", "Manifests");
+                    var sP = Path.Combine(src, "ProgramData_Data", "Manifests");
+                    if (Directory.Exists(sP)) await CopyDirectoryStrictAsync(sP, tP);
+                    var preparedValidation = ValidateSession(tS, t.Id);
+                    if (!preparedValidation.IsValid) throw new InvalidDataException(preparedValidation.Message);
+                    await MovePathToRollback(EpicSavedPath, rbB, "Saved");
+                    foreach (var rel in EOSFoldersToCapture)
+                    {
+                        await MovePathToRollback(Path.Combine(LocalAppData, "Epic Games", rel), rbB, "EOS_" + rel.Replace("\\", "_"));
+                        await MovePathToRollback(Path.Combine(LocalAppData, rel), rbB, "EOS_R_" + rel.Replace("\\", "_"));
+                    }
+                    await MovePathToRollback(Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher"), rbB, "Roaming");
+                    if (Directory.Exists(tP)) await MovePathToRollback(ProgramDataManifestsPath, rbB, "PD_Manifests");
+                    Directory.CreateDirectory(Path.GetDirectoryName(EpicSavedPath));
+                    Directory.Move(tS, EpicSavedPath);
+                    if (Directory.Exists(tE)) RestoreEOSData(tE);
+                    if (Directory.Exists(tR)) RestoreRoamingData(tR);
+                    if (Directory.Exists(tP)) { Directory.CreateDirectory(Path.GetDirectoryName(ProgramDataManifestsPath)); Directory.Move(tP, ProgramDataManifestsPath); }
+                    RestoreRegistryIdentity(t);
+                    CredentialService.DeleteCredentials();
+                    if (t.Credentials != null && t.Credentials.Count > 0) CredentialService.RestoreCredentials(t.Credentials);
+                    SetEmailSurgically(t.Email);
+                    SetRememberMeDataSurgically(t);
+                    SetLauncherWindowSettingsSurgically(t);
+                    var liveValidation = ValidateRestoredState(t);
+                    if (!liveValidation.IsValid) throw new InvalidDataException(liveValidation.Message);
+                    t.LastPlayed = DateTime.Now;
+                    MarkActiveAccount(accs, t.Id);
+                    SaveAccounts(accs);
+                    await SafeDeleteDirectoryAsync(rbB);
+                    await SafeDeleteDirectoryAsync(tmpB);
+                    progress?.Invoke("Launching Epic Games...");
+                    AutoLaunchEpicLauncher();
+                    return true;
+                }
+                catch
+                {
+                    await RollbackSwitchAsync(rbB);
+                    RestoreRegistrySnapshot(registryRollback);
+                    if (CredentialService.DeleteCredentials() && credentialRollback != null) CredentialService.RestoreCredentials(credentialRollback);
+                    if (Directory.Exists(tmpB)) await SafeDeleteDirectoryAsync(tmpB);
+                    return false;
+                }
+            }
+            catch { return false; }
+            finally { SessionOperationLock.Release(); }
+        }
+
+        private static async Task MovePathToRollback(string source, string rollbackRoot, string rollbackName)
+        {
+            if (!Directory.Exists(source) && !File.Exists(source)) return;
+            var rb = Path.Combine(rollbackRoot, rollbackName);
+            Directory.CreateDirectory(Path.GetDirectoryName(rb));
+            if (Directory.Exists(rb)) await SafeDeleteDirectoryAsync(rb);
+            if (File.Exists(rb)) File.Delete(rb);
+            Directory.Move(source, rb);
+        }
+
+        private static void RestoreEOSData(string sourceRoot)
+        {
+            foreach (var rel in EOSFoldersToCapture)
+            {
+                var s = Path.Combine(sourceRoot, rel);
+                if (!Directory.Exists(s)) continue;
+                var dest = File.Exists(s + ".is_root") ? Path.Combine(LocalAppData, rel) : Path.Combine(LocalAppData, "Epic Games", rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                Directory.Move(s, dest);
+            }
+        }
+
+        private static void RestoreRoamingData(string sourceRoot)
+        {
+            foreach (var folder in Directory.GetDirectories(sourceRoot))
+            {
+                var dest = Path.Combine(RoamingAppData, "Epic Games", Path.GetFileName(folder));
+                Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                Directory.Move(folder, dest);
+            }
+        }
+
+        private static async Task RollbackSwitchAsync(string rollbackRoot)
+        {
+            try
+            {
+                await RestoreRollbackPath(rollbackRoot, "Saved", EpicSavedPath);
+                foreach (var rel in EOSFoldersToCapture)
+                {
+                    await RestoreRollbackPath(rollbackRoot, "EOS_" + rel.Replace("\\", "_"), Path.Combine(LocalAppData, "Epic Games", rel));
+                    await RestoreRollbackPath(rollbackRoot, "EOS_R_" + rel.Replace("\\", "_"), Path.Combine(LocalAppData, rel));
+                }
+                await RestoreRollbackPath(rollbackRoot, "Roaming", Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher"));
+                await RestoreRollbackPath(rollbackRoot, "PD_Manifests", ProgramDataManifestsPath);
+            }
+            catch { }
+        }
+
+        private static async Task RestoreRollbackPath(string rollbackRoot, string name, string target)
+        {
+            var s = Path.Combine(rollbackRoot, name);
+            if (!Directory.Exists(s) && !File.Exists(s)) return;
+            if (Directory.Exists(target)) await SafeDeleteDirectoryAsync(target);
+            else if (File.Exists(target)) File.Delete(target);
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            Directory.Move(s, target);
+        }
+
+        private static void RestoreRegistryIdentity(Account target)
+        {
+            ClearRegistryIdentity(CaptureRegistryData());
+            if (target.RegistryData != null)
+            {
+                foreach (var kv in target.RegistryData) Globals.SetRegistryKey(kv.Key, kv.Value);
+            }
+            if (!string.IsNullOrWhiteSpace(target.Id))
+            {
+                Globals.SetRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:AccountId", "sz:" + target.Id);
+                if (target.RegistryData == null || !target.RegistryData.Keys.Any(k => k.EndsWith(":EpicAccountId", StringComparison.OrdinalIgnoreCase)))
+                    Globals.SetRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:EpicAccountId", "sz:" + target.Id);
+            }
+        }
+
+        private static void RestoreRegistrySnapshot(Dictionary<string, string> snapshot)
+        {
+            ClearRegistryIdentity(CaptureRegistryData());
+            if (snapshot == null) return;
+            foreach (var kv in snapshot) Globals.SetRegistryKey(kv.Key, kv.Value);
+        }
+
+        private static void ClearRegistryIdentity(Dictionary<string, string> current)
+        {
+            current = current ?? new Dictionary<string, string>();
+            foreach (var key in current.Keys.Concat(RegistryKeysToSwap).Distinct(StringComparer.OrdinalIgnoreCase)) Globals.DeleteRegistryValue(key);
+        }
+
+        private static bool VerifyRegistryIdentity(string expectedAccountId)
+        {
+            if (string.IsNullOrWhiteSpace(expectedAccountId)) return false;
+            var current = GetCurrentAccountId();
+            return string.Equals(current, expectedAccountId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static SessionValidationResult ValidateRestoredState(Account target)
+        {
+            var live = ValidateSession(EpicSavedPath, target.Id);
+            if (!live.IsValid) return live;
+            if (!VerifyRegistryIdentity(target.Id)) return new SessionValidationResult { IsValid = false, Message = "Restored registry identity does not match target account." };
+            if (!VerifyRememberMeApplied(target)) return new SessionValidationResult { IsValid = false, Message = "Restored RememberMe state does not match target account." };
+            var restoredAuthFiles = AuthFiles.Select(f => Path.Combine(EpicSavedPath, f)).Where(File.Exists).ToList();
+            var hasModernBinary = File.Exists(Path.Combine(EpicSavedPath, "Data", "OC_" + target.Id + ".dat"));
+            if (restoredAuthFiles.Count == 0 && !hasModernBinary) return new SessionValidationResult { IsValid = false, Message = "No restored auth file exists." };
+            live.IsValid = true;
+            return live;
+        }
+
+        private static void AtomicWriteAllLines(string path, IList<string> lines)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            var tmp = path + ".tmp_" + Guid.NewGuid().ToString("N");
+            File.WriteAllLines(tmp, lines.ToArray());
+            AtomicReplaceFile(tmp, path);
+        }
+
+        private static void AtomicReplaceFile(string tmp, string target)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            if (File.Exists(target))
+            {
+                var backup = target + ".bak_" + Guid.NewGuid().ToString("N");
+                File.Replace(tmp, target, backup, true);
+                try { if (File.Exists(backup)) File.Delete(backup); } catch { }
+            }
+            else { File.Move(tmp, target); }
+        }
+
+        private static string MakeRelativePath(string root, string fullPath)
+        {
+            var rootUri = new Uri(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar);
+            var pathUri = new Uri(Path.GetFullPath(fullPath));
+            return Uri.UnescapeDataString(rootUri.MakeRelativeUri(pathUri).ToString()).Replace('/', Path.DirectorySeparatorChar);
+        }
+
+        private static Tuple<string, string, string> _lastDetected;
+
+        public static async Task<Tuple<string, string, string>> GetDetectedMetadataAsync()
+        {
+            return await Task.Run(() =>
+            {
+                var id = GetCurrentAccountId();
+                if (!string.IsNullOrEmpty(id) && _lastDetected != null && _lastDetected.Item1 == id && _lastDetected.Item2 != "N/A") return _lastDetected;
+                var name = "N/A";
+                var email = "N/A";
+                try
+                {
+                    if (Directory.Exists(EpicConfigPath))
+                    {
+                        var files = Directory.GetFiles(EpicConfigPath, "GameUserSettings.ini", SearchOption.AllDirectories);
+                        var ini = files.FirstOrDefault(f => f.IndexOf("WindowsEditor", StringComparison.OrdinalIgnoreCase) >= 0) ?? files.FirstOrDefault();
+                        if (ini != null)
+                        {
+                            var lines = File.ReadAllLines(ini);
+                            foreach (var raw in lines)
+                            {
+                                var line = raw.Trim();
+                                if (line.StartsWith("LastCheckedEmail=", StringComparison.OrdinalIgnoreCase)) { var v = line.Substring("LastCheckedEmail=".Length).Trim(); if (!string.IsNullOrWhiteSpace(v)) email = v; }
+                                else if (line.StartsWith("DisplayName=", StringComparison.OrdinalIgnoreCase)) { var v = line.Substring("DisplayName=".Length).Trim(); if (!string.IsNullOrWhiteSpace(v)) name = v; }
+                            }
+                        }
+                    }
+                    if (name == "N/A" || email == "N/A")
+                    {
+                        var logsPath = Path.Combine(EpicSavedPath, "Logs");
+                        if (Directory.Exists(logsPath))
+                        {
+                            var logs = Directory.GetFiles(logsPath, "EpicGamesLauncher*.log").OrderByDescending(File.GetLastWriteTimeUtc).Take(2).ToList();
+                            foreach (var f in logs)
+                            {
+                                try
+                                {
+                                    using (var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                                    using (var reader = new StreamReader(fs))
+                                    {
+                                        var q = new Queue<string>(1000);
+                                        while (!reader.EndOfStream) { if (q.Count >= 1000) q.Dequeue(); q.Enqueue(reader.ReadLine() ?? ""); }
+                                        foreach (var line in q.Reverse())
+                                        {
+                                            if (name == "N/A" && line.Contains("-epicusername=\""))
+                                            {
+                                                var k = "-epicusername=\"";
+                                                var s = line.IndexOf(k, StringComparison.Ordinal);
+                                                if (s >= 0) { s += k.Length; var e = line.IndexOf('"', s); if (e > s) { var v = line.Substring(s, e - s).Trim(); if (!string.IsNullOrWhiteSpace(v)) name = v; } }
+                                            }
+                                            if (name == "N/A" && line.Contains("DisplayName: "))
+                                            {
+                                                var idx = line.IndexOf("DisplayName: ", StringComparison.Ordinal);
+                                                if (idx >= 0) { var v = line.Substring(idx + "DisplayName: ".Length).Trim(); if (!string.IsNullOrWhiteSpace(v)) name = v; }
+                                            }
+                                            if (email == "N/A" && line.Contains("@")) { var m = Regex.Match(line, @"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"); if (m.Success) email = m.Value; }
+                                            if (name != "N/A" && email != "N/A") break;
+                                        }
+                                    }
+                                }
+                                catch { }
+                                if (name != "N/A" && email != "N/A") break;
+                            }
+                        }
+                    }
+                }
+                catch { }
+                _lastDetected = new Tuple<string, string, string>(id, name, email);
+                return _lastDetected;
             });
         }
 
-        private static async Task CaptureSessionToFolder(string epicSavedPath, string destinationFolder)
+        public static Tuple<string, string, string> GetDetectedMetadata() { return Task.Run(async () => await GetDetectedMetadataAsync()).GetAwaiter().GetResult(); }
+
+        public static async Task<Tuple<string, string, string>> WaitForDetectedMetadata(int sec = 120, int interval = 1500)
         {
-            Globals.WriteToLog($"[CAPTURE] Starting deep session capture to {destinationFolder}");
-            await SafeDeleteDirectoryAsync(destinationFolder);
-            Directory.CreateDirectory(destinationFolder);
+            var end = DateTime.UtcNow.AddSeconds(sec);
+            while (DateTime.UtcNow < end) { var det = GetDetectedMetadata(); if (!string.IsNullOrWhiteSpace(det.Item1)) return det; await Task.Delay(interval); }
+            return new Tuple<string, string, string>(null, "N/A", "N/A");
+        }
 
-            // 1. Capture Essential JSON files from Config/Windows AND root (modern auth home)
-            string[] authFiles = { "PersistentAuthStorage.json", "PersistentAuthStorage.bin" };
-            
-            // Check Config/Windows
-            var configWindowsPath = Path.Combine(epicSavedPath, "Config", "Windows");
-            foreach (var file in authFiles)
+        public static void BackupAccounts(string zip, Action<string> log = null)
+        {
+            Directory.CreateDirectory(BaseDataPath);
+            var tmp = Path.Combine(Path.GetTempPath(), "e_bak_" + GetShortId());
+            try
             {
-                var source = Path.Combine(configWindowsPath, file);
-                if (File.Exists(source))
+                Directory.CreateDirectory(tmp);
+                if (File.Exists(AccountsJsonPath)) File.Copy(AccountsJsonPath, Path.Combine(tmp, "accounts.json"), true);
+                var sPath = Path.Combine(Globals.UserDataFolder, "appsettings.json");
+                if (File.Exists(sPath)) File.Copy(sPath, Path.Combine(tmp, "appsettings.json"), true);
+                var accs = GetAccounts();
+                foreach (var a in accs)
                 {
-                    Globals.WriteToLog($"[CAPTURE] Auth token found in Config/Windows: {file}");
-                    await SafeReplaceFileAsync(source, Path.Combine(destinationFolder, "Config", "Windows", file));
+                    var f = Path.Combine(BaseDataPath, a.Id);
+                    if (Directory.Exists(f)) Globals.CopyFilesRecursive(f, Path.Combine(tmp, a.Id), true);
+                }
+                var uSkins = Path.Combine(Globals.UserDataFolder, "Skin_Icons");
+                var aSkins = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons");
+                var sSkins = Directory.Exists(uSkins) ? uSkins : (Directory.Exists(aSkins) ? aSkins : null);
+                if (sSkins != null) Globals.CopyFilesRecursive(sSkins, Path.Combine(tmp, "Skin_Icons"), true);
+                Directory.CreateDirectory(Path.GetDirectoryName(zip) ?? "");
+                if (File.Exists(zip)) File.Delete(zip);
+
+                using (var archive = SharpCompress.Archives.Zip.ZipArchive.Create())
+                {
+                    foreach (var file in Directory.GetFiles(tmp, "*", SearchOption.AllDirectories))
+                    {
+                        string rel = file.Substring(tmp.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        archive.AddEntry(rel, file);
+                    }
+                    archive.SaveTo(zip, CompressionType.Deflate);
                 }
             }
+            catch { throw; }
+            finally { if (Directory.Exists(tmp)) try { Globals.ForceDeleteDirectory(tmp); } catch { } }
+        }
 
-            // Check Root
-            foreach (var file in authFiles)
+        public static void RestoreAccounts(string zip)
+        {
+            if (!File.Exists(zip)) throw new FileNotFoundException("Backup file not found: " + zip);
+            var tmp = Path.Combine(Path.GetTempPath(), "e_res_" + GetShortId());
+            var rb = BaseDataPath + "_rb";
+            try
             {
-                var source = Path.Combine(epicSavedPath, file);
-                if (File.Exists(source))
+                if (Directory.Exists(tmp)) try { Globals.ForceDeleteDirectory(tmp); } catch { }
+                Directory.CreateDirectory(tmp);
+
+                try
                 {
-                    Globals.WriteToLog($"[CAPTURE] Auth token found in Root: {file}");
-                    await SafeReplaceFileAsync(source, Path.Combine(destinationFolder, file));
+                    using (var archive = SharpCompress.Archives.Zip.ZipArchive.Open(zip))
+                    {
+                        foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
+                        {
+                            string entryPath = entry.Key.Replace('/', Path.DirectorySeparatorChar);
+                            string fullPath = Path.Combine(tmp, entryPath);
+                            string longPath = fullPath.StartsWith(@"\\") ? fullPath : @"\\?\" + fullPath;
+
+                            Directory.CreateDirectory(Path.GetDirectoryName(longPath));
+                            using (var stream = entry.OpenEntryStream())
+                            using (var fs = new FileStream(longPath, FileMode.Create, FileAccess.Write))
+                            {
+                                stream.CopyTo(fs);
+                            }
+                        }
+                    }
                 }
-            }
+                catch (Exception ex) { throw new IOException("Failed to extract backup safely. [LONG_PATH?] Error: " + ex.Message, ex); }
 
-            // 2. Capture ALL WebCaches surgically
-            var webCaches = GetAllEpicWebCachePaths(epicSavedPath);
-            foreach (var wc in webCaches)
-            {
-                var relPath = wc.Substring(epicSavedPath.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                await SafeReplaceDirectoryAsync(wc, Path.Combine(destinationFolder, "WebCaches_Deep", relPath));
-            }
+                var aJson = Path.Combine(tmp, "accounts.json");
+                if (!File.Exists(aJson)) throw new InvalidDataException("Backup is invalid: accounts.json is missing.");
 
-            // 3. Capture Session Folders
-            foreach (var item in SessionFoldersToCapture)
-            {
-                if (item == "WebCaches" || item == "EpicGamesLauncher") continue; // Handled separately or specifically
-                var sourcePath = Path.Combine(epicSavedPath, item);
-                var destPath = Path.Combine(destinationFolder, item);
-                if (Directory.Exists(sourcePath))
+                var accs = JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(aJson));
+                foreach (var a in accs)
                 {
-                    Globals.WriteToLog($"[CAPTURE] Folder: {item}");
-                    await SafeReplaceDirectoryAsync(sourcePath, destPath);
-                }
-                else if (File.Exists(sourcePath))
-                {
-                    Globals.WriteToLog($"[CAPTURE] File: {item}");
-                    await SafeReplaceFileAsync(sourcePath, destPath);
-                }
-            }
-
-            // 4. Capture EOS & Overlay Data (The modern auth home)
-            var localAppData = GetLocalAppDataPath();
-            var eosDestPath = Path.Combine(destinationFolder, "EOS_Data");
-            foreach (var relPath in EOSFoldersToCapture)
-            {
-                // Try LocalAppData\Epic Games\...
-                var sourcePath = Path.Combine(localAppData, "Epic Games", relPath);
-                bool isRoot = false;
-                if (!Directory.Exists(sourcePath)) 
-                {
-                    // Try LocalAppData\...
-                    sourcePath = Path.Combine(localAppData, relPath);
-                    isRoot = true;
+                    NormalizeAccount(a);
+                    if (!string.IsNullOrWhiteSpace(a.ProfileImagePath) && a.ProfileImagePath.Contains("Skin_Icons")) a.ProfileImagePath = Path.Combine("Skin_Icons", Path.GetFileName(a.ProfileImagePath));
                 }
 
-                if (Directory.Exists(sourcePath))
+                if (Directory.Exists(rb)) try { Globals.ForceDeleteDirectory(rb); } catch { }
+                if (Directory.Exists(BaseDataPath)) Directory.Move(BaseDataPath, rb);
+
+                try
                 {
-                    Globals.WriteToLog($"[CAPTURE] EOS Data: {relPath} ({(isRoot ? "Root" : "Epic Folder")})");
-                    var destPath = Path.Combine(eosDestPath, relPath);
-                    await SafeReplaceDirectoryAsync(sourcePath, destPath);
-                    if (isRoot) File.WriteAllText(destPath + ".is_root", "");
+                    Directory.CreateDirectory(BaseDataPath);
+                    Globals.CopyFilesRecursive(tmp, BaseDataPath, true);
+
+                    var sRestored = Path.Combine(tmp, "appsettings.json");
+                    if (File.Exists(sRestored)) { File.Copy(sRestored, Path.Combine(Globals.UserDataFolder, "appsettings.json"), true); AppSettings.LoadSettings(); }
+
+                    var bSkins = Path.Combine(tmp, "Skin_Icons");
+                    if (Directory.Exists(bSkins))
+                    {
+                        try
+                        {
+                            var targetSkins = Path.Combine(Globals.UserDataFolder, "Skin_Icons");
+                            Directory.CreateDirectory(targetSkins);
+                            Globals.CopyFilesRecursive(bSkins, targetSkins, true);
+                        } catch { }
+                    }
+                    SaveAccounts(accs);
                 }
+                catch
+                {
+                    if (Directory.Exists(BaseDataPath)) try { Globals.ForceDeleteDirectory(BaseDataPath); } catch { }
+                    if (Directory.Exists(rb)) Directory.Move(rb, BaseDataPath);
+                    throw;
+                }
+                if (Directory.Exists(rb)) try { Globals.ForceDeleteDirectory(rb); } catch { }
             }
+            finally { if (Directory.Exists(tmp)) try { Globals.ForceDeleteDirectory(tmp); } catch { } }
+        }
 
-            // 5. Capture Epic-Specific Roaming data
-            var roamingAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var roamingDestPath = Path.Combine(destinationFolder, "Roaming_Data");
-            var sourceRoaming = Path.Combine(roamingAppData, "Epic Games", "EpicGamesLauncher");
-            if (Directory.Exists(sourceRoaming))
-            {
-                Globals.WriteToLog($"[CAPTURE] Roaming: EpicGamesLauncher");
-                await SafeReplaceDirectoryAsync(sourceRoaming, Path.Combine(roamingDestPath, "EpicGamesLauncher"));
-            }
-
-            Globals.WriteToLog("[CAPTURE] Deep session capture complete.");
+        public static void DeleteAccount(string id)
+        {
+            var accs = GetAccounts();
+            var t = accs.FirstOrDefault(a => a.Id == id);
+            if (t == null) return;
+            accs.Remove(t);
+            SaveAccounts(accs);
+            var f = Path.Combine(BaseDataPath, t.Id);
+            if (Directory.Exists(f)) try { Globals.ForceDeleteDirectory(f); } catch { }
         }
 
         private static Dictionary<string, string> CaptureRegistryData()
         {
             var data = new Dictionary<string, string>();
-            Globals.WriteToLog("[REG] Starting recursive registry capture...");
-
-            string[] rootPaths = 
-            { 
-                @"HKCU\Software\Epic Games\Unreal Engine\Identifiers",
-                @"HKCU\Software\Epic Games\Unreal Engine\EOS",
-                @"HKCU\Software\Epic Games\EOS",
-                @"HKCU\Software\Epic Games\EpicGamesLauncher"
-            };
-
-            foreach (var rootPath in rootPaths)
-            {
-                CaptureRegistryRecursive(rootPath, data);
-            }
-
-            Globals.WriteToLog($"[REG] Deep capture complete. Total identity tokens: {data.Count}");
+            foreach (var r in RegistryRootsToCapture) CaptureRegistryRecursive(r, data);
             return data;
         }
 
-        private static void CaptureRegistryRecursive(string rootPath, Dictionary<string, string> data)
+        private static void CaptureRegistryRecursive(string root, Dictionary<string, string> data)
         {
             try
             {
-                var (rootKey, path, _) = ExplodeRegistryKey(rootPath + ":Dummy");
-                if (rootKey == null) return;
-
-                using var key = rootKey.OpenSubKey(path);
-                if (key == null) return;
-
-                // Capture values in this key
-                foreach (var valueName in key.GetValueNames())
+                var exp = ExplodeRegistryKeyForCapture(root + ":D");
+                var rKey = exp.Item1;
+                var p = exp.Item2;
+                if (rKey == null) return;
+                using (var key = rKey.OpenSubKey(p))
                 {
-                    string fullPath = $"{rootPath}:{valueName}";
-                    if (Globals.TryReadRegistryKey(fullPath, out string val))
+                    if (key == null) return;
+                    foreach (var vName in key.GetValueNames())
                     {
-                        data[fullPath] = val;
+                        string full = root + ":" + vName;
+                        string val;
+                        if (Globals.TryReadRegistryKey(full, out val)) data[full] = val;
                     }
-                }
-
-                // Recurse into subkeys
-                foreach (var subKeyName in key.GetSubKeyNames())
-                {
-                    CaptureRegistryRecursive($"{rootPath}\\{subKeyName}", data);
+                    foreach (var sKey in key.GetSubKeyNames()) CaptureRegistryRecursive(root + "\\" + sKey, data);
                 }
             }
             catch { }
         }
 
-        private static (RegistryKey rootKey, string path, string subKey) ExplodeRegistryKey(string encodedPath)
+        private static Tuple<RegistryKey, string, string> ExplodeRegistryKeyForCapture(string path)
         {
             try
             {
-                if (string.IsNullOrEmpty(encodedPath) || encodedPath.Length < 5) return (null, null, null);
-                var rootKey = encodedPath.StartsWith("HKCU") ? Microsoft.Win32.Registry.CurrentUser : 
-                             (encodedPath.StartsWith("HKLM") ? Microsoft.Win32.Registry.LocalMachine : null);
-                
-                if (rootKey == null) return (null, null, null);
-
-                var remaining = encodedPath[5..];
-                var parts = remaining.Split(':');
-                if (parts.Length < 2) return (null, null, null);
-
-                return (rootKey, parts[0], parts[1]);
+                if (string.IsNullOrEmpty(path) || path.Length < 5) return new Tuple<RegistryKey, string, string>(null, null, null);
+                var rKey = path.StartsWith("HKCU") ? Microsoft.Win32.Registry.CurrentUser : (path.StartsWith("HKLM") ? Microsoft.Win32.Registry.LocalMachine : null);
+                if (rKey == null) return new Tuple<RegistryKey, string, string>(null, null, null);
+                var rem = path.Substring(5);
+                var parts = rem.Split(':');
+                if (parts.Length < 2) return new Tuple<RegistryKey, string, string>(null, null, null);
+                return new Tuple<RegistryKey, string, string>(rKey, parts[0], parts[1]);
             }
-            catch { return (null, null, null); }
+            catch { return new Tuple<RegistryKey, string, string>(null, null, null); }
         }
 
         private static string GetDeterministicColor(string input)
@@ -658,728 +1261,6 @@ namespace Epic_Games_Account_Switcher_Globals
             var hash = 0;
             foreach (var ch in input ?? string.Empty) hash = (hash << 5) - hash + ch;
             return colors[Math.Abs(hash) % colors.Length];
-        }
-
-        public static async Task<bool> CaptureCurrentAccount(
-            string nameOverride = null,
-            string emailOverride = null,
-            string imagePathOverride = null,
-            string descriptionOverride = null,
-            string passwordOverride = null,
-            Action<string> progress = null,
-            Func<string, Task<bool>> confirmOverwrite = null)
-        {
-            await SessionOperationLock.WaitAsync();
-            try
-            {
-                Globals.WriteToLog("=== CAPTAIN'S LOG: Starting New Account Capture ===");
-                
-                // CRITICAL: Clear cache before detection to prevent "Stuck Name" bug
-                _lastDetected = (null, "N/A", "N/A");
-
-                var detected = await GetDetectedMetadataAsync();
-                if (string.IsNullOrWhiteSpace(detected.Id))
-                {
-                    Globals.WriteToLog("[CAPTURE] ERROR: Could not detect AccountId. Aborting.");
-                    return false;
-                }
-                Globals.WriteToLog($"[CAPTURE] Detected current identity: {detected.Name} ({detected.Id})");
-
-                progress?.Invoke("Closing Epic Games Launcher...");
-                if (!await EnsureEpicIsClosed())
-                {
-                    Globals.WriteToLog("[CAPTURE] ERROR: Failed to close Epic processes. Files might be locked.");
-                    return false;
-                }
-
-                var accounts = GetAccounts();
-                var existing = accounts.FirstOrDefault(a => a.Id == detected.Id);
-                if (existing != null && nameOverride == null && confirmOverwrite != null)
-                {
-                    if (!await confirmOverwrite(existing.Name))
-                    {
-                        Globals.WriteToLog("[CAPTURE] User declined to overwrite existing account data.");
-                        return false;
-                    }
-                }
-
-                var epicSavedPath = GetEpicSavedPath();
-                var account = existing ?? new Account(detected.Id, nameOverride ?? (detected.Name == "N/A" ? "Epic Account" : detected.Name));
-
-                if (!string.IsNullOrWhiteSpace(nameOverride)) account.Name = nameOverride.Trim();
-                else if (!string.IsNullOrWhiteSpace(detected.Name) && detected.Name != "N/A") account.Name = detected.Name;
-
-                if (emailOverride != null) account.Email = emailOverride.Trim();
-                else if (!string.IsNullOrWhiteSpace(detected.Email) && detected.Email != "N/A") account.Email = detected.Email;
-
-                if (descriptionOverride != null) account.Description = descriptionOverride;
-                if (passwordOverride != null) account.Password = passwordOverride;
-                if (!string.IsNullOrWhiteSpace(imagePathOverride)) account.ProfileImagePath = imagePathOverride;
-
-                account.ProfileImagePath = NormalizeProfileImagePath(account.ProfileImagePath);
-                account.AccentColor = GetDeterministicColor(account.Name ?? account.Id);
-
-                progress?.Invoke("Capturing account session...");
-                var targetFolder = Path.Combine(BaseDataPath, account.Id);
-                var tempFolder = targetFolder + "_new_tmp";
-
-                await CaptureSessionToFolder(epicSavedPath, tempFolder);
-                account.RegistryData = CaptureRegistryData();
-                account.Credentials = CredentialService.CaptureCredentials();
-                account.RememberMeData = GetRememberMeDataSurgically();
-                account.LauncherWindowSettings = GetLauncherWindowSettingsSurgically();
-
-                Globals.WriteToLog($"[CAPTURE] Finalizing storage for account: {account.Name}");
-                if (Directory.Exists(targetFolder)) await SafeDeleteDirectoryAsync(targetFolder);
-                Directory.Move(tempFolder, targetFolder);
-
-                if (existing == null) accounts.Add(account);
-                SaveAccounts(accounts);
-
-                Globals.WriteToLog($"=== CAPTAIN'S LOG: Capture Successful for {account.Name} ===");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Globals.WriteToLog("=== CAPTAIN'S LOG: FATAL CAPTURE ERROR ===", ex);
-                return false;
-            }
-            finally
-            {
-                SessionOperationLock.Release();
-            }
-        }
-
-        private static async Task RefreshSnapshotOfCurrentSavedAccount(List<Account> accounts, string switchingToAccountId, string epicSavedPath, Action<string> progress)
-        {
-            var currentId = GetCurrentAccountId();
-            if (string.IsNullOrWhiteSpace(currentId) || currentId == switchingToAccountId) return;
-
-            var currentAccount = accounts.FirstOrDefault(a => a.Id == currentId);
-            if (currentAccount == null) return;
-
-            Globals.WriteToLog($"[AUTO-SAVE] Refreshing session data for current account: {currentAccount.Name}");
-            progress?.Invoke("Saving current account session...");
-
-            currentAccount.RegistryData = CaptureRegistryData();
-            currentAccount.Credentials = CredentialService.CaptureCredentials();
-            currentAccount.RememberMeData = GetRememberMeDataSurgically();
-            currentAccount.LauncherWindowSettings = GetLauncherWindowSettingsSurgically();
-
-            var targetFolder = Path.Combine(BaseDataPath, currentAccount.Id);
-            var tempFolder = targetFolder + "_refresh_tmp";
-
-            await CaptureSessionToFolder(epicSavedPath, tempFolder);
-
-            if (Directory.Exists(targetFolder)) await SafeDeleteDirectoryAsync(targetFolder);
-            Directory.Move(tempFolder, targetFolder);
-
-            SaveAccounts(accounts);
-            Globals.WriteToLog($"[AUTO-SAVE] Refresh complete for {currentAccount.Name}.");
-        }
-
-        private static void MarkActiveAccount(List<Account> accounts, string activeId)
-        {
-            foreach (var acc in accounts)
-            {
-                acc.IsActive = string.Equals(acc.Id, activeId, StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
-        public static void AutoLaunchEpicLauncher()
-        {
-            if (Globals.IsProcessRunning("EpicGamesLauncher")) return;
-
-            try
-            {
-                var installLocation = "";
-                using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
-                {
-                    installLocation = key?.GetValue("InstallLocation")?.ToString();
-                }
-
-                if (string.IsNullOrEmpty(installLocation))
-                {
-                    using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
-                    {
-                        installLocation = key?.GetValue("InstallLocation")?.ToString();
-                    }
-                }
-
-                if (!string.IsNullOrEmpty(installLocation))
-                {
-                    var exePath = Path.Combine(installLocation, "Launcher", "Portal", "Binaries", "Win32", "EpicGamesLauncher.exe");
-                    if (File.Exists(exePath))
-                    {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = exePath,
-                            Arguments = "-minimized -silent",
-                            UseShellExecute = true
-                        });
-                        return;
-                    }
-                }
-                
-                Process.Start(new ProcessStartInfo { FileName = "com.epicgames.launcher://", UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                Globals.WriteToLog("Failed to auto-launch Epic Launcher", ex);
-            }
-        }
-
-        public static async Task<bool> SwitchToAccount(string accId, Action<string> progress = null)
-        {
-            await SessionOperationLock.WaitAsync();
-            try
-            {
-                var accounts = GetAccounts();
-                var target = accounts.FirstOrDefault(a => a.Id == accId);
-                if (target == null) return false;
-
-                Globals.WriteToLog($"=== CAPTAIN'S LOG: Starting Switch to {target.Name} ({target.Id}) ===");
-
-                progress?.Invoke("Closing Epic Games Launcher...");
-                if (!await EnsureEpicIsClosed())
-                {
-                    Globals.WriteToLog("[SWITCH] ERROR: Failed to close Epic processes. Aborting switch.");
-                    return false;
-                }
-
-                var epicSavedPath = GetEpicSavedPath();
-                await RefreshSnapshotOfCurrentSavedAccount(accounts, target.Id, epicSavedPath, progress);
-
-                var sourceFolder = Path.Combine(BaseDataPath, target.Id);
-                if (!Directory.Exists(sourceFolder))
-                {
-                    Globals.WriteToLog($"[SWITCH] ERROR: Saved data not found for {target.Name}. Path: {sourceFolder}");
-                    return false;
-                }
-
-                var localAppData = GetLocalAppDataPath();
-                var roamingAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                var safetyBackupBase = Path.Combine(BaseDataPath, "_switch_rollback_tmp");
-
-                try
-                {
-                    progress?.Invoke("Preparing session rollback point...");
-                    Globals.WriteToLog("[SWITCH] Stage 1: Creating Rename-First Rollback point...");
-                    if (Directory.Exists(safetyBackupBase)) await SafeDeleteDirectoryAsync(safetyBackupBase);
-                    Directory.CreateDirectory(safetyBackupBase);
-
-                    // 1. Move current session to temporary rollback location instead of deleting
-                    async Task SafeMoveToRollback(string source, string rollbackSubName)
-                    {
-                        if (!Directory.Exists(source) && !File.Exists(source)) return;
-                        var dest = Path.Combine(safetyBackupBase, rollbackSubName);
-                        Directory.CreateDirectory(Path.GetDirectoryName(dest));
-                        
-                        try 
-                        { 
-                            if (Directory.Exists(source)) Directory.Move(source, dest);
-                            else File.Move(source, dest);
-                        }
-                        catch 
-                        { 
-                            // Fallback to copy if move fails (e.g. cross-volume or locked)
-                            if (Directory.Exists(source)) await Globals.CopyFilesRecursiveAsync(source, dest, true);
-                            else File.Copy(source, dest, true);
-                            
-                            if (Directory.Exists(source)) await SafeDeleteDirectoryAsync(source);
-                            else File.Delete(source);
-                        }
-                    }
-
-                    await SafeMoveToRollback(epicSavedPath, "Saved");
-                    foreach (var relPath in EOSFoldersToCapture)
-                    {
-                        await SafeMoveToRollback(Path.Combine(localAppData, "Epic Games", relPath), "EOS_" + relPath.Replace("\\", "_"));
-                        await SafeMoveToRollback(Path.Combine(localAppData, relPath), "EOS_Root_" + relPath.Replace("\\", "_"));
-                    }
-                    await SafeMoveToRollback(Path.Combine(roamingAppData, "Epic Games", "EpicGamesLauncher"), "Roaming");
-
-                    Directory.CreateDirectory(epicSavedPath);
-                    Globals.WriteToLog("[SWITCH] Current session moved to rollback storage.");
-
-                    progress?.Invoke("Restoring login session...");
-                    Globals.WriteToLog("[SWITCH] Stage 2: Restoring saved session data...");
-                    
-                    if (Directory.Exists(sourceFolder))
-                    {
-                        // NEW: Explicitly purge ANY remaining webcaches that might have been missed by the rollback move
-                        // (Epic sometimes locks these, or they are created in sub-sub-folders)
-                        var existingWebCaches = GetAllEpicWebCachePaths(epicSavedPath);
-                        foreach (var wc in existingWebCaches)
-                        {
-                            try { Globals.ForceDeleteDirectory(wc); } catch { }
-                        }
-
-                        // A. Restore Unififed Launcher Files Pass
-                        foreach (var item in SessionFoldersToCapture)
-                        {
-                            if (item == "WebCaches" || item == "EpicGamesLauncher") continue;
-                            var saved = Path.Combine(sourceFolder, item);
-                            var targetLoc = Path.Combine(epicSavedPath, item);
-                            if (Directory.Exists(saved)) await Globals.CopyFilesRecursiveAsync(saved, targetLoc, true);
-                            else if (File.Exists(saved)) File.Copy(saved, targetLoc, true);
-                        }
-
-                        // B. Restore Modern Auth Tokens Pass (Explicitly to ensure they override)
-                        string[] authFiles = { "PersistentAuthStorage.json", "PersistentAuthStorage.bin" };
-                        foreach (var file in authFiles)
-                        {
-                            var savedFile = Path.Combine(sourceFolder, file);
-                            if (File.Exists(savedFile)) File.Copy(savedFile, Path.Combine(epicSavedPath, file), true);
-                            
-                            var savedConfigWindows = Path.Combine(sourceFolder, "Config", "Windows", file);
-                            if (File.Exists(savedConfigWindows))
-                            {
-                                var targetConfig = Path.Combine(epicSavedPath, "Config", "Windows");
-                                Directory.CreateDirectory(targetConfig);
-                                File.Copy(savedConfigWindows, Path.Combine(targetConfig, file), true);
-                            }
-                        }
-
-                        // C. Restore Deep WebCaches
-                        var savedWebCacheDeep = Path.Combine(sourceFolder, "WebCaches_Deep");
-                        if (Directory.Exists(savedWebCacheDeep))
-                        {
-                            Globals.WriteToLog("[SWITCH] Restoring Deep WebCaches...");
-                            // We need to restore each subfolder in WebCaches_Deep back to its relative position in Saved
-                            foreach (var dir in Directory.GetDirectories(savedWebCacheDeep, "*", SearchOption.AllDirectories))
-                            {
-                                var relPath = dir.Substring(savedWebCacheDeep.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                                if (string.IsNullOrEmpty(relPath)) continue;
-
-                                var targetLoc = Path.Combine(epicSavedPath, relPath);
-                                Directory.CreateDirectory(Path.GetDirectoryName(targetLoc) ?? string.Empty);
-                                await Globals.CopyFilesRecursiveAsync(dir, targetLoc, true);
-                            }
-                            
-                            // Also copy root files from WebCaches_Deep if any
-                            foreach (var file in Directory.GetFiles(savedWebCacheDeep))
-                            {
-                                var relPath = Path.GetFileName(file);
-                                var targetLoc = Path.Combine(epicSavedPath, relPath);
-                                File.Copy(file, targetLoc, true);
-                            }
-                        }
-
-                        // D. Restore EOS Data
-                        var eosSavedPath = Path.Combine(sourceFolder, "EOS_Data");
-                        if (Directory.Exists(eosSavedPath))
-                        {
-                            foreach (var relPath in EOSFoldersToCapture)
-                            {
-                                var saved = Path.Combine(eosSavedPath, relPath);
-                                if (!Directory.Exists(saved)) continue;
-                                bool isRoot = File.Exists(saved + ".is_root");
-                                var targetLoc = isRoot ? Path.Combine(localAppData, relPath) : Path.Combine(localAppData, "Epic Games", relPath);
-                                Directory.CreateDirectory(Path.GetDirectoryName(targetLoc));
-                                await Globals.CopyFilesRecursiveAsync(saved, targetLoc, true);
-                            }
-                        }
-
-                        // E. Restore Roaming Data
-                        var savedRoamingPath = Path.Combine(sourceFolder, "Roaming_Data");
-                        if (Directory.Exists(savedRoamingPath))
-                        {
-                            foreach (var folder in Directory.GetDirectories(savedRoamingPath))
-                            {
-                                var targetLoc = Path.Combine(roamingAppData, "Epic Games", Path.GetFileName(folder));
-                                Directory.CreateDirectory(Path.GetDirectoryName(targetLoc));
-                                await Globals.CopyFilesRecursiveAsync(folder, targetLoc, true);
-                            }
-                        }
-                    }
-                    Globals.WriteToLog("[SWITCH] Session files restored successfully.");
-
-                    Globals.WriteToLog("[SWITCH] Stage 3: Applying registry identity...");
-                    // CRITICAL FIX: We no longer wipe the entire registry here.
-                    // Wiping the entire tree (especially Identifiers and EOS) was deleting machine fingerprints.
-                    // Instead, we let SetRegistryKey overwrite values. This solves the "Email Authentication" loop.
-                    
-                    foreach (var kv in target.RegistryData) Globals.SetRegistryKey(kv.Key, kv.Value);
-
-                    if (target.Credentials?.Count > 0)
-                    {
-                        CredentialService.RestoreCredentials(target.Credentials);
-                    }
-
-                    SetEmailSurgically(target.Email);
-                    SetRememberMeDataSurgically(target.RememberMeData);
-                    SetLauncherWindowSettingsSurgically(target.LauncherWindowSettings);
-
-                    MarkActiveAccount(accounts, target.Id);
-                    SaveAccounts(accounts);
-
-                    // Clean up rollback point only after total success
-                    await SafeDeleteDirectoryAsync(safetyBackupBase);
-
-                    Globals.WriteToLog($"=== CAPTAIN'S LOG: Switch to {target.Name} completed successfully! ===");
-                    progress?.Invoke("Launching Epic Games...");
-                    AutoLaunchEpicLauncher();
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    Globals.WriteToLog("=== CAPTAIN'S LOG: CRITICAL SWITCH ERROR. Attempting Rollback... ===", ex);
-                    try
-                    {
-                        // Rollback from the temporary move location
-                        async Task RollbackFromTemp(string rollbackSubName, string target)
-                        {
-                            var source = Path.Combine(safetyBackupBase, rollbackSubName);
-                            if (!Directory.Exists(source) && !File.Exists(source)) return;
-
-                            if (Directory.Exists(target)) await SafeDeleteDirectoryAsync(target);
-                            else if (File.Exists(target)) File.Delete(target);
-
-                            Directory.CreateDirectory(Path.GetDirectoryName(target));
-                            if (Directory.Exists(source)) Directory.Move(source, target);
-                            else File.Move(source, target);
-                        }
-
-                        await RollbackFromTemp("Saved", epicSavedPath);
-                        foreach (var relPath in EOSFoldersToCapture)
-                        {
-                            await RollbackFromTemp("EOS_" + relPath.Replace("\\", "_"), Path.Combine(localAppData, "Epic Games", relPath));
-                            await RollbackFromTemp("EOS_Root_" + relPath.Replace("\\", "_"), Path.Combine(localAppData, relPath));
-                        }
-                        await RollbackFromTemp("Roaming", Path.Combine(roamingAppData, "Epic Games", "EpicGamesLauncher"));
-                        
-                        Globals.WriteToLog("[ROLLBACK] Restore complete.");
-                    }
-                    catch (Exception rex) { Globals.WriteToLog("[ROLLBACK] FATAL: Rollback failed.", rex); }
-                    return false;
-                }
-            }
-            finally { SessionOperationLock.Release(); }
-        }
-
-        private static (string Id, string Name, string Email) _lastDetected;
-
-        public static async Task<(string Id, string Name, string Email)> GetDetectedMetadataAsync()
-        {
-            var detectedId = GetCurrentAccountId();
-            if (!string.IsNullOrEmpty(detectedId) && _lastDetected.Id == detectedId && _lastDetected.Name != "N/A")
-            {
-                return _lastDetected;
-            }
-
-            var detectedName = "N/A";
-            var detectedEmail = "N/A";
-
-            var epicSavedPath = GetEpicSavedPath();
-            var epicConfigPath = Path.Combine(epicSavedPath, "Config");
-
-            try
-            {
-                if (Directory.Exists(epicConfigPath))
-                {
-                    var iniFiles = Directory.GetFiles(epicConfigPath, "GameUserSettings.ini", SearchOption.AllDirectories);
-                    var ini = iniFiles.FirstOrDefault(f => f.Contains("WindowsEditor", StringComparison.OrdinalIgnoreCase)) ?? iniFiles.FirstOrDefault();
-
-                    if (ini != null)
-                    {
-                        var lines = await File.ReadAllLinesAsync(ini);
-                        foreach (var raw in lines)
-                        {
-                            var line = raw.Trim();
-                            if (line.StartsWith("LastCheckedEmail=", StringComparison.OrdinalIgnoreCase))
-                            {
-                                var value = line.Substring("LastCheckedEmail=".Length).Trim();
-                                if (!string.IsNullOrWhiteSpace(value)) detectedEmail = value;
-                            }
-                            else if (line.StartsWith("DisplayName=", StringComparison.OrdinalIgnoreCase))
-                            {
-                                var value = line.Substring("DisplayName=".Length).Trim();
-                                if (!string.IsNullOrWhiteSpace(value)) detectedName = value;
-                            }
-                        }
-                    }
-                }
-
-                if (detectedName == "N/A" || detectedEmail == "N/A")
-                {
-                    var logsPath = Path.Combine(epicSavedPath, "Logs");
-                    if (Directory.Exists(logsPath))
-                    {
-                        var logs = Directory.GetFiles(logsPath, "EpicGamesLauncher*.log")
-                            .OrderByDescending(File.GetLastWriteTimeUtc)
-                            .Take(2) // Only check the 2 most recent logs
-                            .ToList();
-
-                        foreach (var logFile in logs)
-                        {
-                            try
-                            {
-                                using var fs = new FileStream(logFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                                using var reader = new StreamReader(fs);
-                                
-                                // Only scan the last 1000 lines of the log to prevent hanging on massive files
-                                var queue = new Queue<string>(1000);
-                                while (!reader.EndOfStream)
-                                {
-                                    if (queue.Count >= 1000) queue.Dequeue();
-                                    queue.Enqueue(await reader.ReadLineAsync() ?? string.Empty);
-                                }
-
-                                foreach (var line in queue.Reverse())
-                                {
-                                    if (detectedName == "N/A" && line.Contains("-epicusername=\"", StringComparison.Ordinal))
-                                    {
-                                        var key = "-epicusername=\"";
-                                        var start = line.IndexOf(key, StringComparison.Ordinal);
-                                        if (start >= 0)
-                                        {
-                                            start += key.Length;
-                                            var end = line.IndexOf('"', start);
-                                            if (end > start)
-                                            {
-                                                var val = line.Substring(start, end - start).Trim();
-                                                if (!string.IsNullOrWhiteSpace(val)) detectedName = val;
-                                            }
-                                        }
-                                    }
-
-                                    if (detectedName == "N/A" && line.Contains("DisplayName: ", StringComparison.Ordinal))
-                                    {
-                                        var idx = line.IndexOf("DisplayName: ", StringComparison.Ordinal);
-                                        if (idx >= 0)
-                                        {
-                                            var val = line[(idx + "DisplayName: ".Length)..].Trim();
-                                            if (!string.IsNullOrWhiteSpace(val)) detectedName = val;
-                                        }
-                                    }
-
-                                    if (detectedEmail == "N/A" && line.Contains('@'))
-                                    {
-                                        var match = Regex.Match(line, @"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}");
-                                        if (match.Success) detectedEmail = match.Value;
-                                    }
-
-                                    if (detectedName != "N/A" && detectedEmail != "N/A") break;
-                                }
-                            }
-                            catch { }
-                            if (detectedName != "N/A" && detectedEmail != "N/A") break;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex) { Globals.WriteToLog("Error gathering account metadata", ex); }
-
-            _lastDetected = (detectedId, detectedName, detectedEmail);
-            return _lastDetected;
-        }
-
-        public static (string Id, string Name, string Email) GetDetectedMetadata()
-        {
-            // Sync wrapper for UI compatibility, but ideally call Async
-            return Task.Run(async () => await GetDetectedMetadataAsync()).GetAwaiter().GetResult();
-        }
-
-        public static async Task<(string Id, string Name, string Email)> WaitForDetectedMetadata(int timeoutSeconds = 120, int pollIntervalMs = 1500)
-        {
-            var timeoutAt = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-            while (DateTime.UtcNow < timeoutAt)
-            {
-                var detected = GetDetectedMetadata();
-                if (!string.IsNullOrWhiteSpace(detected.Id)) return detected;
-                await Task.Delay(pollIntervalMs);
-            }
-
-            return (null, "N/A", "N/A");
-        }
-
-        public static void BackupAccounts(string zipPath)
-        {
-            Globals.WriteToLog($"[BACKUP] Starting backup to: {zipPath}");
-            Directory.CreateDirectory(BaseDataPath);
-            var tempFolder = Path.Combine(Path.GetTempPath(), "epic_accounts_backup_" + Guid.NewGuid().ToString("N"));
-
-            try
-            {
-                Directory.CreateDirectory(tempFolder);
-
-                if (File.Exists(AccountsJsonPath))
-                {
-                    Globals.WriteToLog("[BACKUP] Backing up accounts.json");
-                    File.Copy(AccountsJsonPath, Path.Combine(tempFolder, "accounts.json"), true);
-                }
-
-                                                                         
-                var settingsPath = Path.Combine(Globals.UserDataFolder, "appsettings.json");
-                if (File.Exists(settingsPath))
-                {
-                    Globals.WriteToLog("[BACKUP] Backing up appsettings.json");
-                    File.Copy(settingsPath, Path.Combine(tempFolder, "appsettings.json"), true);
-                }
-
-                var accounts = GetAccounts();
-                Globals.WriteToLog($"[BACKUP] Backing up {accounts.Count} account folders.");
-                foreach (var account in accounts)
-                {
-                    var accountFolder = Path.Combine(BaseDataPath, account.Id);
-                    if (!Directory.Exists(accountFolder)) continue;
-
-                    var targetFolder = Path.Combine(tempFolder, account.Id);
-                    Directory.CreateDirectory(targetFolder);
-                    Globals.CopyFilesRecursive(accountFolder, targetFolder, true);
-                }
-
-                // Also backup the Skin_Icons folder if it exists in UserData (primary) or app directory
-                var userSkinIcons = Path.Combine(Globals.UserDataFolder, "Skin_Icons");
-                var appSkinIcons = Path.Combine(AppContext.BaseDirectory, "Skin_Icons");
-                
-                string sourceSkins = Directory.Exists(userSkinIcons) ? userSkinIcons : (Directory.Exists(appSkinIcons) ? appSkinIcons : null);
-
-                if (sourceSkins != null)
-                {
-                    Globals.WriteToLog($"[BACKUP] Backing up skins from: {sourceSkins}");
-                    var targetSkins = Path.Combine(tempFolder, "Skin_Icons");
-                    Directory.CreateDirectory(targetSkins);
-                    Globals.CopyFilesRecursive(sourceSkins, targetSkins, true);
-                }
-
-                Directory.CreateDirectory(Path.GetDirectoryName(zipPath) ?? string.Empty);
-                if (File.Exists(zipPath)) File.Delete(zipPath);
-                ZipFile.CreateFromDirectory(tempFolder, zipPath, CompressionLevel.Optimal, false);
-                Globals.WriteToLog("[BACKUP] Backup successfully created.");
-            }
-            catch (Exception ex)
-            {
-                Globals.WriteToLog("[ERROR] Backup failed.", ex);
-                throw;
-            }
-            finally
-            {
-                if (Directory.Exists(tempFolder))
-                {
-                    try { Globals.ForceDeleteDirectory(tempFolder); } catch { }
-                }
-            }
-        }
-
-        public static void RestoreAccounts(string zipPath)
-        {
-            if (!File.Exists(zipPath)) throw new FileNotFoundException("Backup file not found", zipPath);
-            Globals.WriteToLog($"[RESTORE] Starting restore from: {zipPath}");
-
-            var restoreTemp = Path.Combine(Path.GetTempPath(), "epic_restore_tmp_" + Guid.NewGuid().ToString("N"));
-            var backupFolder = BaseDataPath + "_restore_backup";
-
-            try
-            {
-                Directory.CreateDirectory(restoreTemp);
-                ZipFile.ExtractToDirectory(zipPath, restoreTemp, true);
-
-                var restoredAccountsJson = Path.Combine(restoreTemp, "accounts.json");
-                if (!File.Exists(restoredAccountsJson))
-                    throw new InvalidDataException("Backup is missing 'accounts.json'. This is not a valid Epic Games Account Switcher backup.");
-
-                                                       
-                List<Account> restoredAccounts;
-                try
-                {
-                    var jsonContent = File.ReadAllText(restoredAccountsJson);
-                    restoredAccounts = JsonConvert.DeserializeObject<List<Account>>(jsonContent);
-                    if (restoredAccounts == null) throw new Exception("Restored accounts list is null.");
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidDataException("The 'accounts.json' file in the backup is corrupted or invalid: " + ex.Message);
-                }
-
-                Globals.WriteToLog($"[RESTORE] Found {restoredAccounts.Count} accounts in backup.");
-                                                                
-                foreach (var acc in restoredAccounts)
-                {
-                    NormalizeAccount(acc);
-                    
-                                                                                               
-                    if (!string.IsNullOrWhiteSpace(acc.ProfileImagePath) && (acc.ProfileImagePath.Contains("\\Skin_Icons\\") || acc.ProfileImagePath.Contains("\\Skins_Icons\\")))
-                    {
-                        var fileName = Path.GetFileName(acc.ProfileImagePath);
-                        acc.ProfileImagePath = Path.Combine("Skin_Icons", fileName);                                              
-                    }
-                }
-
-                                                                      
-                var restoredSettingsPath = Path.Combine(restoreTemp, "appsettings.json");
-                var currentSettingsPath = Path.Combine(Globals.UserDataFolder, "appsettings.json");
-
-                if (Directory.Exists(backupFolder)) Globals.ForceDeleteDirectory(backupFolder);
-                if (Directory.Exists(BaseDataPath)) Directory.Move(BaseDataPath, backupFolder);
-
-                try
-                {
-                    Directory.CreateDirectory(BaseDataPath);
-                    Globals.CopyFilesRecursive(restoreTemp, BaseDataPath, true);
-                    
-                    if (File.Exists(restoredSettingsPath))
-                    {
-                        Globals.WriteToLog("[RESTORE] Restoring appsettings.json");
-                        File.Copy(restoredSettingsPath, currentSettingsPath, true);
-                        AppSettings.LoadSettings();
-                    }
-
-                    // Restore the Skin_Icons folder BEFORE saving accounts
-                    var backupSkins = Path.Combine(restoreTemp, "Skin_Icons");
-                    if (Directory.Exists(backupSkins))
-                    {
-                        Globals.WriteToLog("[RESTORE] Restoring Skin_Icons folder to UserData.");
-                        var targetSkins = Path.Combine(Globals.UserDataFolder, "Skin_Icons");
-                        try
-                        {
-                            Directory.CreateDirectory(targetSkins);
-                            Globals.CopyFilesRecursive(backupSkins, targetSkins, true);
-                        }
-                        catch (Exception ex)
-                        {
-                            Globals.WriteToLog("[ERROR] Failed to restore Skin_Icons.", ex);
-                        }
-                    }
-
-                    SaveAccounts(restoredAccounts);
-                    Globals.WriteToLog("[RESTORE] Restore complete.");
-                }
-                catch (Exception ex)
-                {
-                    Globals.WriteToLog("[ERROR] Restore failed.", ex);
-                                                         
-                    if (Directory.Exists(BaseDataPath)) Globals.ForceDeleteDirectory(BaseDataPath);
-                    if (Directory.Exists(backupFolder)) Directory.Move(backupFolder, BaseDataPath);
-                    throw;
-                }
-
-                if (Directory.Exists(backupFolder)) Globals.ForceDeleteDirectory(backupFolder);
-            }
-            finally
-            {
-                if (Directory.Exists(restoreTemp))
-                {
-                    try { Globals.ForceDeleteDirectory(restoreTemp); } catch { }
-                }
-            }
-        }
-
-        public static void DeleteAccount(string accId)
-        {
-            var accounts = GetAccounts();
-            var target = accounts.FirstOrDefault(a => a.Id == accId);
-            if (target == null) return;
-
-            accounts.Remove(target);
-            SaveAccounts(accounts);
-
-            var accountFolder = Path.Combine(BaseDataPath, target.Id);
-            if (Directory.Exists(accountFolder))
-            {
-                try { Globals.ForceDeleteDirectory(accountFolder); } catch { }
-            }
         }
     }
 }

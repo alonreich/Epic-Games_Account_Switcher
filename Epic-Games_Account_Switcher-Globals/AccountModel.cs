@@ -31,14 +31,17 @@ namespace Epic_Games_Account_Switcher_Globals
         }
 
         public string RememberMeData { get; set; }
+        public Dictionary<string, string> RememberMeDataByPath { get; set; } = new Dictionary<string, string>();
         public string LauncherWindowSettings { get; set; }
-        public List<CredentialService.SavedCredential> Credentials { get; set; } = new();
-        public Dictionary<string, string> RegistryData { get; set; } = new();
+        public Dictionary<string, string> LauncherWindowSettingsByPath { get; set; } = new Dictionary<string, string>();
+        public List<CredentialService.SavedCredential> Credentials { get; set; } = new List<CredentialService.SavedCredential>();
+        public Dictionary<string, string> RegistryData { get; set; } = new Dictionary<string, string>();
 
         public string EncryptedPassword { get; set; }
 
+        public DateTime LastPlayed { get; set; }
+
         [Newtonsoft.Json.JsonIgnore]
-        [System.Text.Json.Serialization.JsonIgnore]
         public string Password
         {
             get

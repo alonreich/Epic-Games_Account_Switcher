@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace Epic_Games_Account_Switcher_Globals
 {
@@ -34,9 +33,6 @@ namespace Epic_Games_Account_Switcher_Globals
             public uint Type { get; set; }
         }
 
-        [DllImport("Advapi32.dll", EntryPoint = "CredReadW", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern bool CredRead(string target, uint type, int reservedFlag, out IntPtr credentialPtr);
-
         [DllImport("Advapi32.dll", EntryPoint = "CredWriteW", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern bool CredWrite(ref CREDENTIAL credential, uint flags);
 
@@ -49,95 +45,81 @@ namespace Epic_Games_Account_Switcher_Globals
         [DllImport("Advapi32.dll", EntryPoint = "CredFree", SetLastError = true)]
         private static extern void CredFree(IntPtr buffer);
 
-        private const uint CRED_TYPE_GENERIC = 1;
-        private const uint CRED_PERSIST_LOCAL_MACHINE = 2;
-
-        private static readonly string[] CredentialFilters = 
-        { 
-            "eos-sdk:*", "EpicGames:*", "EpicGames.Launcher:*", "EOS:*", "Epic Games:*", 
-            "com.epicgames*", "Epic*Account*", "Epic*Session*", "Epic*Auth*" 
-        };
+        private static readonly string[] CredentialNeedles = { "eos", "epic", "com.epicgames", "epicgameslauncher", "fortnite" };
 
         public static List<SavedCredential> CaptureCredentials()
         {
             var results = new List<SavedCredential>();
             Globals.WriteToLog("[CRED] Starting credential capture...");
-            foreach (var filter in CredentialFilters)
+            ForEachEpicCredential(cred =>
             {
                 try
                 {
-                    if (CredEnumerate(filter, 0, out int count, out IntPtr credentialPtrs))
+                    var saved = new SavedCredential
                     {
-                        Globals.WriteToLog($"[CRED] Found {count} credentials for filter: {filter}");
-                        for (int i = 0; i < count; i++)
-                        {
-                            IntPtr ptr = Marshal.ReadIntPtr(credentialPtrs, i * IntPtr.Size);
-                            var cred = Marshal.PtrToStructure<CREDENTIAL>(ptr);
-                            
-                            var saved = new SavedCredential
-                            {
-                                TargetName = cred.TargetName,
-                                UserName = cred.UserName,
-                                Persist = cred.Persist,
-                                Type = cred.Type,
-                                Blob = new byte[cred.CredentialBlobSize]
-                            };
-                            Marshal.Copy(cred.CredentialBlob, saved.Blob, 0, (int)cred.CredentialBlobSize);
-                            
-                            if (!results.Any(r => r.TargetName == saved.TargetName))
-                                results.Add(saved);
-                        }
-                        CredFree(credentialPtrs);
-                    }
+                        TargetName = cred.TargetName,
+                        UserName = cred.UserName,
+                        Persist = cred.Persist,
+                        Type = cred.Type,
+                        Blob = new byte[cred.CredentialBlobSize]
+                    };
+                    if (cred.CredentialBlob != IntPtr.Zero && cred.CredentialBlobSize > 0) Marshal.Copy(cred.CredentialBlob, saved.Blob, 0, (int)cred.CredentialBlobSize);
+                    if (!results.Any(r => string.Equals(r.TargetName, saved.TargetName, StringComparison.OrdinalIgnoreCase))) results.Add(saved);
                 }
                 catch (Exception ex)
                 {
-                    Globals.WriteToLog($"Failed to capture credentials for filter {filter}", ex);
+                    Globals.WriteToLog("[CRED] Failed to capture Epic credential.", ex);
                 }
-            }
-            Globals.WriteToLog($"[CRED] Captured {results.Count} unique credentials.");
+                return true;
+            });
+            Globals.WriteToLog("[CRED] Captured " + results.Count + " unique credentials.");
             return results;
         }
 
-        public static void DeleteCredentials()
+        public static bool DeleteCredentials()
         {
             Globals.WriteToLog("[CRED] Deleting current credentials...");
-            int deletedCount = 0;
-            foreach (var filter in CredentialFilters)
+            var success = true;
+            var deletedCount = 0;
+            ForEachEpicCredential(cred =>
             {
                 try
                 {
-                    if (CredEnumerate(filter, 0, out int count, out IntPtr credentialPtrs))
+                    if (CredDelete(cred.TargetName, cred.Type, 0)) deletedCount++;
+                    else
                     {
-                        for (int i = 0; i < count; i++)
+                        var err = Marshal.GetLastWin32Error();
+                        if (err != 1168)
                         {
-                            IntPtr ptr = Marshal.ReadIntPtr(credentialPtrs, i * IntPtr.Size);
-                            var cred = Marshal.PtrToStructure<CREDENTIAL>(ptr);
-                            if (CredDelete(cred.TargetName, cred.Type, 0)) deletedCount++;
+                            success = false;
+                            Globals.WriteToLog("[CRED] Failed to delete credential. Error: " + err);
                         }
-                        CredFree(credentialPtrs);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Globals.WriteToLog($"Failed to delete credentials for filter {filter}", ex);
+                    success = false;
+                    Globals.WriteToLog("[CRED] Failed to delete Epic credential.", ex);
                 }
-            }
-            Globals.WriteToLog($"[CRED] Deleted {deletedCount} credentials.");
+                return true;
+            });
+            Globals.WriteToLog("[CRED] Deleted " + deletedCount + " credentials.");
+            return success;
         }
 
-        public static void RestoreCredentials(List<SavedCredential> savedList)
+        public static bool RestoreCredentials(List<SavedCredential> savedList)
         {
-            if (savedList == null) return;
-
-            Globals.WriteToLog($"[CRED] Restoring {savedList.Count} credentials...");
+            if (savedList == null) return true;
+            Globals.WriteToLog("[CRED] Restoring " + savedList.Count + " credentials...");
+            var success = true;
             foreach (var saved in savedList)
             {
+                IntPtr blobPtr = IntPtr.Zero;
                 try
                 {
-                    IntPtr blobPtr = Marshal.AllocHGlobal(saved.Blob.Length);
-                    Marshal.Copy(saved.Blob, 0, blobPtr, saved.Blob.Length);
-
+                    if (saved == null || string.IsNullOrWhiteSpace(saved.TargetName) || saved.Blob == null) continue;
+                    blobPtr = Marshal.AllocHGlobal(saved.Blob.Length);
+                    if (saved.Blob.Length > 0) Marshal.Copy(saved.Blob, 0, blobPtr, saved.Blob.Length);
                     var cred = new CREDENTIAL
                     {
                         Type = saved.Type,
@@ -152,23 +134,61 @@ namespace Epic_Games_Account_Switcher_Globals
                         Comment = null,
                         TargetAlias = null
                     };
-
                     if (!CredWrite(ref cred, 0))
                     {
-                        Globals.WriteToLog($"[CRED] Failed to write credential {saved.TargetName}. Error: {Marshal.GetLastWin32Error()}");
+                        success = false;
+                        Globals.WriteToLog("[CRED] Failed to write credential " + saved.TargetName + ". Error: " + Marshal.GetLastWin32Error());
                     }
                     else
                     {
-                        Globals.WriteToLog($"[CRED] Restored: {saved.TargetName}");
+                        Globals.WriteToLog("[CRED] Restored: " + saved.TargetName);
                     }
-
-                    Marshal.FreeHGlobal(blobPtr);
                 }
                 catch (Exception ex)
                 {
-                    Globals.WriteToLog($"Error restoring credential {saved.TargetName}", ex);
+                    success = false;
+                    Globals.WriteToLog("[CRED] Error restoring credential " + saved.TargetName, ex);
+                }
+                finally
+                {
+                    if (blobPtr != IntPtr.Zero) Marshal.FreeHGlobal(blobPtr);
                 }
             }
+            return success;
+        }
+
+        private static void ForEachEpicCredential(Func<CREDENTIAL, bool> action)
+        {
+            IntPtr credentialPtrs = IntPtr.Zero;
+            try
+            {
+                int count;
+                if (!CredEnumerate(null, 0, out count, out credentialPtrs)) return;
+                for (int i = 0; i < count; i++)
+                {
+                    var ptr = Marshal.ReadIntPtr(credentialPtrs, i * IntPtr.Size);
+                    var cred = (CREDENTIAL)Marshal.PtrToStructure(ptr, typeof(CREDENTIAL));
+                    if (IsEpicCredential(cred.TargetName))
+                    {
+                        if (!action(cred)) break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("[CRED] Failed to enumerate credentials.", ex);
+            }
+            finally
+            {
+                if (credentialPtrs != IntPtr.Zero) CredFree(credentialPtrs);
+            }
+        }
+
+        private static bool IsEpicCredential(string targetName)
+        {
+            if (string.IsNullOrWhiteSpace(targetName)) return false;
+            var n = targetName.ToLowerInvariant();
+            return CredentialNeedles.Any(needle => n.Contains(needle));
         }
     }
 }

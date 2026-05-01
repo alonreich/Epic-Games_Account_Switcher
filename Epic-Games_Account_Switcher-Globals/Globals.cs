@@ -10,10 +10,8 @@ using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
-using System.Net.Http;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
-using System.Runtime.Versioning;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SharpCompress.Archives;
@@ -21,6 +19,7 @@ using SharpCompress.Archives.SevenZip;
 using SharpCompress.Common;
 using SharpCompress.Writers;
 using System.Drawing;
+using System.Collections.Concurrent;
 
 namespace Epic_Games_Account_Switcher_Globals
 {
@@ -28,300 +27,151 @@ namespace Epic_Games_Account_Switcher_Globals
     {
         public static bool VerboseMode;
         public static readonly string Version = "2026.03.30";
-
-        public static string AppDataFolder => AppContext.BaseDirectory;
+        public static string AppDataFolder => AppDomain.CurrentDomain.BaseDirectory;
         public static string UserDataFolder
         {
-            get
-            {
-                
-                var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Epic-Games_Account_Switcher");
-                if (!Directory.Exists(path)) Directory.CreateDirectory(path);
-                return path;
-            }
+            get { var p = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EpicAccountSwitcher"); try { if (!Directory.Exists(p)) Directory.CreateDirectory(p); } catch { } return p; }
         }
-
         public static bool IsAdministrator => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
-
         public static string GetLogPath()
         {
             try
             {
-                var exePath = Process.GetCurrentProcess().MainModule.FileName;
-                var installDir = Path.GetDirectoryName(exePath);
-                var logName = Path.GetFileNameWithoutExtension(exePath) + ".log";
-                return Path.Combine(installDir, logName);
-            }
-            catch
-            {
-                return Path.Combine(UserDataFolder, "Epic-Games_Account_Switcher.log");
-            }
+                var ld = Path.Combine(UserDataFolder, "Logs");
+                if (!Directory.Exists(ld)) Directory.CreateDirectory(ld);
+                return Path.Combine(ld, "Epic-Games_Account_Switcher.log");
+            } catch { return Path.Combine(UserDataFolder, "Epic-Games_Account_Switcher.log"); }
         }
-
         public static void WriteToLog(string msg, Exception ex = null)
         {
-            try 
+            try
             {
-                string logPath = GetLogPath();
-                FileInfo fi = new FileInfo(logPath);
-                
-                if (fi.Exists && fi.Length > 5 * 1024 * 1024)
-                {
-                    // "new data deletes old data" - Keep the last 1MB of logs to maintain context
-                    try
-                    {
-                        byte[] buffer = new byte[1024 * 1024]; // 1MB
-                        using (var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                        {
-                            fs.Seek(-buffer.Length, SeekOrigin.End);
-                            fs.Read(buffer, 0, buffer.Length);
-                        }
-                        string tail = Encoding.UTF8.GetString(buffer);
-                        int firstNewline = tail.IndexOf('\n');
-                        if (firstNewline != -1) tail = tail.Substring(firstNewline + 1);
-
-                        File.WriteAllText(logPath, $"--- Log Rotated at {DateTime.Now} (Size > 5MB) ---\n" + tail);
-                    }
-                    catch
-                    {
-                        File.WriteAllText(logPath, $"--- Log reset at {DateTime.Now} due to size limit (5MB) ---\n");
-                    }
-                }
-
-                string content = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {msg}" + (ex != null ? $"\n[EXCEPTION] {ex.Message}\nStack: {ex.StackTrace}" : "") + "\n";
-                File.AppendAllText(logPath, content);
-                
-                if (VerboseMode) Console.WriteLine($"[LOG] {msg}");
-            } 
-            catch { }
+                string lp = GetLogPath();
+                string c = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + "] " + msg + (ex != null ? "\n[EX] " + ex.Message + "\n" + ex.StackTrace : "") + "\n";
+                File.AppendAllText(lp, c);
+                if (VerboseMode) Console.WriteLine("[LOG] " + msg);
+            } catch { }
         }
-
-        public static void WriteToLog(string msg) => WriteToLog(msg, null);
-
-        public static void DebugWriteLine(string msg)
+        public static void DebugWriteLine(string msg) { if (VerboseMode) WriteToLog("[DEBUG] " + msg); }
+        public static void ForceDeleteDirectory(string p)
         {
-            if (VerboseMode) WriteToLog("[DEBUG] " + msg);
-        }
-
-        public static void ForceDeleteDirectory(string path)
-        {
-            if (!Directory.Exists(path)) return;
-            WriteToLog($"[IO] Force Deleting Directory: {path}");
-
+            if (!Directory.Exists(p)) return;
             for (int i = 0; i < 5; i++)
             {
-                try
-                {
-                    var directory = new DirectoryInfo(path) { Attributes = FileAttributes.Normal };
-                    foreach (var info in directory.GetFileSystemInfos("*", SearchOption.AllDirectories))
-                    {
-                        info.Attributes = FileAttributes.Normal;
-                    }
-                    directory.Delete(true);
-                    return;
-                }
-                catch (IOException)
-                {
-                    if (i == 4) throw;
-                    Thread.Sleep(500 * (i + 1));
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    if (i == 4) throw;
-                    Thread.Sleep(500 * (i + 1));
-                }
+                try { var d = new DirectoryInfo(p) { Attributes = FileAttributes.Normal }; foreach (var info in d.GetFileSystemInfos("*", SearchOption.AllDirectories)) info.Attributes = FileAttributes.Normal; d.Delete(true); return; }
+                catch { if (i == 4) throw; Thread.Sleep(500 * (i + 1)); }
             }
         }
-
         public static void CreateDataFolder(bool overwrite)
         {
             if (AppDataFolder == UserDataFolder) return;
             if (InstalledToProgramFiles() && !IsAdministrator) return;
-            var settingsPath = Path.Combine(UserDataFolder, "appsettings.json");
-            if (!File.Exists(settingsPath))
-            {
-                var sourceSettings = Path.Combine(AppDataFolder, "appsettings.json");
-                if (File.Exists(sourceSettings)) CopyFile(sourceSettings, settingsPath, false);
-            }
+            var sp = Path.Combine(UserDataFolder, "appsettings.json");
+            if (!File.Exists(sp)) { var src = Path.Combine(AppDataFolder, "appsettings.json"); if (File.Exists(src)) CopyFile(src, sp, false); }
         }
-
         public static bool InstalledToProgramFiles()
         {
             var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
             var pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
             return AppDataFolder.StartsWith(pf, StringComparison.OrdinalIgnoreCase) || AppDataFolder.StartsWith(pfx86, StringComparison.OrdinalIgnoreCase);
         }
-
         public static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
             try { File.WriteAllText(Path.Combine(UserDataFolder, "LastError.txt"), e.ExceptionObject.ToString()); } catch { }
         }
-
-        public static bool IsProcessRunning(string name)
+        public static bool IsProcessRunning(string n)
         {
-            try { return Process.GetProcessesByName(name).Any(p => p.Id != Environment.ProcessId); }
-            catch { return false; }
+            try { return Process.GetProcessesByName(n).Any(p => p.Id != Process.GetCurrentProcess().Id); } catch { return false; }
         }
-
-        public static void KillProcess(string name, bool wait = true) 
-        { 
-            try 
+        public static void KillProcess(string n, bool wait = true)
+        {
+            try
             {
-                var currentId = Environment.ProcessId;
-                
+                var curId = Process.GetCurrentProcess().Id;
                 for (int i = 0; i < 3; i++)
                 {
-                    var processes = Process.GetProcessesByName(name).Where(p => p.Id != currentId).ToList();
-                    if (!processes.Any()) break;
-
-                    foreach (var p in processes) 
-                    {
-                        try 
-                        {
-                            WriteToLog($"[PROC] Terminating process: {p.ProcessName} (PID: {p.Id})");
-                            p.Kill(true); 
-                        } catch { } 
-                    }
-
-                    if (wait)
-                    {
-                        foreach (var p in processes)
-                        {
-                            try { p.WaitForExit(2000); } catch { }
-                        }
-                    }
-                    
+                    var procs = Process.GetProcessesByName(n).Where(p => p.Id != curId).ToList();
+                    if (!procs.Any()) break;
+                    foreach (var p in procs) { try { p.Kill(); } catch { } }
+                    if (wait) foreach (var p in procs) { try { p.WaitForExit(2000); } catch { } }
                     if (i < 2) Thread.Sleep(500); 
                 }
-            }
-            catch (Exception ex) { WriteToLog($"Failed to kill process {name}", ex); }
+            } catch { }
         }
-
         public static bool FileOrDirectoryExists(string p) => (Directory.Exists(p) || File.Exists(p));
-
-        public static bool CopyFile(string source, string dest, bool overwrite = true)
+        public static bool CopyFile(string s, string d, bool ovr = true)
         {
-            if (!File.Exists(source)) return false;
-            try { Directory.CreateDirectory(Path.GetDirectoryName(dest)); File.Copy(source, dest, overwrite); return true; }
-            catch { return false; }
+            if (!File.Exists(s)) return false;
+            try { Directory.CreateDirectory(Path.GetDirectoryName(d)); File.Copy(s, d, ovr); return true; } catch { return false; }
         }
-
-        public static bool DeleteFile(string path, bool throwErr = false) { try { if (File.Exists(path)) File.Delete(path); return true; } catch (IOException) { return false; } catch (Exception) { if (throwErr) throw; return false; } }
-
-        public static async Task<T> RetryAsync<T>(Func<Task<T>> action, int maxRetries = 5, int delayMs = 500, bool throwOnFailure = false)
+        public static bool DeleteFile(string p, bool err = false) { try { if (File.Exists(p)) File.Delete(p); return true; } catch { if (err) throw; return false; } }
+        public static async Task<T> RetryAsync<T>(Func<Task<T>> a, int max = 5, int del = 500, bool th = false)
         {
-            for (int i = 0; i < maxRetries; i++)
-            {
-                try { return await action(); }
-                catch (IOException) when (i < maxRetries - 1) { await Task.Delay(delayMs * (i + 1)); }
-                catch (UnauthorizedAccessException) when (i < maxRetries - 1) { await Task.Delay(delayMs * (i + 1)); }
-            }
-            if (throwOnFailure) return await action();
-            try { return await action(); } catch { return default; }
+            for (int i = 0; i < max; i++) { try { return await a(); } catch { if (i == max - 1 && th) throw; await Task.Delay(del * (i + 1)); } }
+            return default(T);
         }
-
-        public static async Task RetryActionAsync(Func<Task> action, int maxRetries = 5, int delayMs = 500, bool throwOnFailure = false)
+        public static async Task RetryActionAsync(Func<Task> a, int max = 5, int del = 500, bool th = false)
         {
-            for (int i = 0; i < maxRetries; i++)
-            {
-                try { await action(); return; }
-                catch (IOException) when (i < maxRetries - 1) { await Task.Delay(delayMs * (i + 1)); }
-                catch (UnauthorizedAccessException) when (i < maxRetries - 1) { await Task.Delay(delayMs * (i + 1)); }
-            }
-            if (throwOnFailure) await action();
-            else try { await action(); } catch { }
+            for (int i = 0; i < max; i++) { try { await a(); return; } catch { if (i == max - 1 && th) throw; await Task.Delay(del * (i + 1)); } }
         }
-
-        public static string ReadAllText(string f) { using var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite); using var tr = new StreamReader(fs); return tr.ReadToEnd(); }
-
-        public static async Task<bool> CopyFilesRecursiveAsync(string inputFolder, string outputFolder, bool overwrite = true, List<string> excludeFolders = null)
+        public static string ReadAllText(string f) { using (FileStream fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) using (StreamReader tr = new StreamReader(fs)) return tr.ReadToEnd(); }
+        public static async Task<bool> CopyFilesRecursiveAsync(string s, string d, bool ovr = true, List<string> ex = null)
         {
-            return await Task.Run(() =>
+            return await Task.Run(() => CopyFilesRecursive(s, d, ovr, ex));
+        }
+        public static bool CopyFilesRecursive(string s, string d, bool ovr = true, List<string> ex = null)
+        {
+            try
             {
-                try
+                s = Path.GetFullPath(s).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                d = Path.GetFullPath(d).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                string sLong = s.StartsWith(@"\\") ? s : @"\\?\" + s;
+                string dLong = d.StartsWith(@"\\") ? d : @"\\?\" + d;
+
+                if (!Directory.Exists(dLong)) Directory.CreateDirectory(dLong);
+
+                foreach (var dir in Directory.GetDirectories(sLong, "*", SearchOption.AllDirectories))
                 {
-                    WriteToLog($"[IO] Recursive Copy (Async): {inputFolder} -> {outputFolder}");
-                    inputFolder = Path.GetFullPath(inputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-                    outputFolder = Path.GetFullPath(outputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-                    Directory.CreateDirectory(outputFolder);
-
-                    var allDirs = Directory.GetDirectories(inputFolder, "*", SearchOption.AllDirectories);
-                    foreach (var d in allDirs)
-                    {
-                        string rd = d.Substring(inputFolder.Length);
-                        if (excludeFolders != null && excludeFolders.Any(ex => rd.Contains(ex, StringComparison.OrdinalIgnoreCase))) continue;
-                        Directory.CreateDirectory(Path.Combine(outputFolder, rd));
-                    }
-
-                    var allFiles = Directory.GetFiles(inputFolder, "*.*", SearchOption.AllDirectories);
-                    foreach (var f in allFiles)
-                    {
-                        string rd = f.Substring(inputFolder.Length);
-                        if (excludeFolders != null && excludeFolders.Any(ex => rd.Contains(ex, StringComparison.OrdinalIgnoreCase))) continue;
-                        string df = Path.Combine(outputFolder, rd);
-                        if (overwrite || !File.Exists(df))
-                        {
-                            File.Copy(f, df, overwrite);
-                        }
-                    }
-                    return true;
+                    string r = dir.Substring(sLong.Length).TrimStart(Path.DirectorySeparatorChar);
+                    if (ex != null && ex.Any(e => r.IndexOf(e, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
+                    Directory.CreateDirectory(Path.Combine(dLong, r));
                 }
-                catch (Exception ex)
+                foreach (var f in Directory.GetFiles(sLong, "*.*", SearchOption.AllDirectories))
                 {
-                    WriteToLog($"[ERROR] Recursive copy (Async) failed: {inputFolder}", ex);
-                    throw;
-                }
-            });
-        }
-
-        public static bool CopyFilesRecursive(string inputFolder, string outputFolder, bool overwrite = true, List<string> excludeFolders = null)
-        {
-            try {
-                WriteToLog($"[IO] Recursive Copy: {inputFolder} -> {outputFolder}");
-                inputFolder = Path.GetFullPath(inputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-                outputFolder = Path.GetFullPath(outputFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-                Directory.CreateDirectory(outputFolder);
-                
-                foreach (var d in Directory.GetDirectories(inputFolder, "*", SearchOption.AllDirectories)) 
-                { 
-                    string rd = d.Substring(inputFolder.Length);
-                    if (excludeFolders != null && excludeFolders.Any(ex => rd.Contains(ex, StringComparison.OrdinalIgnoreCase))) continue;
-                    Directory.CreateDirectory(Path.Combine(outputFolder, rd)); 
-                }
-                
-                foreach (var f in Directory.GetFiles(inputFolder, "*.*", SearchOption.AllDirectories)) 
-                { 
-                    string rd = f.Substring(inputFolder.Length);
-                    if (excludeFolders != null && excludeFolders.Any(ex => rd.Contains(ex, StringComparison.OrdinalIgnoreCase))) continue;
-                    string df = Path.Combine(outputFolder, rd); 
-                    if (overwrite || !File.Exists(df)) File.Copy(f, df, overwrite); 
+                    string r = f.Substring(sLong.Length).TrimStart(Path.DirectorySeparatorChar);
+                    if (ex != null && ex.Any(e => r.IndexOf(e, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
+                    string dest = Path.Combine(dLong, r);
+                    if (ovr || !File.Exists(dest))
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                        File.Copy(f, dest, ovr);
+                    }
                 }
                 return true;
-            } catch (Exception ex) { 
-                WriteToLog($"[ERROR] Recursive copy failed: {inputFolder}", ex);
-                throw;
+            }
+            catch (Exception exn)
+            {
+                WriteToLog("[IO] Recursive copy failed: " + s + " -> " + d, exn);
+                return false;
             }
         }
-
-        public static void CreateShortcut(string targetPath, string shortcutPath, string description, string args = "", string iconPath = "")
+        public static void CreateShortcut(string target, string path, string desc, string args = "", string icon = "")
         {
             try {
-                var folder = Path.GetDirectoryName(shortcutPath);
-                if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
-
+                var f = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(f)) Directory.CreateDirectory(f);
                 Type t = Type.GetTypeFromProgID("WScript.Shell");
                 if (t == null) return;
-                dynamic shell = Activator.CreateInstance(t);
-                var shortcut = shell.CreateShortcut(shortcutPath);
-                shortcut.TargetPath = targetPath;
-                shortcut.Description = description;
-                shortcut.Arguments = args;
-                shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
-                if (!string.IsNullOrEmpty(iconPath)) shortcut.IconLocation = iconPath;
-                shortcut.Save();
-            } catch (Exception ex) { 
-                WriteToLog("Shortcut creation failed for: " + shortcutPath, ex);
-            }
+                object s = Activator.CreateInstance(t);
+                object sc = s.GetType().InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, s, new object[] { path });
+                sc.GetType().InvokeMember("TargetPath", BindingFlags.SetProperty, null, sc, new object[] { target });
+                sc.GetType().InvokeMember("Description", BindingFlags.SetProperty, null, sc, new object[] { desc });
+                sc.GetType().InvokeMember("Arguments", BindingFlags.SetProperty, null, sc, new object[] { args });
+                sc.GetType().InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, sc, new object[] { Path.GetDirectoryName(target) });
+                if (!string.IsNullOrEmpty(icon)) sc.GetType().InvokeMember("IconLocation", BindingFlags.SetProperty, null, sc, new object[] { icon });
+                sc.GetType().InvokeMember("Save", BindingFlags.InvokeMethod, null, sc, null);
+            } catch { }
         }
     }
 }
