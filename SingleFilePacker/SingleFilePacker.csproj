@@ -1,21 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
-    <RootNamespace>SingleFilePacker</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
     <Platforms>x64</Platforms>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <LangVersion>7.3</LangVersion>
     <ApplicationIcon>..\Application_Icons\Epic-Games_Account_Switcher.ico</ApplicationIcon>
-    <AssemblyName>Epic-Games_Account_Switcher</AssemblyName>
-    <DebugType>none</DebugType>
-    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
-
   <ItemGroup>
-    <EmbeddedResource Include="Payload.zip" />
+    <Reference Include="System.Windows.Forms" />
+    <PackageReference Include="SharpCompress" Version="0.32.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="payload.zip" Condition="Exists('payload.zip')" />
   </ItemGroup>
 </Project>

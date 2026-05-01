@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Diagnostics;
 using System.Reflection;
 using System.Windows.Forms;
@@ -12,91 +13,38 @@ namespace SingleFilePacker
         [STAThread]
         static void Main(string[] args)
         {
-            if (args.Length > 0 && args[0] == "--pack")
-            {
-                Pack();
-                return;
-            }
-
-            string runDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Epic-Games_Account_Switcher", "Runtime");
-            ExtractAndRun(runDir, args);
+            if (args.Contains("--pack")) { Pack(); return; }
+            ExtractAndRun(args);
         }
-
         static void Pack()
+        {
+            Console.WriteLine("Packing Payload...");
+            var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "Payload"))) dir = dir.Parent;
+            if (dir == null) { Console.WriteLine("Payload directory not found."); Environment.Exit(1); }
+            var payload = Path.Combine(dir.FullName, "Payload");
+            var zipPath = Path.Combine(dir.FullName, "SingleFilePacker", "payload.zip");
+            if (File.Exists(zipPath)) File.Delete(zipPath);
+            ZipFile.CreateFromDirectory(payload, zipPath, CompressionLevel.Optimal, false);
+            Console.WriteLine("Payload packed to: " + zipPath);
+        }
+        static void ExtractAndRun(string[] args)
         {
             try
             {
-                string sourceDir = Path.GetFullPath("Payload");
-                string zipPath = Path.GetFullPath("SingleFilePacker\\Payload.zip");
-                
-                if (!Directory.Exists(sourceDir))
-                {
-                    Console.WriteLine("Error: Payload directory not found at " + sourceDir);
-                    return;
-                }
-
-                if (File.Exists(zipPath)) File.Delete(zipPath);
-                ZipFile.CreateFromDirectory(sourceDir, zipPath);
-                Console.WriteLine("Payload packed successfully into " + zipPath);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Packing failed: " + ex.Message);
-            }
-        }
-
-        static void ExtractAndRun(string runDir, string[] args)
-        {
-            try 
-            {
-                if (Directory.Exists(runDir))
-                {
-                    try { Directory.Delete(runDir, true); } catch { }
-                }
-                Directory.CreateDirectory(runDir);
-                
                 var assembly = Assembly.GetExecutingAssembly();
-                string resourceName = "SingleFilePacker.Payload.zip";
-                
-                using (Stream resStream = assembly.GetManifestResourceStream(resourceName))
-                {
-                    if (resStream == null)
-                    {
-                        MessageBox.Show($"Internal Error: Resource '{resourceName}' not found in assembly.", "Critical Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return;
-                    }
-                    using (ZipArchive archive = new ZipArchive(resStream))
-                    {
-                        foreach (ZipArchiveEntry entry in archive.Entries)
-                        {
-                            string completeFileName = Path.Combine(runDir, entry.FullName);
-                            string directory = Path.GetDirectoryName(completeFileName);
-                            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory)) Directory.CreateDirectory(directory);
-                            if (!string.IsNullOrEmpty(entry.Name)) entry.ExtractToFile(completeFileName, true);
-                        }
-                    }
-                }
-
-                string exePath = Path.Combine(runDir, "Epic-Games_Account_Switcher.exe");
-                if (!File.Exists(exePath))
-                {
-                    MessageBox.Show("Internal Error: Main executable not found in extracted payload.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                string cmdArgs = string.Join(" ", args);
-                ProcessStartInfo startInfo = new ProcessStartInfo(exePath, cmdArgs)
-                {
-                    WorkingDirectory = runDir,
-                    UseShellExecute = true
-                };
-                
-                Process.Start(startInfo);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Fatal Launch Error:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+                var resourceName = assembly.GetManifestResourceNames().FirstOrDefault(r => r.EndsWith("payload.zip"));
+                if (string.IsNullOrEmpty(resourceName)) { MessageBox.Show("No payload found in this executable.", "Boot Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+                var temp = Path.Combine(Path.GetTempPath(), "EpicSwitcherInstaller_" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(temp);
+                using (var stream = assembly.GetManifestResourceStream(resourceName))
+                using (var fileStream = File.Create(Path.Combine(temp, "payload.zip"))) stream.CopyTo(fileStream);
+                ZipFile.ExtractToDirectory(Path.Combine(temp, "payload.zip"), temp);
+                var exe = Path.Combine(temp, "Epic-Games_Account_Switcher.exe");
+                if (!File.Exists(exe)) { MessageBox.Show("Installer executable missing from payload.", "Extraction Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+                string cmdArgs = args != null && args.Length > 0 ? string.Join(" ", args.Select(a => "\"" + a + "\"")) : "";
+                Process.Start(new ProcessStartInfo { FileName = exe, Arguments = cmdArgs, WorkingDirectory = temp, UseShellExecute = true });
+            } catch (Exception ex) { MessageBox.Show("Fatal Boot Error: " + ex.Message + "\n\nStack: " + ex.StackTrace, "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
     }
 }

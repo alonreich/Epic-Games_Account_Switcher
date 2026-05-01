@@ -4,42 +4,44 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="CustomMessageBox"
-        MinHeight="180" MinWidth="510"
-		Height="250" Width="650"
-        Background="#253340" d:DesignWidth="510.5" d:DesignHeight="190.5">
-	<Grid Width="Auto" Height="Auto">
-		<Grid.ColumnDefinitions>
-			<ColumnDefinition Width="*" />
-		</Grid.ColumnDefinitions>
-		<Grid.RowDefinitions>
-			<RowDefinition Height="30px"/>
-			<RowDefinition Height="*"/>
-			<RowDefinition Height="40px"/>
-		</Grid.RowDefinitions>
-
-		
-        <Border Name="HeaderBg" MouseDown="DragWindow" Grid.Row="0" Style="{StaticResource Headerbar}" Background="#14151E" Height="30" Panel.ZIndex="3"/>
-        <Label Panel.ZIndex="3" IsHitTestVisible="False" Style="{StaticResource HeaderbarLabel}" Name="HeaderInstruction" Grid.Row="0" VerticalAlignment="Center" Foreground="White" HorizontalAlignment="Center" Content="Error message"/>
-        <Button x:Name="BtnMin" Style="{StaticResource BtnMin}" Panel.ZIndex="3" Grid.Row="0" Content="-" HorizontalAlignment="Right" Margin="0 0 30px 0" Width="30px" Height="30px" Foreground="white" BorderThickness="0" Click="BtnMinimize"></Button>
-        <Button x:Name="BtnClose" Style="{StaticResource BtnClose}" Panel.ZIndex="3" Grid.Row="0" Content="X" HorizontalAlignment="Right" Width="30px" Height="30px" Background="#363952" Foreground="white" Click="BtnExit" BorderThickness="0"></Button>
-		<Grid Grid.Row="1" Width="Auto" Height="Auto">
-			<Grid.ColumnDefinitions>
-				<ColumnDefinition Width="100px"/>
-				<ColumnDefinition Width="*" />
-			</Grid.ColumnDefinitions>
-			<Grid.RowDefinitions>
-				<RowDefinition Height="*"/>
-			</Grid.RowDefinitions>
-			<Canvas Grid.Row="0" Panel.ZIndex="3" IsHitTestVisible="False"  Name="SvgX" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="5 0 0 0" Width="60" Height="80">
-                <Path Name="CrossIcon" Style="{StaticResource CrossIcon}" StrokeMiterLimit="2" StrokeLineJoin="Round" Data="F1 M352,512z M0,0z M242.72,256L342.79,155.93C355.07,143.65,355.07,123.74,342.79,111.45L320.55,89.21C308.27,76.93,288.36,76.93,276.07,89.21L176,189.28 75.93,89.21C63.65,76.93,43.74,76.93,31.45,89.21L9.21,111.45C-3.07,123.73,-3.07,143.64,9.21,155.93L109.28,256 9.21,356.07C-3.07,368.35,-3.07,388.26,9.21,400.55L31.45,422.79C43.73,435.07,63.65,435.07,75.93,422.79L176,322.72 276.07,422.79C288.35,435.07,308.27,435.07,320.55,422.79L342.79,400.55C355.07,388.27,355.07,368.36,342.79,356.07L242.72,256z" Width="60" Height="80" Stretch="Fill"/>
-			</Canvas>
-            <TextBlock Name="Message" Grid.Column="1" Style="{StaticResource ErrorMessageBox}" Margin="15,0,15,0" />
-		</Grid>
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0 0 15,10">
-            <Button Name="ButtonOk" Margin="10,0,0,0" Style="{StaticResource OkButton}" Click="ButtonOk_OnClick">OK</Button>
-            <Button Name="ButtonNo" Margin="10,0,0,0" Style="{StaticResource OkButton}" Click="ButtonNo_OnClick" Visibility="Collapsed">NO</Button>
-            <Button Name="ButtonCancel" Margin="10,0,0,0" Style="{StaticResource OkButton}" Click="ButtonCancel_OnClick" Visibility="Collapsed">CANCEL</Button>
-        </StackPanel>
-	</Grid>
+        Title="Epic Games Account Switcher"
+        MinHeight="200" MinWidth="550"
+		Height="280" Width="680"
+        Background="#1F2335"
+        Topmost="True" WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True">
+	<Border BorderBrush="#414868" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="65"/>
+            </Grid.RowDefinitions>
+            <Border Name="HeaderBg" MouseDown="DragWindow" Grid.Row="0" Background="#14151E">
+                <Grid>
+                    <Label Name="HeaderInstruction" Content="ALERT" VerticalAlignment="Center" Foreground="White" HorizontalAlignment="Center" FontWeight="Bold" FontSize="12"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="BtnMin" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Background="Transparent" Foreground="White" BorderThickness="0" Click="BtnMinimize"/>
+                        <Button x:Name="BtnClose" Content="" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Background="Transparent" Foreground="#F7768E" BorderThickness="0" Click="BtnExit"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <Grid Grid.Row="1" Margin="20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Viewbox Width="50" Height="50" HorizontalAlignment="Center" VerticalAlignment="Top">
+                    <Path Name="CrossIcon" Fill="#7AA2F7" Data="F1 M352,512z M0,0z M242.72,256L342.79,155.93C355.07,143.65,355.07,123.74,342.79,111.45L320.55,89.21C308.27,76.93,288.36,76.93,276.07,89.21L176,189.28 75.93,89.21C63.65,76.93,43.74,76.93,31.45,89.21L9.21,111.45C-3.07,123.73,-3.07,143.64,9.21,155.93L109.28,256 9.21,356.07C-3.07,368.35,-3.07,388.26,9.21,400.55L31.45,422.79C43.73,435.07,63.65,435.07,75.93,422.79L176,322.72 276.07,422.79C288.35,435.07,308.27,435.07,320.55,422.79L342.79,400.55C355.07,388.27,355.07,368.36,342.79,356.07L242.72,256z"/>
+                </Viewbox>
+                <TextBlock Name="Message" Grid.Column="1" Foreground="White" FontSize="15" TextWrapping="Wrap" VerticalAlignment="Center" Margin="10,0,0,0"/>
+            </Grid>
+            <Border Grid.Row="2" Background="#16161E" BorderBrush="#414868" BorderThickness="0,1,0,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0">
+                    <Button Name="ButtonOk" Content="OK" Style="{StaticResource OkButton}" Click="ButtonOk_OnClick" MinWidth="120" Height="35" Margin="10,0,0,0"/>
+                    <Button Name="ButtonNo" Content="NO" Style="{StaticResource OkButton}" Click="ButtonNo_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0"/>
+                    <Button Name="ButtonCancel" Content="CANCEL" Style="{StaticResource OkButton}" Click="ButtonCancel_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
 </Window>

@@ -5,405 +5,490 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.ComponentModel;
 using Epic_Games_Account_Switcher_Globals;
 using System.Diagnostics;
+using System.Security.Principal;
+using Microsoft.Win32;
 
 namespace Epic_Games_Account_Switcher_Client
 {
     public partial class App
     {
         public static string StartPage = "";
-        private static readonly Mutex Mutex = new(true, "{A240C23D-6F45-4E92-9979-11E6CE10A22C}");
+        private static Mutex _appMutex;
+        private const string AppMutexName = "{A240C23D-6F45-4E92-9979-11E6CE10A22C}";
+        private const string InstallerMutexName = "Global\\EpicSwitcherSetupMutex";
+        private const string MsiMutexName = "Global\\_MSIExecute";
+        private const string RegPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Epic-Games_Account_Switcher";
+        private static string CurrentProcessPath => Process.GetCurrentProcess().MainModule.FileName;
+        private static ProgressWindow _progress;
 
-        protected override void OnExit(ExitEventArgs e)
-        {
-            Globals.WriteToLog($"=== Application Exiting (Exit Code: {e.ApplicationExitCode}) ===");
-            try { Mutex.ReleaseMutex(); } catch { }
-        }
+        protected override void OnExit(ExitEventArgs e) { try { if (_appMutex != null) { _appMutex.ReleaseMutex(); _appMutex.Dispose(); } } catch { } }
 
         [STAThread]
         protected override void OnStartup(StartupEventArgs e)
         {
-            Globals.WriteToLog("=== Application Starting ===");
-            Globals.WriteToLog($"Version: {Globals.Version}");
-            Globals.WriteToLog($"Arguments: {string.Join(" ", e.Args)}");
-
-            AppDomain.CurrentDomain.UnhandledException += (s, ev) => {
-                Globals.WriteToLog("[FATAL] Unhandled Exception occurred.", ev.ExceptionObject as Exception);
-                try { File.WriteAllText(Path.Combine(Globals.UserDataFolder, "Crash.txt"), ev.ExceptionObject.ToString()); } catch { }
+            string logPath = Path.Combine(Path.GetTempPath(), "EpicSwitcher_Boot.log");
+            try { File.AppendAllText(logPath, "[" + DateTime.Now + "] ON_STARTUP. Args: " + string.Join(" ", e.Args) + " | Path: " + CurrentProcessPath + Environment.NewLine); } catch { }
+            
+            AppDomain.CurrentDomain.UnhandledException += (s, ev) => 
+            { 
+                string err = ev.ExceptionObject.ToString();
+                try { File.AppendAllText(logPath, "[FATAL_CRASH] " + err + Environment.NewLine); } catch { }
+                MessageBox.Show("CRITICAL ERROR:\n\n" + err, "Epic Games Account Switcher", MessageBoxButton.OK, MessageBoxImage.Error);
             };
 
-            
-            Resources["HeaderbarBackground"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#14151E"));
-            Resources["HeaderbarForeground"] = System.Windows.Media.Brushes.White;
-            Resources["MainBackground"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#00000000"));
-            Resources["MessageForeground"] = System.Windows.Media.Brushes.White;
-            Resources["IconFill"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F7768E"));
-            Resources["BtnBackground"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#363952"));
-            Resources["BtnBackgroundHover"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#414868"));
-            Resources["BtnBackgroundActive"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#24283B"));
-            Resources["BtnForeground"] = System.Windows.Media.Brushes.White;
-            Resources["BtnBorder"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#414868"));
-            Resources["BtnBorderHover"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#7AA2F7"));
-            Resources["BtnBorderActive"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#7AA2F7"));
-            Resources["MinBackground"] = System.Windows.Media.Brushes.Transparent;
-            Resources["MinBackgroundHover"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2F334D"));
-            Resources["MinBackgroundActive"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#24283B"));
-            Resources["CloseBackgroundHover"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F7768E"));
-            Resources["CloseBackgroundActive"] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C53B53"));
+            bool isUninstall = e.Args.Any(a => a.Equals("--uninstall", StringComparison.OrdinalIgnoreCase));
+            bool isInstall = e.Args.Any(a => a.Equals("--installing", StringComparison.OrdinalIgnoreCase)) || !Globals.InstalledToProgramFiles();
 
-            if (e.Args.Contains("--uninstall")) 
-            {
-                PerformThoroughUninstall(e.Args.Contains("--confirmed")); 
+            if (isUninstall) 
+            { 
+                Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown; 
+                string waitPid = e.Args.FirstOrDefault(a => int.TryParse(a, out _));
+                PerformThoroughUninstall(e.Args.Contains("--confirmed"), waitPid); 
                 return; 
             }
 
-            
-            bool mustInstall = !Globals.InstalledToProgramFiles();
-            if (mustInstall) { PerformSmartInstall(); return; }
+            if (isInstall) 
+            { 
+                Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown; 
+                PerformSmartInstall(e.Args.Contains("--preserve")); 
+                return; 
+            }
 
+            try { File.AppendAllText(logPath, "[" + DateTime.Now + "] Proceeding to normal launch." + Environment.NewLine); } catch { }
             Globals.CreateDataFolder(false);
             Directory.SetCurrentDirectory(Globals.UserDataFolder);
-
             IsRunningAlready();
-
-            try { new MainWindow().Show(); }
-            catch (Exception ex) { 
-                try { File.WriteAllText(Path.Combine(Globals.UserDataFolder, "LaunchError.txt"), ex.ToString()); } catch { }
-                Environment.Exit(1); 
-            }
+            try { new MainWindow().Show(); } catch (Exception ex) { try { File.AppendAllText(logPath, "[LAUNCH_ERROR] " + ex.ToString() + Environment.NewLine); } catch { } Environment.Exit(1); }
         }
 
         public static void IsRunningAlready()
         {
             try 
             { 
-                if (!Mutex.WaitOne(TimeSpan.Zero, true)) 
-                { 
-                    if (NativeFuncs.BringToFront())
-                    {
-                        Environment.Exit(0);
-                    }
-                    else
-                    {
-                        MessageBox.Show("An \"Epic Games Account Switcher\" instance is already running but could not be focused. Please close it manually and try again.", "Already Running", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        Environment.Exit(1056);
-                    }
-                } 
+                _appMutex = new Mutex(true, AppMutexName, out bool createdNew);
+                if (!createdNew)
+                {
+                    if (NativeFuncs.BringToFront()) Environment.Exit(0);
+                    else { new CustomMessageBox("Already Running", "An instance is already running.").ShowDialog(); Environment.Exit(1056); }
+                }
             }
             catch (AbandonedMutexException) { }
         }
 
-        private void PerformSmartInstall()
+        private static bool IsMsiBusy()
         {
-            Globals.WriteToLog("[INSTALL] Starting Fluent Upgrade/Install flow.");
-            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            var targetDir = Path.Combine(programFiles, "Epic-Games_Account_Switcher");
-            var targetExePath = Path.Combine(targetDir, "Epic-Games_Account_Switcher.exe");
-            string upgradeBackupZip = Path.Combine(Path.GetTempPath(), "Epic_Upgrade_Backup.zip");
-
-            bool IsInstalledInAppWiz()
-            {
-                const string uninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Epic-Games_Account_Switcher";
-                try
-                {
-                    using var hklm64 = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
-                    using var key64 = hklm64.OpenSubKey(uninstallKey);
-                    if (key64 != null) return true;
-                }
-                catch { }
-                return false;
+            try 
+            { 
+                using (var mutex = Mutex.OpenExisting(MsiMutexName)) return true; 
             }
+            catch (WaitHandleCannotBeOpenedException) { }
+            catch { }
 
-            bool alreadyInstalled = Directory.Exists(targetDir) || File.Exists(targetExePath) || IsInstalledInAppWiz();
-            Globals.WriteToLog($"[INSTALL] Already installed check: {alreadyInstalled}");
-
-                                       
-            if (!Environment.GetCommandLineArgs().Contains("--installing"))
-            {
-                if (alreadyInstalled)
-                {
-                    var choice = MessageBox.Show(
-                        "A previous version of Epic Games Account Switcher is detected.\n\n" +
-                        "The installer will now perform a Fluent Upgrade:\n" +
-                        "1. Backup your current data\n" +
-                        "2. Wipe old remnants\n" +
-                        "3. Install the new version\n" +
-                        "4. Restore your data automatically\n\n" +
-                        "Proceed with Upgrade?",
-                        "Upgrade Detected", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-                    if (choice != MessageBoxResult.Yes) { Globals.WriteToLog("[INSTALL] User cancelled upgrade."); Environment.Exit(0); return; }
-                }
-
-                if (!Globals.IsAdministrator)
-                {
-                    Globals.WriteToLog("[INSTALL] Requesting admin elevation for install.");
-                    try 
-                    { 
-                        Process.Start(new ProcessStartInfo { FileName = Environment.ProcessPath, Arguments = "--installing", UseShellExecute = true, Verb = "runas" }); 
-                        Environment.Exit(0); 
-                    }
-                    catch (Exception ex) { Globals.WriteToLog("[INSTALL] Admin elevation failed.", ex); MessageBox.Show("Administrator approval is required to install/upgrade."); Environment.Exit(1); }
-                    return;
-                }
-            }
-
-            string currentStage = "Initializing";
             try
             {
-                                  
-                currentStage = "Stage 1: Backup Current Data";
-                Globals.WriteToLog($"[INSTALL] {currentStage}");
-                if (alreadyInstalled && Directory.Exists(Globals.UserDataFolder))
-                {
-                    AccountService.BackupAccounts(upgradeBackupZip);
-                }
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\InProgress")) { if (key != null) return true; }
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Updates\UpdateExeVolatile")) { if (key != null) return true; }
+            } catch { }
+            return false;
+        }
 
-                                                   
-                currentStage = "Stage 2: Thorough Uninstall & Wipe";
-                Globals.WriteToLog($"[INSTALL] {currentStage}");
-                Globals.KillProcess("Epic-Games_Account_Switcher", true);
-                
-                                        
-                string regPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Epic-Games_Account_Switcher";
-                using (var hklm64 = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64))
-                {
-                    hklm64.DeleteSubKeyTree(regPath, false);
-                }
-                Microsoft.Win32.Registry.ClassesRoot.DeleteSubKeyTree("epic-switcher", false);
-
-                                     
-                if (Directory.Exists(targetDir))
-                {
-                    try { Globals.ForceDeleteDirectory(targetDir); } catch { }
-                }
-
-                                                 
-                if (Directory.Exists(Globals.UserDataFolder))
-                {
-                    foreach (var file in Directory.GetFiles(Globals.UserDataFolder, "*.txt"))
-                    {
-                        try { File.Delete(file); } catch { }
-                    }
-                }
-
-                                   
-                currentStage = "Stage 3: Installing New Version";
-                Globals.WriteToLog($"[INSTALL] {currentStage}");
-                Directory.CreateDirectory(targetDir);
-                
-                string sourceBase = AppDomain.CurrentDomain.BaseDirectory;
-                Globals.WriteToLog($"[INSTALL] Copying from runtime base: {sourceBase}");
-
-                // Deep copy all files from current base directory
-                Globals.CopyFilesRecursive(sourceBase, targetDir, true);
-                
-                if (File.Exists(Environment.ProcessPath)) File.Copy(Environment.ProcessPath, targetExePath, true);
-
-                // EXPLICIT FORCE COPY for OpenCV_Anchors
-                var sourceAnchors = Path.Combine(sourceBase, "OpenCV_Anchors");
-                var targetAnchors = Path.Combine(targetDir, "OpenCV_Anchors");
-                
-                Globals.WriteToLog($"[INSTALL] Explicit anchor check: {sourceAnchors}");
-                if (Directory.Exists(sourceAnchors))
-                {
-                    Directory.CreateDirectory(targetAnchors);
-                    var files = Directory.GetFiles(sourceAnchors);
-                    foreach(var file in files)
-                    {
-                        var destFile = Path.Combine(targetAnchors, Path.GetFileName(file));
-                        File.Copy(file, destFile, true);
-                        Globals.WriteToLog($"[INSTALL] Copied anchor file: {Path.GetFileName(file)}");
-                    }
-                    Globals.WriteToLog($"[INSTALL] Force copied {files.Length} anchors to {targetAnchors}");
-                }
-                else
-                {
-                    Globals.WriteToLog("[INSTALL] ERROR: OpenCV_Anchors source folder NOT FOUND in extraction base.");
-                    // Fallback: Check if it's one level up?
-                    var fallbackSource = Path.Combine(Path.GetDirectoryName(sourceBase.TrimEnd(Path.DirectorySeparatorChar)) ?? "", "OpenCV_Anchors");
-                    if (Directory.Exists(fallbackSource))
-                    {
-                         Globals.WriteToLog($"[INSTALL] Found fallback anchors at: {fallbackSource}");
-                         // ... copy from here
-                    }
-                }
-
-                            
-                string commonPrograms = Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms);
-                string startMenuFolder = Path.Combine(commonPrograms, "Epic Games Account Switcher");
-                Directory.CreateDirectory(startMenuFolder);
-                Globals.CreateShortcut(targetExePath, Path.Combine(startMenuFolder, "Epic Games Account Switcher.lnk"), "Epic Games Account Switcher", "", targetExePath);
-                Globals.CreateShortcut(targetExePath, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), "Epic Games Account Switcher.lnk"), "Epic Games Account Switcher", "", targetExePath);
-
-                                  
-                using (var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(regPath))
-                {
-                    key.SetValue("DisplayName", "Epic Games Account Switcher");
-                    key.SetValue("UninstallString", $"\"{targetExePath}\" --uninstall");
-                    key.SetValue("DisplayIcon", targetExePath);
-                    key.SetValue("DisplayVersion", Globals.Version);
-                    key.SetValue("InstallLocation", targetDir);
-                }
-
-                using (var key = Microsoft.Win32.Registry.ClassesRoot.CreateSubKey("epic-switcher"))
-                {
-                    key.SetValue("", "URL:epic-switcher Protocol");
-                    key.SetValue("URL Protocol", "");
-                    using var commandKey = key.CreateSubKey(@"shell\open\command");
-                    commandKey.SetValue("", $"\"{targetExePath}\" \"%1\"");
-                }
-
-                                   
-                currentStage = "Stage 4: Restoring Data";
-                Globals.WriteToLog($"[INSTALL] {currentStage}");
-                if (File.Exists(upgradeBackupZip))
-                {
-                    AccountService.RestoreAccounts(upgradeBackupZip);
-                    try { File.Delete(upgradeBackupZip); } catch { }
-                }
-
-                Globals.WriteToLog("[INSTALL] Success!");
-                MessageBox.Show("Upgrade and Installation Successful!", "Fluent Upgrade Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-                Process.Start(new ProcessStartInfo { FileName = targetExePath, WorkingDirectory = targetDir, UseShellExecute = true });
-                Environment.Exit(0);
-            }
-            catch (Exception ex)
+        private static void KillAllProcesses(Action<string> update)
+        {
+            string[] names = { "Epic-Games_Account_Switcher", "runas", "Epic_Uninstaller", "epic_sw_del", "SingleFilePacker" };
+            var cur = Process.GetCurrentProcess();
+            var dirs = new List<string>
             {
-                Globals.WriteToLog($"[INSTALL] FAILED at {currentStage}", ex);
-                string errorMsg = $"[UPGRADE ERROR] {currentStage} failed.\n\nDetails: {ex.Message}";
-                MessageBox.Show(errorMsg, "Upgrade Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                
-                try 
-                { 
-                    Directory.CreateDirectory(Globals.UserDataFolder);
-                    File.WriteAllText(Path.Combine(Globals.UserDataFolder, "UpgradeError.txt"), $"{DateTime.Now}: {errorMsg}\n\nFull Stack Trace:\n{ex}"); 
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Epic-Games_Account_Switcher").ToLower(),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Epic-Games_Account_Switcher").ToLower()
+            };
+            
+            for (int retry = 0; retry < 3; retry++)
+            {
+                bool found = false;
+                foreach (var n in names)
+                {
+                    foreach (var p in Process.GetProcessesByName(n))
+                    {
+                        if (p.Id == cur.Id) continue;
+                        found = true;
+                        update?.Invoke("AUTO-CLEANUP: Terminating " + p.ProcessName + " (" + p.Id + ")...");
+                        try 
+                        { 
+                            p.Kill(); 
+                            if (!p.WaitForExit(3000))
+                            {
+                                Process.Start(new ProcessStartInfo { FileName = "taskkill", Arguments = "/F /T /PID " + p.Id, CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(2000);
+                            }
+                        } catch { }
+                    }
+                }
+
+                try
+                {
+                    foreach (var p in Process.GetProcesses())
+                    {
+                        if (p.Id == cur.Id) continue;
+                        try 
+                        { 
+                            if (!string.IsNullOrEmpty(p.MainModule?.FileName)) 
+                            {
+                                string procPath = p.MainModule.FileName.ToLower();
+                                if (dirs.Any(d => procPath.StartsWith(d))) 
+                                {
+                                    found = true;
+                                    update?.Invoke("AUTO-CLEANUP: Terminating path-match: " + p.ProcessName + " (" + p.Id + ")");
+                                    p.Kill(); 
+                                    if (!p.WaitForExit(3000))
+                                    {
+                                        Process.Start(new ProcessStartInfo { FileName = "taskkill", Arguments = "/F /T /PID " + p.Id, CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(2000);
+                                    }
+                                }
+                            }
+                        } catch { }
+                    }
                 } catch { }
-                
-                Environment.Exit(1);
+
+                if (!found) break;
+                Thread.Sleep(800);
             }
         }
 
-        private void PerformThoroughUninstall(bool confirmed)
+        private static void SafeDeleteDirectory(string path, Action<string> log)
         {
-            Globals.WriteToLog("[UNINSTALL] Starting Uninstall flow.");
-            if (!confirmed)
+            if (!Directory.Exists(path)) return;
+            log?.Invoke("CLEANUP: Purging directory: " + Path.GetFileName(path));
+            
+            bool success = false;
+            for (int i = 0; i < 5; i++)
             {
-                var res = MessageBox.Show("Are you sure you want to completely uninstall Epic Games Account Switcher and remove ALL saved data?\n\nThis will purge all accounts, settings, and shortcuts.", "Confirm Full Uninstall", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (res != MessageBoxResult.Yes) { Globals.WriteToLog("[UNINSTALL] User cancelled."); Environment.Exit(0); }
+                try { Directory.Delete(path, true); success = true; break; }
+                catch (Exception)
+                {
+                    log?.Invoke("RETRY-CLEANUP: " + Path.GetFileName(path) + " is locked. Retrying... (" + (i + 1) + "/5)");
+                    KillAllProcesses(log);
+                    Thread.Sleep(1000);
+                }
             }
+
+            if (!success)
+            {
+                log?.Invoke("NOTICE: " + Path.GetFileName(path) + " is stubbornly locked. Attempting surgical overwrite...");
+                try
+                {
+                    foreach (var f in Directory.GetFiles(path, "*", SearchOption.AllDirectories)) 
+                    {
+                        try { File.SetAttributes(f, FileAttributes.Normal); File.Delete(f); } catch { }
+                    }
+                    Directory.Delete(path, true);
+                }
+                catch (Exception ex) { log?.Invoke("WARNING: Surgical purge failed: " + ex.Message); }
+            }
+        }
+
+        private static void SleepWithTrace(int ms, string reason, Action<string> update = null)
+        {
+            update?.Invoke("SYSTEM: Waiting " + ms + "ms for " + reason + "...");
+            Thread.Sleep(ms);
+        }
+
+        private void PerformSmartInstall(bool preserveRequested)
+        {
+            string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            string pf86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            var targetDir = Path.Combine(pf, "Epic-Games_Account_Switcher");
+            var targetDir86 = Path.Combine(pf86, "Epic-Games_Account_Switcher");
+            var targetExe = Path.Combine(targetDir, "Epic-Games_Account_Switcher.exe");
+            var targetExe86 = Path.Combine(targetDir86, "Epic-Games_Account_Switcher.exe");
 
             if (!Globals.IsAdministrator)
             {
-                Globals.WriteToLog("[UNINSTALL] Requesting admin elevation.");
-                try { Process.Start(new ProcessStartInfo { FileName = Environment.ProcessPath, Arguments = "--uninstall --confirmed", UseShellExecute = true, Verb = "runas" }); Environment.Exit(0); } catch (Exception ex) { Globals.WriteToLog("[UNINSTALL] Elevation failed.", ex); return; }
+                bool foundByFile = File.Exists(targetExe) || File.Exists(targetExe86);
+                string oldDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Epic-Games_Account_Switcher");
+                bool foundByData = File.Exists(Path.Combine(Globals.UserDataFolder, "EG", "accounts.json")) || File.Exists(Path.Combine(oldDataPath, "LoginCache", "Epic_Games", "accounts.json"));
+                bool foundByReg = false;
+                try { using (var key = Registry.LocalMachine.OpenSubKey(RegPath)) if (key != null) foundByReg = true; } catch { }
+                try { using (var key = Registry.CurrentUser.OpenSubKey(RegPath)) if (key != null) foundByReg = true; } catch { }
+                
+                bool preserve = false;
+                if (foundByFile || foundByData || foundByReg)
+                {
+                    var result = new CustomMessageBox("Existing Installation Detected", 
+                        "A previous installation of Epic Games Account Switcher has been detected on your system.\n\n" +
+                        "To ensure a stable and clean environment, setup can perform a thorough cleanup of the existing version before proceeding.\n\n" +
+                        "Would you like to preserve your existing account profiles and settings during this upgrade?", 
+                        "Preserve & Upgrade", "Perform Clean Install").ShowDialog();
+                    
+                    if (result == true) preserve = true;
+                    else if (result == false) preserve = false;
+                    else Environment.Exit(0);
+                }
+
+                string args = "--installing" + (preserve ? " --preserve" : "");
+                try { Process.Start(new ProcessStartInfo { FileName = CurrentProcessPath, Arguments = args, UseShellExecute = true, Verb = "runas" }); Environment.Exit(0); }
+                catch { Environment.Exit(1); }
+                return;
             }
 
-            try
+            using (Mutex setupMutex = new Mutex(false, InstallerMutexName))
             {
+                bool owned = false;
+                try { owned = setupMutex.WaitOne(TimeSpan.FromSeconds(5), false); } catch (AbandonedMutexException) { owned = true; }
                 
-                try 
-                {
-                    Globals.WriteToLog("[UNINSTALL] Creating final backup in Downloads.");
-                    string downloadsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-                    string backupFile = Path.Combine(downloadsFolder, "Epic-Games_Account_Switcher_Backup.zip");
-                    AccountService.BackupAccounts(backupFile);
-                }
-                catch { }
+                if (!owned) { new CustomMessageBox("Installer Busy", "Another installation is already in progress.").ShowDialog(); Environment.Exit(0); return; }
+                if (IsMsiBusy()) { new CustomMessageBox("System Busy", "Windows Installer is busy or a reboot is pending. Please wait and try again.").ShowDialog(); Environment.Exit(0); return; }
 
-                
-                string installPath = "";
-                string regPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Epic-Games_Account_Switcher";
-                
-                using (var hklm64 = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64))
-                using (var key = hklm64.OpenSubKey(regPath))
-                {
-                    installPath = key?.GetValue("InstallLocation")?.ToString() ?? "";
-                }
+                bool isUpgrade = preserveRequested;
+                string upgradeBackupPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Epic_Setup_Backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".zip");
+                _progress = new ProgressWindow("Epic Games Account Switcher - Setup");
+                string setupLog = Path.Combine(Path.GetTempPath(), "Epic_Setup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".log");
+                File.WriteAllText(setupLog, "--- Setup Initialized at " + DateTime.Now + " ---\n");
 
-                
-                var currentPid = Process.GetCurrentProcess().Id;
-                string[] processesToKill = { "Epic-Games_Account_Switcher", "runas" };
-                foreach (var name in processesToKill)
+                _progress.Loaded += (s, e) =>
                 {
-                    foreach (var p in Process.GetProcessesByName(name))
+                    Task.Run(() =>
                     {
-                        if (p.Id == currentPid) continue;
-                        try { p.Kill(true); p.WaitForExit(2000); } catch { }
-                    }
-                }
-
-                
-                Globals.WriteToLog("[UNINSTALL] Cleaning registry.");
-                string[] keysToDelete = {
-                    regPath,
-                    @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Epic-Games_Account_Switcher",
-                    @"Software\Epic-Games_Account_Switcher"
-                };
-
-                var hives = new[] { Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryHive.CurrentUser };
-                var views = new[] { Microsoft.Win32.RegistryView.Registry64, Microsoft.Win32.RegistryView.Registry32 };
-
-                foreach (var hive in hives)
-                {
-                    foreach (var view in views)
-                    {
-                        using var baseKey = Microsoft.Win32.RegistryKey.OpenBaseKey(hive, view);
-                        foreach (var path in keysToDelete)
+                        Action<string> log = (st) => { try { File.AppendAllText(setupLog, "[" + DateTime.Now.ToString("HH:mm:ss") + "] " + st + Environment.NewLine); _progress.UpdateStatus(st); } catch { } };
+                        try
                         {
-                            try { baseKey.DeleteSubKeyTree(path, false); } catch { }
+                            log("DEBUG: Installer Task Sequence Started.");
+                            _progress.UpdateProgress(5);
+
+                            if (isUpgrade)
+                            {
+                                log("UPGRADE: Starting data preservation sequence...");
+                                try { AccountService.BackupAccounts(upgradeBackupPath, st => log("UPGRADE-IO: " + st)); log("UPGRADE: Data successfully preserved."); }
+                                catch (Exception ex) { log("WARNING: Preservation failed: " + ex.Message); isUpgrade = false; }
+                            }
+
+                            log("SYSTEM AUDIT: Terminating active application instances...");
+                            KillAllProcesses(st => log(st));
+                            try { Process.Start(new ProcessStartInfo { FileName = "schtasks", Arguments = "/Delete /TN \"Epic-Games_Account_Switcher\" /F", CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(2000); } catch { }
+                            SleepWithTrace(1000, "InstallPostKill", log);
+                            _progress.UpdateProgress(15);
+
+                            log("REGISTRY: Wiping all configuration and metadata keys...");
+                            string[] hives = { "HKLM", "HKCU" }; string[] views = { "64", "32" };
+                            foreach (var hv in hives) foreach (var vw in views) 
+                            { 
+                                try 
+                                { 
+                                    var baseKey = vw == "64" ? RegistryKey.OpenBaseKey(hv == "HKLM" ? RegistryHive.LocalMachine : RegistryHive.CurrentUser, RegistryView.Registry64) : RegistryKey.OpenBaseKey(hv == "HKLM" ? RegistryHive.LocalMachine : RegistryHive.CurrentUser, RegistryView.Registry32); 
+                                    baseKey.DeleteSubKeyTree(RegPath, false); 
+                                    baseKey.DeleteSubKeyTree(@"Software\Epic-Games_Account_Switcher", false);
+                                } catch { } 
+                            }
+                            _progress.UpdateProgress(25);
+
+                            log("FILESYSTEM: Purging remnants from target locations...");
+                            SafeDeleteDirectory(targetDir, log);
+                            SafeDeleteDirectory(targetDir86, log);
+                            SafeDeleteDirectory(Path.Combine(Path.GetTempPath(), "Epic-Games_Account_Switcher"), log);
+                            SafeDeleteDirectory(Path.Combine(Path.GetTempPath(), "Epic_Uninstaller_Workspace"), log);
+                            SafeDeleteDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Epic-Games_Account_Switcher"), log);
+                            if (!isUpgrade) SafeDeleteDirectory(Globals.UserDataFolder, log);
+                            _progress.UpdateProgress(40);
+
+                            log("FILESYSTEM: Initializing target directory -> " + targetDir);
+                            Directory.CreateDirectory(targetDir);
+                            
+                            log("DEPLOYMENT: Deploying main executable...");
+                            File.Copy(CurrentProcessPath, targetExe, true);
+                            
+                            log("DEPLOYMENT: Synchronizing resource payload...");
+                            Globals.CopyFilesRecursive(AppDomain.CurrentDomain.BaseDirectory, targetDir, true);
+                            _progress.UpdateProgress(70);
+
+                            if (isUpgrade && File.Exists(upgradeBackupPath))
+                            {
+                                log("UPGRADE: Restoring account profiles from temporary backup...");
+                                try 
+                                { 
+                                    AccountService.RestoreAccounts(upgradeBackupPath); 
+                                    log("UPGRADE: Data restoration successful."); 
+                                    log("SUCCESS: ACCOUNT PROFILES RESTORED.");
+                                }
+                                catch (Exception ex) 
+                                { 
+                                    log("ERROR: DATA RESTORATION FAILURE: " + ex.Message); 
+                                    Application.Current.Dispatcher.Invoke(() => {
+                                        new CustomMessageBox("Restore Failed", "Setup finished but your account profiles could not be automatically restored.\n\nYou can try manual restore from: " + upgradeBackupPath + "\n\nError: " + ex.Message, MessageBoxVisualStyle.Error).ShowDialog();
+                                    });
+                                }
+                                SleepWithTrace(1000, "PostRestoreCooldown", log);
+                            }
+
+                            log("REGISTRY: Writing system uninstaller metadata...");
+                            using (var key = Registry.LocalMachine.CreateSubKey(RegPath))
+                            {
+                                key.SetValue("DisplayName", "Epic Games Account Switcher");
+                                key.SetValue("UninstallString", "\"" + targetExe + "\" --uninstall --confirmed");
+                                key.SetValue("DisplayIcon", targetExe);
+                                key.SetValue("DisplayVersion", Globals.Version);
+                                key.SetValue("InstallLocation", targetDir);
+                                key.SetValue("Publisher", "Epic Games Account Switcher Team");
+                                key.SetValue("NoModify", 1, RegistryValueKind.DWord);
+                                key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
+                            }
+                            _progress.UpdateProgress(85);
+
+                            log("SHELL: Registering system shortcuts...");
+                            try
+                            {
+                                var startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Epic Games Account Switcher.lnk");
+                                var desktop = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), "Epic Games Account Switcher.lnk");
+                                Globals.CreateShortcut(targetExe, startMenu, "Epic Games Account Switcher");
+                                Globals.CreateShortcut(targetExe, desktop, "Epic Games Account Switcher");
+                                log("SHELL: Shortcuts registered successfully.");
+                            }
+                            catch (Exception ex) { log("WARNING: Shortcut generation failed: " + ex.Message); }
+
+                            _progress.UpdateProgress(100);
+                            log("SUCCESS: Installation finished successfully.");
+                            SleepWithTrace(1500, "InstallSuccessDisplay", log);
+                            _progress.Dispatcher.Invoke(() => _progress.Close());
+                            
+                            Process.Start(new ProcessStartInfo { FileName = targetExe, WorkingDirectory = targetDir, UseShellExecute = true });
+                            Environment.Exit(0);
                         }
-                    }
-                }
-                try { Microsoft.Win32.Registry.ClassesRoot.DeleteSubKeyTree("epic-switcher", false); } catch { }
-
-                
-                Globals.WriteToLog("[UNINSTALL] Cleaning shortcuts.");
-                string[] locations = {
-                    Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
-                    Environment.GetFolderPath(Environment.SpecialFolder.Programs),
-                    Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
-                    Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
+                        catch (Exception ex)
+                        {
+                            try { File.AppendAllText(setupLog, "[FATAL] " + ex.ToString() + Environment.NewLine); } catch { }
+                            _progress.Dispatcher.Invoke(() => {
+                                try { new CustomMessageBox("Setup Failed", "A fatal error occurred during setup.\n\n" + ex.Message + "\n\nLog: " + setupLog, MessageBoxVisualStyle.Error).ShowDialog(); }
+                                catch { MessageBox.Show("Setup Failed: " + ex.Message + "\n\nSee: " + setupLog, "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
+                                _progress.Close();
+                            });
+                            Environment.Exit(1);
+                        }
+                    });
                 };
+                _progress.ShowDialog();
+            }
+        }
 
-                foreach (var loc in locations)
+        private void PerformThoroughUninstall(bool confirmed, string waitPid)
+        {
+            if (int.TryParse(waitPid, out int pid)) 
+            {
+                try { var parent = Process.GetProcessById(pid); parent.WaitForExit(10000); } catch { }
+            }
+
+            if (CurrentProcessPath.ToLower().Contains("program files"))
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "Epic_Uninstaller_Workspace");
+                try 
+                { 
+                    if (Directory.Exists(tempDir)) SafeDeleteDirectory(tempDir, null);
+                    Directory.CreateDirectory(tempDir);
+                    Globals.CopyFilesRecursive(Path.GetDirectoryName(CurrentProcessPath), tempDir, true);
+                } catch { }
+
+                string tempExe = Path.Combine(tempDir, "Epic-Games_Account_Switcher.exe");
+                Process.Start(new ProcessStartInfo { FileName = tempExe, Arguments = "--uninstall " + Process.GetCurrentProcess().Id + (confirmed ? " --confirmed" : ""), UseShellExecute = true, Verb = Globals.IsAdministrator ? "" : "runas" });
+                Environment.Exit(0);
+            }
+
+            if (!Globals.IsAdministrator) 
+            { 
+                Process.Start(new ProcessStartInfo { FileName = CurrentProcessPath, Arguments = "--uninstall " + waitPid + (confirmed ? " --confirmed" : ""), UseShellExecute = true, Verb = "runas" }); 
+                Environment.Exit(0); 
+                return; 
+            }
+
+            if (!confirmed) 
+            { 
+                if (new CustomMessageBox("Confirm Uninstall", "Completely remove application and all data?", "Uninstall", "Cancel").ShowDialog() != true) Environment.Exit(0); 
+            }
+
+            using (Mutex setupMutex = new Mutex(false, InstallerMutexName))
+            {
+                bool owned = false;
+                try { owned = setupMutex.WaitOne(TimeSpan.FromSeconds(5), false); } catch (AbandonedMutexException) { owned = true; }
+                if (!owned) return;
+
+                if (IsMsiBusy())
                 {
-                    try {
-                        string folder = Path.Combine(loc, "Epic Games Account Switcher");
-                        if (Directory.Exists(folder)) Globals.ForceDeleteDirectory(folder);
-                        string link = Path.Combine(loc, "Epic Games Account Switcher.lnk");
-                        if (File.Exists(link)) File.Delete(link);
-                    } catch { }
+                    MessageBox.Show("Windows Installer or a reboot is pending. Please wait and try again.", "System Busy", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
 
-                
-                MessageBox.Show("Epic Games Account Switcher has been successfully uninstalled.\n\nRemaining temporary files will be cleaned up automatically.", "Uninstall Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                _progress = new ProgressWindow("Epic Games Account Switcher - Uninstallation");
+                _progress.Loaded += (s, e) =>
+                {
+                    Task.Run(() =>
+                    {
+                        Action<string> log = (st) => { _progress.UpdateStatus(st); };
+                        try
+                        {
+                            _progress.UpdateProgress(5);
+                            log("SYSTEM AUDIT: Terminating active application instances...");
+                            KillAllProcesses(st => log(st));
+                            try { Process.Start(new ProcessStartInfo { FileName = "schtasks", Arguments = "/Delete /TN \"Epic-Games_Account_Switcher\" /F", CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(2000); } catch { }
+                            SleepWithTrace(1000, "UninstallPostKill", log);
+                            _progress.UpdateProgress(20);
 
-                
-                var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                var mainDataFolder = Path.Combine(localAppData, "Epic-Games_Account_Switcher");
+                            log("REGISTRY: Wiping all configuration and metadata keys...");
+                            try { Registry.LocalMachine.DeleteSubKeyTree(RegPath, false); } catch { }
+                            string[] hives = { "HKLM", "HKCU" }; string[] views = { "64", "32" };
+                            foreach (var hv in hives) foreach (var vw in views) 
+                            { 
+                                try 
+                                { 
+                                    var baseKey = vw == "64" ? RegistryKey.OpenBaseKey(hv == "HKLM" ? RegistryHive.LocalMachine : RegistryHive.CurrentUser, RegistryView.Registry64) : RegistryKey.OpenBaseKey(hv == "HKLM" ? RegistryHive.LocalMachine : RegistryHive.CurrentUser, RegistryView.Registry32); 
+                                    baseKey.DeleteSubKeyTree(RegPath, false); 
+                                    baseKey.DeleteSubKeyTree(@"Software\Epic-Games_Account_Switcher", false);
+                                } catch { } 
+                            }
+                            _progress.UpdateProgress(40);
 
-                string scriptPath = Path.Combine(Path.GetTempPath(), "epic_final_cleanup.bat");
-                string script = "@echo off\r\n" +
-                               "title Epic Cleanup\r\n" +
-                               ":wait_loop\r\n" +
-                               "tasklist /FI \"PID eq " + currentPid + "\" 2>NUL | find /I \"" + currentPid + "\" >NUL\r\n" +
-                               "if \"%ERRORLEVEL%\"==\"0\" (timeout /t 1 /nobreak > nul & goto wait_loop)\r\n";
+                            log("SHELL: Purging system shortcuts...");
+                            try { File.Delete(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Epic Games Account Switcher.lnk")); } catch { }
+                            try { File.Delete(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), "Epic Games Account Switcher.lnk")); } catch { }
+                            _progress.UpdateProgress(60);
 
-                if (!string.IsNullOrEmpty(installPath)) script += $"rd /s /q \"{installPath}\" > nul 2>&1\r\n";
-                script += $"rd /s /q \"{mainDataFolder}\" > nul 2>&1\r\n";
-                script += "del \"%~f0\"";
-                
-                File.WriteAllText(scriptPath, script);
-                Globals.WriteToLog("[UNINSTALL] Success! Cleanup script created.");
-                Process.Start(new ProcessStartInfo { FileName = "cmd.exe", Arguments = $"/c \"{scriptPath}\"", CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden });
-            }
-            catch (Exception ex) { Globals.WriteToLog("[UNINSTALL] FAILED", ex); MessageBox.Show("Critical Uninstall Error: " + ex.Message); }
-            finally
-            {
-                try { Mutex.ReleaseMutex(); } catch { }
-                Environment.Exit(0);
+                            log("FILESYSTEM: Purging application data and install directory...");
+                            string targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Epic-Games_Account_Switcher");
+                            string targetDir86 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Epic-Games_Account_Switcher");
+                            SafeDeleteDirectory(targetDir, log);
+                            SafeDeleteDirectory(targetDir86, log);
+                            SafeDeleteDirectory(Globals.UserDataFolder, log);
+                            SafeDeleteDirectory(Path.Combine(Path.GetTempPath(), "Epic-Games_Account_Switcher"), log);
+                            SafeDeleteDirectory(Path.Combine(Path.GetTempPath(), "Epic_Uninstaller_Workspace"), log);
+                            _progress.UpdateProgress(90);
+
+                            _progress.UpdateProgress(100);
+                            log("SUCCESS: UNINSTALLATION COMPLETE!");
+                            SleepWithTrace(2000, "UninstallSuccessDisplay", log);
+                            _progress.Dispatcher.Invoke(() => _progress.Close());
+
+                            string batch = Path.Combine(Path.GetTempPath(), "epic_sw_del.bat");
+                            string tempDir = Path.GetDirectoryName(CurrentProcessPath);
+                            bool isTempWorkspace = tempDir.ToLower().Contains("epic_uninstaller_workspace");
+
+                            string batchContent = string.Format(
+                                "@echo off\n" +
+                                ":retry\n" +
+                                "timeout /t 1 /nobreak > nul\n" +
+                                "del /f /q \"{0}\"\n" +
+                                "if exist \"{0}\" goto retry\n" +
+                                (isTempWorkspace ? "rd /s /q \"" + tempDir + "\"\n" : "") +
+                                "del \"%~f0\"", CurrentProcessPath);
+                            File.WriteAllText(batch, batchContent);
+                            Process.Start(new ProcessStartInfo { FileName = "cmd.exe", Arguments = "/c \"" + batch + "\"", CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden });
+                            Environment.Exit(0);
+                        }
+                        catch (Exception ex) 
+                        { 
+                            log("FATAL ERROR: " + ex.Message); 
+                            Thread.Sleep(5000); 
+                            Environment.Exit(1); 
+                        }
+                    });
+                };
+                _progress.ShowDialog();
             }
         }
     }

@@ -1,12 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -15,7 +12,7 @@ namespace Epic_Games_Account_Switcher_Globals
     public class GLang
     {
         private static GLang _instance;
-        private static readonly object LockObj = new();
+        private static readonly object LockObj = new object();
 
         public static GLang Instance
         {
@@ -23,7 +20,7 @@ namespace Epic_Games_Account_Switcher_Globals
             {
                 lock (LockObj)
                 {
-                    if (_instance is { _currentlyModifying: true }) return _instance;
+                    if (_instance != null && _instance._currentlyModifying) return _instance;
                     if (_instance == null)
                     {
                         _instance = new GLang { _currentlyModifying = true };
@@ -35,7 +32,7 @@ namespace Epic_Games_Account_Switcher_Globals
             }
         }
 
-        private Dictionary<string, string> _strings = new();
+        private Dictionary<string, string> _strings = new Dictionary<string, string>();
         private string _current = "";
         private bool _currentlyModifying;
 
@@ -46,7 +43,7 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public static void LoadDefault()
         {
-            _ = Load("en-US");
+            Load("en-US");
         }
 
         public static void LoadLocalised()
@@ -55,13 +52,18 @@ namespace Epic_Games_Account_Switcher_Globals
             Load(GLangAppSettings.Language == "" ? CultureInfo.CurrentCulture.Name : GLangAppSettings.Language);
         }
 
-        public static List<string> GetAvailableLanguages() => Directory.GetFiles(Path.Join(Globals.AppDataFolder, "Resources")).Select(f => Path.GetFileName(f).Split(".yml")[0]).ToList();
+        public static List<string> GetAvailableLanguages() 
+        {
+            string resourcesPath = Path.Combine(Globals.AppDataFolder, "Resources");
+            if (!Directory.Exists(resourcesPath)) return new List<string>();
+            return Directory.GetFiles(resourcesPath).Select(f => Path.GetFileName(f).Replace(".yml", "")).ToList();
+        }
 
         public static bool Load(string filename, bool save = false)
         {
             try
             {
-                var path = Path.Join(Globals.AppDataFolder, "Resources", filename + ".yml");
+                var path = Path.Combine(Globals.AppDataFolder, "Resources", filename + ".yml");
                 Current = filename;
 
                 if (!File.Exists(path))
@@ -71,7 +73,7 @@ namespace Epic_Games_Account_Switcher_Globals
                     var foundClose = false;
                     foreach (var l in availableLang.Where(l => l.StartsWith(langGroup)))
                     {
-                        path = Path.Join(Globals.AppDataFolder, "Resources", l + ".yml");
+                        path = Path.Combine(Globals.AppDataFolder, "Resources", l + ".yml");
                         foundClose = true;
                         Current = l;
                         if (save) GLangAppSettings.Language = l;
@@ -83,7 +85,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 var desc = new DeserializerBuilder().WithNamingConvention(HyphenatedNamingConvention.Instance).Build();
                 var text = Globals.ReadAllText(path);
                 var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(JsonConvert.SerializeObject(desc.Deserialize<object>(text)));
-                if (dict != null) foreach (var (k, v) in dict) Strings[k] = v;
+                if (dict != null) foreach (var kvp in dict) Strings[kvp.Key] = kvp.Value;
                 return true;
             }
             catch (Exception e)
@@ -96,15 +98,15 @@ namespace Epic_Games_Account_Switcher_Globals
 
     class GLangAppSettings
     {
-        private static GLangAppSettings _instance = new();
-        private static readonly object LockObj = new();
+        private static GLangAppSettings _instance = new GLangAppSettings();
+        private static readonly object LockObj = new object();
         public static GLangAppSettings Instance
         {
             get
             {
                 lock (LockObj)
                 {
-                    if (_instance is { _currentlyModifying: true }) return _instance;
+                    if (_instance != null && _instance._currentlyModifying) return _instance;
                     _instance = new GLangAppSettings { _currentlyModifying = true };
                     if (File.Exists(SettingsFile))
                     {

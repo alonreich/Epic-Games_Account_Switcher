@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <Windows.h>
 #include <conio.h>
 
@@ -78,6 +79,9 @@ inline void wait_for_input()
 #pragma region File Operations
 inline string current_download;
 inline chrono::time_point<chrono::system_clock> last_time = std::chrono::system_clock::now();
+inline std::unique_ptr<ProgressBar> g_download_progress;
+inline double g_progress_total = 0.0;
+inline string g_progress_label;
 
 inline size_t write_data(const void* ptr, const size_t size, const size_t n_mem_b, FILE* stream) {
 	const size_t written = fwrite(ptr, size, n_mem_b, stream);
@@ -107,13 +111,21 @@ inline int progress_bar(
 	double ul_total,
 	double ul_now)
 {
-	if (const double n = dl_total; n > 0) {
+	if (const double n = dl_total; n > 0)
+	{
 		const string dls = "Downloading " + current_download + " (" + convert_size(static_cast<size_t>(dl_total)) + ")";
-		const auto bar1 = new ProgressBar(static_cast<unsigned long>(n), dls.c_str());
+
+		if (!g_download_progress || g_progress_total != dl_total || g_progress_label != dls)
+		{
+			g_download_progress = std::make_unique<ProgressBar>(static_cast<unsigned long>(n), dls.c_str());
+			g_progress_total = dl_total;
+			g_progress_label = dls;
+		}
+
 		if (const std::chrono::duration<double> elapsed_seconds = std::chrono::system_clock::now() - last_time; elapsed_seconds.count() >= 0.2)
 		{
 			last_time = std::chrono::system_clock::now();
-			bar1->Progressed(static_cast<unsigned long>(dl_now));
+			g_download_progress->Progressed(static_cast<unsigned long>(dl_now));
 		}
 	}
 	return 0;
@@ -121,20 +133,29 @@ inline int progress_bar(
 
 inline bool download_file(const char* url, const char* dest) {
 	if (CURL* curl = curl_easy_init(); curl) {
-		FILE* fp;
-		fopen_s(&fp, dest, "wb");
+		FILE* fp = nullptr;
+		if (fopen_s(&fp, dest, "wb") != 0 || fp == nullptr)
+		{
+			curl_easy_cleanup(curl);
+			return false;
+		}
 		curl_easy_setopt(curl, CURLOPT_URL, url);
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 		curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 		curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_bar);
 		curl_easy_setopt(curl, CURLOPT_FRESH_CONNECT, true);
-		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
+		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+		curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true); 
 		const CURLcode res = curl_easy_perform(curl);
 		
 		curl_easy_cleanup(curl);
 		fclose(fp);
+		g_download_progress.reset();
+		g_progress_total = 0.0;
+		g_progress_label.clear();
 
 		insert_empty_line();
 
@@ -308,9 +329,17 @@ inline void install_runtime(const string& path, const string& name, const bool& 
 	wstring args;
 	if (passive) args = L"/install /passive /norestart";
 
-	CreateProcessW(s2_ws(path).c_str(), &args[0], nullptr,
-		nullptr, 0, 0, nullptr, nullptr, &si, &pi);
+	LPWSTR cmd = args.empty() ? nullptr : args.data();
+	if (!CreateProcessW(s2_ws(path).c_str(), cmd, nullptr,
+		nullptr, 0, 0, nullptr, nullptr, &si, &pi))
+	{
+		cout << "Failed to start installer process for: " << name << endl;
+		return;
+	}
+
 	WaitForSingleObject(pi.hProcess, INFINITE);
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
 }
 
 inline void download_install_missing_runtimes()
