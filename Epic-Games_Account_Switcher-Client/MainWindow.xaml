@@ -5,13 +5,14 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Epic_Games_Account_Switcher_Client"
         mc:Ignorable="d"
-        Title="Epic Games Account Switcher" Height="650" Width="1000"
+        Title="Epic Games Account Switcher" Height="880" Width="1250"
         Background="#1F2335" WindowStyle="None" AllowsTransparency="True"
         Icon="..\Application_Icons\Epic-Games_Account_Switcher.ico">
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="40" ResizeBorderThickness="12" GlassFrameThickness="0" CornerRadius="0"/>
     </WindowChrome.WindowChrome>
     <Window.Resources>
+        <local:ProfileImageConverter x:Key="ProfileImageConverter"/>
         <Style x:Key="AccountCardStyle" TargetType="ListBoxItem">
             <Setter Property="Template">
                 <Setter.Value>
@@ -43,7 +44,7 @@
                                                         </Border>
                                                         <Ellipse x:Name="ProfilePic" Width="110" Height="110" Margin="0,0,0,12" Stroke="{Binding AccentColor}" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality">
                                                             <Ellipse.Fill>
-                                                                <ImageBrush ImageSource="{Binding ProfileImagePath}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                <ImageBrush ImageSource="{Binding ProfileImagePath, Converter={StaticResource ProfileImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                             </Ellipse.Fill>
                                                         </Ellipse>
                                                         <TextBlock x:Name="ProfileName" Text="{Binding Name}" Foreground="White" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,0,1"/>
@@ -143,8 +144,8 @@
                 </StackPanel>
                 <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8">
-                        <CheckBox Content="Minimize after switch"
-                                  IsChecked="{Binding MinimizeOnSwitchSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        <CheckBox Content="Close once launched"
+                                  IsChecked="{Binding CloseOnceLaunchedSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   Foreground="#9AA5CE"
                                   Margin="0,0,16,0"/>
                         <CheckBox Content="Prompt on unsaved login"

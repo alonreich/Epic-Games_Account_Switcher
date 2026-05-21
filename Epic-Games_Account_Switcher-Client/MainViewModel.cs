@@ -66,10 +66,10 @@ namespace Epic_Games_Account_Switcher_Client
             set { _toastMessage = value; OnPropertyChanged(); }
         }
 
-        public bool MinimizeOnSwitchSetting
+        public bool CloseOnceLaunchedSetting
         {
-            get => AppSettings.Instance.MinimizeOnSwitch;
-            set { AppSettings.Instance.MinimizeOnSwitch = value; AppSettings.SaveSettings(); OnPropertyChanged(); }
+            get => AppSettings.Instance.CloseOnceLaunched;
+            set { AppSettings.Instance.CloseOnceLaunched = value; AppSettings.SaveSettings(); OnPropertyChanged(); }
         }
 
         public bool PromptOnUnsavedLoginSetting
@@ -130,12 +130,23 @@ namespace Epic_Games_Account_Switcher_Client
             {
                 if (await AccountService.SwitchToAccount(account.Id, (s) => Application.Current.Dispatcher.Invoke(new Action(() => BusyStatus = s))))
                 {
-                    ShowToast("Switched to " + account.Name);
-                    if (AppSettings.Instance.MinimizeOnSwitch)
-                    {
-                        Application.Current.Dispatcher.Invoke(new Action(() => Application.Current.MainWindow.WindowState = WindowState.Minimized));
-                    }
+                    BusyStatus = "Verifying Epic sign-in...";
+                    var verified = await AccountService.WaitForLaunchedAccountAsync(account.Id, (s) => Application.Current.Dispatcher.Invoke(new Action(() => BusyStatus = s)));
                     await LoadAccountsAsync();
+
+                    if (!verified)
+                    {
+                        new CustomMessageBox("Switch Verification Timed Out", "The session was restored, but Epic Games Launcher did not confirm the target account in time.\n\nThe app will stay open so you can verify manually.").ShowDialog();
+                        return;
+                    }
+
+                    var closeOnceLaunched = AppSettings.Instance.CloseOnceLaunched;
+                    Application.Current.Dispatcher.Invoke(new Action(() => {
+                        var mainWindow = Application.Current.MainWindow;
+                        if (mainWindow == null) return;
+                        mainWindow.WindowState = WindowState.Minimized;
+                        if (closeOnceLaunched) mainWindow.Close();
+                    }));
                 }
                 else
                 {

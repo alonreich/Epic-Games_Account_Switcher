@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,8 +9,11 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Threading.Tasks;
 using Epic_Games_Account_Switcher_Globals;
+using Forms = System.Windows.Forms;
+using Drawing = System.Drawing;
 
 namespace Epic_Games_Account_Switcher_Client
 {
@@ -32,15 +36,7 @@ namespace Epic_Games_Account_Switcher_Client
             DataContext = ViewModel;
             ViewModel.RequestCapture += ViewModel_RequestCapture;
             Loaded += MainWindow_Loaded;
-            Width = AppSettings.WindowWidth;
-            Height = AppSettings.WindowHeight;
-            if (AppSettings.WindowLeft != -1 && AppSettings.WindowTop != -1)
-            {
-                Left = AppSettings.WindowLeft;
-                Top = AppSettings.WindowTop;
-                WindowStartupLocation = WindowStartupLocation.Manual;
-            }
-            else { WindowStartupLocation = WindowStartupLocation.CenterScreen; }
+            if (!ApplySavedWindowPlacement(AppSettings.Instance)) WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
         private void MainWindow_Loaded(object sender, RoutedEventArgs e) { ViewModel.LoadAccounts(); }
         private async Task<bool> ViewModel_RequestCapture(MainViewModel.AccountMetadata metadata)
@@ -52,12 +48,66 @@ namespace Epic_Games_Account_Switcher_Client
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             try { ViewModel.Shutdown(); } catch { }
-            AppSettings.WindowWidth = (int)Width;
-            AppSettings.WindowHeight = (int)Height;
-            AppSettings.WindowLeft = (int)Left;
-            AppSettings.WindowTop = (int)Top;
+            SaveWindowPlacement();
             AppSettings.SaveSettings();
             base.OnClosing(e);
+        }
+
+        private bool ApplySavedWindowPlacement(AppSettings settings)
+        {
+            if (settings == null || settings.WindowWidth <= 0 || settings.WindowHeight <= 0) return false;
+
+            var savedScreen = Forms.Screen.AllScreens.FirstOrDefault(s => string.Equals(s.DeviceName, settings.WindowMonitorDeviceName, StringComparison.OrdinalIgnoreCase));
+            var screen = savedScreen ?? Forms.Screen.FromRectangle(new Drawing.Rectangle(settings.WindowLeft, settings.WindowTop, settings.WindowWidth, settings.WindowHeight));
+            if (screen == null) return false;
+
+            var work = screen.WorkingArea;
+            var width = Math.Max(settings.WindowWidth, 700);
+            var height = Math.Max(settings.WindowHeight, 450);
+            if (work.Width > 0) width = Math.Min(width, work.Width);
+            if (work.Height > 0) height = Math.Min(height, work.Height);
+            var left = settings.WindowLeft;
+            var top = settings.WindowTop;
+
+            if (savedScreen != null && settings.WindowRelativeLeft >= 0 && settings.WindowRelativeTop >= 0)
+            {
+                left = work.Left + settings.WindowRelativeLeft;
+                top = work.Top + settings.WindowRelativeTop;
+            }
+
+            if (left == -1 || top == -1) return false;
+
+            Width = width;
+            Height = height;
+            Left = Clamp(left, work.Left, work.Right - width);
+            Top = Clamp(top, work.Top, work.Bottom - height);
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            return true;
+        }
+
+        private void SaveWindowPlacement()
+        {
+            var settings = AppSettings.Instance;
+            var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0 || double.IsNaN(bounds.Left) || double.IsNaN(bounds.Top)) return;
+
+            var rect = new Drawing.Rectangle((int)Math.Round(bounds.Left), (int)Math.Round(bounds.Top), Math.Max(1, (int)Math.Round(bounds.Width)), Math.Max(1, (int)Math.Round(bounds.Height)));
+            var screen = Forms.Screen.FromRectangle(rect);
+            settings.WindowWidth = rect.Width;
+            settings.WindowHeight = rect.Height;
+            settings.WindowLeft = rect.Left;
+            settings.WindowTop = rect.Top;
+            settings.WindowMonitorDeviceName = screen == null ? "" : screen.DeviceName;
+            settings.WindowRelativeLeft = screen == null ? -1 : rect.Left - screen.WorkingArea.Left;
+            settings.WindowRelativeTop = screen == null ? -1 : rect.Top - screen.WorkingArea.Top;
+        }
+
+        private static double Clamp(double value, double min, double max)
+        {
+            if (max < min) return min;
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
         }
         private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
         private void Close_Click(object sender, RoutedEventArgs e) => Close();
@@ -246,6 +296,36 @@ namespace Epic_Games_Account_Switcher_Client
     public class InverseBooleanToEnabledConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => (value is bool) ? !(bool)value : true;
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => throw new NotImplementedException();
+    }
+
+    public class ProfileImageConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            var path = value as string;
+            if (string.IsNullOrWhiteSpace(path)) return null;
+
+            try
+            {
+                var fullPath = Path.GetFullPath(path);
+                if (!File.Exists(fullPath)) return null;
+
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                bitmap.UriSource = new Uri(fullPath, UriKind.Absolute);
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) => throw new NotImplementedException();
     }
 }

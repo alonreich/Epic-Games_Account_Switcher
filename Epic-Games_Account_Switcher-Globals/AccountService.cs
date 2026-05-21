@@ -12,8 +12,6 @@ using System.Threading.Tasks;
 using Microsoft.Win32;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using SharpCompress.Archives;
-using SharpCompress.Common;
 
 namespace Epic_Games_Account_Switcher_Globals
 {
@@ -57,15 +55,58 @@ namespace Epic_Games_Account_Switcher_Globals
             if (string.IsNullOrWhiteSpace(path)) return GetDefaultProfileImagePath();
             try
             {
-                if (File.Exists(path)) return Path.GetFullPath(path);
                 var fn = Path.GetFileName(path);
-                var uC = Path.Combine(Globals.UserDataFolder, "Skin_Icons", fn);
-                if (File.Exists(uC)) return uC;
-                var bC = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons", fn);
-                if (File.Exists(bC)) return bC;
+                var candidates = new List<string>();
+
+                if (Path.IsPathRooted(path))
+                {
+                    candidates.Add(path);
+                }
+                else
+                {
+                    candidates.Add(Path.Combine(Globals.UserDataFolder, path));
+                    candidates.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, path));
+                }
+
+                if (!string.IsNullOrWhiteSpace(fn))
+                {
+                    candidates.Add(Path.Combine(Globals.UserDataFolder, "Skin_Icons", fn));
+                    candidates.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons", fn));
+                    candidates.Add(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Payload", "Skin_Icons", fn));
+                }
+
+                foreach (var candidate in candidates)
+                    if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate)) return Path.GetFullPath(candidate);
+
+                var recursive = FindSkinByFileName(fn);
+                if (!string.IsNullOrWhiteSpace(recursive)) return recursive;
             }
             catch { }
             return GetDefaultProfileImagePath();
+        }
+
+        private static string FindSkinByFileName(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) return null;
+            var roots = new[]
+            {
+                Path.Combine(Globals.UserDataFolder, "Skin_Icons"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Payload", "Skin_Icons")
+            };
+
+            foreach (var root in roots)
+            {
+                try
+                {
+                    if (!Directory.Exists(root)) continue;
+                    var match = Directory.GetFiles(root, fileName, SearchOption.AllDirectories).FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(match)) return Path.GetFullPath(match);
+                }
+                catch { }
+            }
+
+            return null;
         }
 
         public static List<Account> GetAccounts()
@@ -77,6 +118,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 {
                     var accs = JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(AccountsJsonPath)) ?? new List<Account>();
                     foreach (var a in accs) NormalizeAccount(a);
+                    MarkActiveAccount(accs, GetCurrentAccountId());
                     return accs;
                 }
                 catch (Exception ex)
@@ -464,13 +506,68 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public static string GetCurrentAccountId()
         {
+            var registryId = TryGetCurrentAccountIdFromRegistry();
+            if (!string.IsNullOrWhiteSpace(registryId)) return registryId;
+
+            var authStateId = TryGetCurrentAccountIdFromLiveAuthState();
+            if (!string.IsNullOrWhiteSpace(authStateId)) return authStateId;
+
+            return null;
+        }
+
+        private static string TryGetCurrentAccountIdFromRegistry()
+        {
             try
             {
                 string id;
-                if (Globals.TryReadRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:AccountId", out id)) return id == null ? null : id.Replace("sz:", "");
+                if (Globals.TryReadRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:AccountId", out id)) return NormalizeRegistryIdentityValue(id);
+                if (Globals.TryReadRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:EpicAccountId", out id)) return NormalizeRegistryIdentityValue(id);
             }
             catch { }
             return null;
+        }
+
+        private static string NormalizeRegistryIdentityValue(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var v = value.Trim();
+            if (v.StartsWith("sz:", StringComparison.OrdinalIgnoreCase)) v = v.Substring(3);
+            return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        }
+
+        private static string TryGetCurrentAccountIdFromLiveAuthState()
+        {
+            try
+            {
+                var accountIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var authPath in AuthFiles.Select(f => Path.Combine(EpicSavedPath, f)).Where(File.Exists))
+                {
+                    try
+                    {
+                        var json = Globals.ReadAllText(authPath);
+                        if (string.IsNullOrWhiteSpace(json)) continue;
+                        var token = JsonConvert.DeserializeObject<JToken>(json);
+                        CollectAuthFacts(token, new List<DateTime>(), accountIds);
+                    }
+                    catch { }
+                }
+
+                if (accountIds.Count == 1) return accountIds.First();
+
+                var dataPath = Path.Combine(EpicSavedPath, "Data");
+                if (!Directory.Exists(dataPath)) return null;
+
+                var binaryIds = Directory.GetFiles(dataPath, "OC_*.dat", SearchOption.TopDirectoryOnly)
+                    .Select(Path.GetFileNameWithoutExtension)
+                    .Where(n => !string.IsNullOrWhiteSpace(n) && n.StartsWith("OC_", StringComparison.OrdinalIgnoreCase) && n.Length > 3)
+                    .Select(n => n.Substring(3))
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                return binaryIds.Count == 1 ? binaryIds[0] : null;
+            }
+            catch { return null; }
         }
 
         private static string GetShortId() { return Guid.NewGuid().ToString("N").Substring(0, 8); }
@@ -755,27 +852,124 @@ namespace Epic_Games_Account_Switcher_Globals
             foreach (var acc in accounts) acc.IsActive = string.Equals(acc.Id, activeId, StringComparison.OrdinalIgnoreCase);
         }
 
-        public static void AutoLaunchEpicLauncher()
+        public static void PrepareLauncherForInitialSync(int maxWaitMs = 8000)
         {
-            if (Globals.IsProcessRunning("EpicGamesLauncher")) return;
             try
             {
-                var loc = "";
-                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
-                    if (key != null) loc = key.GetValue("InstallLocation") == null ? null : key.GetValue("InstallLocation").ToString();
-                if (string.IsNullOrEmpty(loc))
+                var waitMs = Math.Max(0, maxWaitMs);
+                var beforeId = GetCurrentAccountId();
+                var launcherStarted = AutoLaunchEpicLauncher(false);
+
+                if (waitMs == 0 || (!launcherStarted && string.IsNullOrWhiteSpace(beforeId))) return;
+
+                var deadline = DateTime.UtcNow.AddMilliseconds(waitMs);
+                var shortDeadline = DateTime.UtcNow.AddMilliseconds(Math.Min(waitMs, 3000));
+                while (DateTime.UtcNow < deadline)
                 {
-                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
-                        if (key != null) loc = key.GetValue("InstallLocation") == null ? null : key.GetValue("InstallLocation").ToString();
+                    var launcherRunning = Globals.IsProcessRunning("EpicGamesLauncher");
+                    var currentId = GetCurrentAccountId();
+                    if (launcherRunning && !string.IsNullOrWhiteSpace(currentId)) break;
+                    if (launcherRunning && !string.IsNullOrWhiteSpace(beforeId) && DateTime.UtcNow >= shortDeadline) break;
+                    Thread.Sleep(500);
                 }
-                if (!string.IsNullOrEmpty(loc))
+
+                Globals.WriteToLog("[SYNC] Initial launcher sync. Before=" + (string.IsNullOrWhiteSpace(beforeId) ? "NULL" : beforeId) + "; After=" + (GetCurrentAccountId() ?? "NULL"));
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("[SYNC] Initial launcher sync failed", ex);
+            }
+        }
+
+        public static bool AutoLaunchEpicLauncher(bool minimized = true)
+        {
+            if (Globals.IsProcessRunning("EpicGamesLauncher")) return true;
+            try
+            {
+                var exe = ResolveEpicLauncherExecutable();
+                if (!string.IsNullOrEmpty(exe))
                 {
-                    var exe = Path.Combine(loc, "Launcher", "Portal", "Binaries", "Win32", "EpicGamesLauncher.exe");
-                    if (File.Exists(exe)) { Process.Start(new ProcessStartInfo { FileName = exe, Arguments = "-minimized -silent", UseShellExecute = true }); return; }
+                    Process.Start(new ProcessStartInfo { FileName = exe, Arguments = minimized ? "-minimized -silent" : "", UseShellExecute = true });
+                    return true;
                 }
                 Process.Start(new ProcessStartInfo { FileName = "com.epicgames.launcher://", UseShellExecute = true });
+                return true;
+            }
+            catch (Exception ex) { Globals.WriteToLog("[LAUNCHER] Failed to launch Epic Games Launcher", ex); return false; }
+        }
+
+        private static string ResolveEpicLauncherExecutable()
+        {
+            try
+            {
+                var installRoots = GetEpicInstallPaths();
+                installRoots.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Epic Games"));
+                installRoots.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Epic Games"));
+
+                foreach (var root in installRoots.Where(r => !string.IsNullOrWhiteSpace(r)).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    var candidates = new[]
+                    {
+                        Path.Combine(root, "Launcher", "Portal", "Binaries", "Win64", "EpicGamesLauncher.exe"),
+                        Path.Combine(root, "Launcher", "Portal", "Binaries", "Win32", "EpicGamesLauncher.exe"),
+                        Path.Combine(root, "EpicGamesLauncher.exe")
+                    };
+                    foreach (var candidate in candidates) if (File.Exists(candidate)) return candidate;
+                }
             }
             catch { }
+            return null;
+        }
+
+        public static async Task<bool> WaitForLaunchedAccountAsync(string expectedAccountId, Action<string> progress = null, int timeoutMs = 45000)
+        {
+            if (string.IsNullOrWhiteSpace(expectedAccountId)) return false;
+
+            var sw = Stopwatch.StartNew();
+            DateTime? healthySince = null;
+            var launchRequested = false;
+
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                if (!Globals.IsProcessRunning("EpicGamesLauncher"))
+                {
+                    if (!launchRequested)
+                    {
+                        progress?.Invoke("Launching Epic Games...");
+                        AutoLaunchEpicLauncher(false);
+                        launchRequested = true;
+                    }
+                    healthySince = null;
+                    await Task.Delay(500);
+                    continue;
+                }
+
+                var currentId = GetCurrentAccountId();
+                var session = ValidateSession(EpicSavedPath, expectedAccountId);
+                if (string.Equals(currentId, expectedAccountId, StringComparison.OrdinalIgnoreCase) && session.IsValid)
+                {
+                    if (!healthySince.HasValue)
+                    {
+                        progress?.Invoke("Verifying Epic sign-in...");
+                        healthySince = DateTime.UtcNow;
+                    }
+
+                    if (DateTime.UtcNow - healthySince.Value >= TimeSpan.FromSeconds(5))
+                    {
+                        Globals.WriteToLog("[VERIFY] Epic launcher is running with expected account: " + expectedAccountId);
+                        return true;
+                    }
+                }
+                else
+                {
+                    healthySince = null;
+                }
+
+                await Task.Delay(1000);
+            }
+
+            Globals.WriteToLog("[VERIFY] Timed out waiting for launched account. Expected=" + expectedAccountId + "; Current=" + (GetCurrentAccountId() ?? "NULL"));
+            return false;
         }
 
         public static async Task<bool> SwitchToAccount(string accId, Action<string> progress = null)
@@ -857,7 +1051,7 @@ namespace Epic_Games_Account_Switcher_Globals
                     await SafeDeleteDirectoryAsync(rbB);
                     await SafeDeleteDirectoryAsync(tmpB);
                     progress?.Invoke("Launching Epic Games...");
-                    AutoLaunchEpicLauncher();
+                    AutoLaunchEpicLauncher(false);
                     return true;
                 }
                 catch
@@ -1094,7 +1288,6 @@ namespace Epic_Games_Account_Switcher_Globals
             try
             {
                 Directory.CreateDirectory(tmp);
-                if (File.Exists(AccountsJsonPath)) File.Copy(AccountsJsonPath, Path.Combine(tmp, "accounts.json"), true);
                 var sPath = Path.Combine(Globals.UserDataFolder, "appsettings.json");
                 if (File.Exists(sPath)) File.Copy(sPath, Path.Combine(tmp, "appsettings.json"), true);
                 var accs = GetAccounts();
@@ -1103,21 +1296,30 @@ namespace Epic_Games_Account_Switcher_Globals
                     var f = Path.Combine(BaseDataPath, a.Id);
                     if (Directory.Exists(f)) Globals.CopyFilesRecursive(f, Path.Combine(tmp, a.Id), true);
                 }
-                var uSkins = Path.Combine(Globals.UserDataFolder, "Skin_Icons");
-                var aSkins = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons");
-                var sSkins = Directory.Exists(uSkins) ? uSkins : (Directory.Exists(aSkins) ? aSkins : null);
-                if (sSkins != null) Globals.CopyFilesRecursive(sSkins, Path.Combine(tmp, "Skin_Icons"), true);
-                Directory.CreateDirectory(Path.GetDirectoryName(zip) ?? "");
+                CopySkinDirectoryToBackup(Path.Combine(Globals.UserDataFolder, "Skin_Icons"), tmp);
+                CopySkinDirectoryToBackup(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons"), tmp);
+                CopySkinDirectoryToBackup(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Payload", "Skin_Icons"), tmp);
+
+                var portableAccounts = CloneAccounts(accs);
+                foreach (var account in portableAccounts) account.ProfileImagePath = MakePortableProfileImagePath(account, tmp, log);
+                File.WriteAllText(Path.Combine(tmp, "accounts.json"), JsonConvert.SerializeObject(portableAccounts, Formatting.Indented));
+
+                var zipDir = Path.GetDirectoryName(Path.GetFullPath(zip));
+                if (!string.IsNullOrWhiteSpace(zipDir)) Directory.CreateDirectory(zipDir);
                 if (File.Exists(zip)) File.Delete(zip);
 
-                using (var archive = SharpCompress.Archives.Zip.ZipArchive.Create())
+                using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create))
                 {
                     foreach (var file in Directory.GetFiles(tmp, "*", SearchOption.AllDirectories))
                     {
                         string rel = file.Substring(tmp.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                        archive.AddEntry(rel, file);
+                        var entry = archive.CreateEntry(rel.Replace(Path.DirectorySeparatorChar, '/'), CompressionLevel.Optimal);
+                        using (var entryStream = entry.Open())
+                        using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        {
+                            fs.CopyTo(entryStream);
+                        }
                     }
-                    archive.SaveTo(zip, CompressionType.Deflate);
                 }
             }
             catch { throw; }
@@ -1136,16 +1338,15 @@ namespace Epic_Games_Account_Switcher_Globals
 
                 try
                 {
-                    using (var archive = SharpCompress.Archives.Zip.ZipArchive.Open(zip))
+                    using (var archive = ZipFile.OpenRead(zip))
                     {
-                        foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
+                        foreach (var entry in archive.Entries.Where(e => !string.IsNullOrEmpty(e.Name)))
                         {
-                            string entryPath = entry.Key.Replace('/', Path.DirectorySeparatorChar);
-                            string fullPath = Path.Combine(tmp, entryPath);
+                            string fullPath = GetSafeExtractionPath(tmp, entry.FullName);
                             string longPath = fullPath.StartsWith(@"\\") ? fullPath : @"\\?\" + fullPath;
 
                             Directory.CreateDirectory(Path.GetDirectoryName(longPath));
-                            using (var stream = entry.OpenEntryStream())
+                            using (var stream = entry.Open())
                             using (var fs = new FileStream(longPath, FileMode.Create, FileAccess.Write))
                             {
                                 stream.CopyTo(fs);
@@ -1158,11 +1359,13 @@ namespace Epic_Games_Account_Switcher_Globals
                 var aJson = Path.Combine(tmp, "accounts.json");
                 if (!File.Exists(aJson)) throw new InvalidDataException("Backup is invalid: accounts.json is missing.");
 
-                var accs = JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(aJson));
+                RestoreBackupSkins(tmp);
+
+                var accs = JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(aJson)) ?? new List<Account>();
                 foreach (var a in accs)
                 {
+                    a.ProfileImagePath = ResolveRestoredProfileImagePath(a.ProfileImagePath, tmp);
                     NormalizeAccount(a);
-                    if (!string.IsNullOrWhiteSpace(a.ProfileImagePath) && a.ProfileImagePath.Contains("Skin_Icons")) a.ProfileImagePath = Path.Combine("Skin_Icons", Path.GetFileName(a.ProfileImagePath));
                 }
 
                 if (Directory.Exists(rb)) try { Globals.ForceDeleteDirectory(rb); } catch { }
@@ -1176,16 +1379,7 @@ namespace Epic_Games_Account_Switcher_Globals
                     var sRestored = Path.Combine(tmp, "appsettings.json");
                     if (File.Exists(sRestored)) { File.Copy(sRestored, Path.Combine(Globals.UserDataFolder, "appsettings.json"), true); AppSettings.LoadSettings(); }
 
-                    var bSkins = Path.Combine(tmp, "Skin_Icons");
-                    if (Directory.Exists(bSkins))
-                    {
-                        try
-                        {
-                            var targetSkins = Path.Combine(Globals.UserDataFolder, "Skin_Icons");
-                            Directory.CreateDirectory(targetSkins);
-                            Globals.CopyFilesRecursive(bSkins, targetSkins, true);
-                        } catch { }
-                    }
+                    RestoreBackupSkins(tmp);
                     SaveAccounts(accs);
                 }
                 catch
@@ -1197,6 +1391,155 @@ namespace Epic_Games_Account_Switcher_Globals
                 if (Directory.Exists(rb)) try { Globals.ForceDeleteDirectory(rb); } catch { }
             }
             finally { if (Directory.Exists(tmp)) try { Globals.ForceDeleteDirectory(tmp); } catch { } }
+        }
+
+        private static List<Account> CloneAccounts(List<Account> accounts)
+        {
+            var clones = new List<Account>();
+            foreach (var account in accounts ?? new List<Account>())
+            {
+                var clone = new Account(account.Id, account.Name)
+                {
+                    Email = account.Email,
+                    Description = account.Description,
+                    ProfileImagePath = account.ProfileImagePath,
+                    AccentColor = account.AccentColor,
+                    IsActive = account.IsActive,
+                    RememberMeData = account.RememberMeData,
+                    RememberMeDataByPath = account.RememberMeDataByPath == null ? new Dictionary<string, string>() : new Dictionary<string, string>(account.RememberMeDataByPath),
+                    LauncherWindowSettings = account.LauncherWindowSettings,
+                    LauncherWindowSettingsByPath = account.LauncherWindowSettingsByPath == null ? new Dictionary<string, string>() : new Dictionary<string, string>(account.LauncherWindowSettingsByPath),
+                    Credentials = account.Credentials == null ? new List<CredentialService.SavedCredential>() : account.Credentials.Select(c => new CredentialService.SavedCredential
+                    {
+                        TargetName = c.TargetName,
+                        UserName = c.UserName,
+                        Blob = c.Blob == null ? null : c.Blob.ToArray(),
+                        Persist = c.Persist,
+                        Type = c.Type
+                    }).ToList(),
+                    RegistryData = account.RegistryData == null ? new Dictionary<string, string>() : new Dictionary<string, string>(account.RegistryData),
+                    EncryptedPassword = account.EncryptedPassword,
+                    LastPlayed = account.LastPlayed
+                };
+                clones.Add(clone);
+            }
+
+            return clones;
+        }
+
+        private static void CopySkinDirectoryToBackup(string source, string backupRoot)
+        {
+            try
+            {
+                if (!Directory.Exists(source)) return;
+                Globals.CopyFilesRecursive(source, Path.Combine(backupRoot, "Skin_Icons"), true);
+            }
+            catch { }
+        }
+
+        private static string MakePortableProfileImagePath(Account account, string backupRoot, Action<string> log)
+        {
+            var imagePath = account == null ? null : account.ProfileImagePath;
+            if (string.IsNullOrWhiteSpace(imagePath)) return imagePath;
+
+            try
+            {
+                var fileName = Path.GetFileName(imagePath);
+                if (string.IsNullOrWhiteSpace(fileName)) return imagePath;
+
+                if (File.Exists(imagePath))
+                {
+                    var safeId = MakeSafeFileName(string.IsNullOrWhiteSpace(account.Id) ? account.Name : account.Id);
+                    var relative = Path.Combine("Skin_Icons", "Selected", safeId + "_" + fileName);
+                    var target = Path.Combine(backupRoot, relative);
+                    Directory.CreateDirectory(Path.GetDirectoryName(target));
+                    File.Copy(imagePath, target, true);
+                    return relative;
+                }
+
+                if (imagePath.IndexOf("Skin_Icons", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return Path.Combine("Skin_Icons", fileName);
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke("WARNING: Failed to preserve selected profile image for " + (account == null ? "unknown" : account.Name) + ": " + ex.Message);
+            }
+
+            return imagePath;
+        }
+
+        private static void RestoreBackupSkins(string extractedRoot)
+        {
+            try
+            {
+                var bSkins = Path.Combine(extractedRoot, "Skin_Icons");
+                if (!Directory.Exists(bSkins)) return;
+
+                var targetSkins = Path.Combine(Globals.UserDataFolder, "Skin_Icons");
+                Directory.CreateDirectory(targetSkins);
+                Globals.CopyFilesRecursive(bSkins, targetSkins, true);
+            }
+            catch { }
+        }
+
+        private static string ResolveRestoredProfileImagePath(string imagePath, string extractedRoot)
+        {
+            if (string.IsNullOrWhiteSpace(imagePath)) return imagePath;
+
+            try
+            {
+                if (File.Exists(imagePath)) return Path.GetFullPath(imagePath);
+
+                if (!Path.IsPathRooted(imagePath))
+                {
+                    var restoredRelative = Path.Combine(Globals.UserDataFolder, imagePath);
+                    if (File.Exists(restoredRelative)) return Path.GetFullPath(restoredRelative);
+
+                    var extractedRelative = Path.Combine(extractedRoot, imagePath);
+                    if (File.Exists(extractedRelative)) return Path.GetFullPath(extractedRelative);
+                }
+
+                var fileName = Path.GetFileName(imagePath);
+                if (string.IsNullOrWhiteSpace(fileName)) return imagePath;
+
+                var restoredSkinRoot = Path.Combine(Globals.UserDataFolder, "Skin_Icons");
+                if (Directory.Exists(restoredSkinRoot))
+                {
+                    var restoredMatch = Directory.GetFiles(restoredSkinRoot, fileName, SearchOption.AllDirectories).FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(restoredMatch)) return Path.GetFullPath(restoredMatch);
+                }
+
+                var extractedSkinRoot = Path.Combine(extractedRoot, "Skin_Icons");
+                if (Directory.Exists(extractedSkinRoot))
+                {
+                    var extractedMatch = Directory.GetFiles(extractedSkinRoot, fileName, SearchOption.AllDirectories).FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(extractedMatch)) return Path.GetFullPath(extractedMatch);
+                }
+            }
+            catch { }
+
+            return imagePath;
+        }
+
+        private static string MakeSafeFileName(string value)
+        {
+            var safe = string.IsNullOrWhiteSpace(value) ? "account" : value;
+            foreach (var c in Path.GetInvalidFileNameChars()) safe = safe.Replace(c, '_');
+            return safe;
+        }
+
+        private static string GetSafeExtractionPath(string extractionRoot, string entryKey)
+        {
+            if (string.IsNullOrWhiteSpace(entryKey)) throw new InvalidDataException("Backup contains an empty entry name.");
+
+            var root = Path.GetFullPath(extractionRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var entryPath = entryKey.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+            var fullPath = Path.GetFullPath(Path.Combine(root, entryPath));
+
+            if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Backup contains an unsafe path: " + entryKey);
+
+            return fullPath;
         }
 
         public static void DeleteAccount(string id)
