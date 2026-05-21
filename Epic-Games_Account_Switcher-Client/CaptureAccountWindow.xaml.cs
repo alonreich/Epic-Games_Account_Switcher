@@ -31,13 +31,34 @@ namespace Epic_Games_Account_Switcher_Client
             AccountEmailInput.Text = blankIdentityInputs ? "" : email;
             AccountDescriptionInput.Text = desc;
             AccountPasswordInput.Password = pass;
-            if (!string.IsNullOrEmpty(ProfileImagePath)) { try { ProfileImageBrush.ImageSource = new BitmapImage(new Uri(ProfileImagePath)); } catch { } }
+            SetProfilePreview(ProfileImagePath);
         }
         private void SelectImage_Click(object sender, RoutedEventArgs e)
         {
             var win = new SkinPickerWindow { Owner = this };
-            if (win.ShowDialog() == true) { ProfileImagePath = win.SelectedSkinPath; ProfileImageBrush.ImageSource = new BitmapImage(new Uri(ProfileImagePath)); }
+            if (win.ShowDialog() == true) { ProfileImagePath = win.SelectedSkinPath; SetProfilePreview(ProfileImagePath); }
         }
+
+        private void SetProfilePreview(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            try
+            {
+                var fullPath = Path.GetFullPath(path);
+                if (!File.Exists(fullPath)) return;
+
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                bitmap.UriSource = new Uri(fullPath, UriKind.Absolute);
+                bitmap.EndInit();
+                bitmap.Freeze();
+                ProfileImageBrush.ImageSource = bitmap;
+            }
+            catch { }
+        }
+
         private void Capture_Click(object sender, RoutedEventArgs e)
         {
             var newName = AccountNameInput.Text;

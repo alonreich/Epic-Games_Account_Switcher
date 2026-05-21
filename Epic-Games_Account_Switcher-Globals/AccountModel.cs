@@ -18,10 +18,33 @@ namespace Epic_Games_Account_Switcher_Globals
             set { _name = value; OnPropertyChanged(); } 
         }
 
-        public string Email { get; set; }
-        public string Description { get; set; }
-        public string ProfileImagePath { get; set; }
-        public string AccentColor { get; set; } = "#7AA2F7";
+        private string _email;
+        public string Email
+        {
+            get => _email;
+            set { _email = value; OnPropertyChanged(); }
+        }
+
+        private string _description;
+        public string Description
+        {
+            get => _description;
+            set { _description = value; OnPropertyChanged(); }
+        }
+
+        private string _profileImagePath;
+        public string ProfileImagePath
+        {
+            get => _profileImagePath;
+            set { _profileImagePath = value; OnPropertyChanged(); }
+        }
+
+        private string _accentColor = "#7AA2F7";
+        public string AccentColor
+        {
+            get => _accentColor;
+            set { _accentColor = value; OnPropertyChanged(); }
+        }
 
         private bool _isActive;
         public bool IsActive 

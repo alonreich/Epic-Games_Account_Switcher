@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
 
 namespace Epic_Games_Account_Switcher_Globals
@@ -38,13 +36,16 @@ namespace Epic_Games_Account_Switcher_Globals
             @"HKCU\Software\Epic Games\Unreal Engine\EOS:WorkerId"
         };
 
-        public bool MinimizeOnSwitch { get; set; } = true;
         public bool PromptOnUnsavedLogin { get; set; } = true;
+        public bool CloseOnceLaunched { get; set; } = false;
 
-        public static int WindowWidth { get; set; } = 1000;
-        public static int WindowHeight { get; set; } = 650;
-        public static int WindowLeft { get; set; } = -1;
-        public static int WindowTop { get; set; } = -1;
+        public int WindowWidth { get; set; } = 1250;
+        public int WindowHeight { get; set; } = 880;
+        public int WindowLeft { get; set; } = -1;
+        public int WindowTop { get; set; } = -1;
+        public int WindowRelativeLeft { get; set; } = -1;
+        public int WindowRelativeTop { get; set; } = -1;
+        public string WindowMonitorDeviceName { get; set; } = "";
 
         public static void LoadSettings()
         {
@@ -69,21 +70,20 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public static void SaveSettings()
         {
-            Task.Run(() =>
+            lock (_lock)
             {
-                lock (_lock)
+                try
                 {
-                    try
-                    {
-                        var json = JsonConvert.SerializeObject(Instance, Formatting.Indented);
-                        File.WriteAllText(SettingsPath, json);
-                    }
-                    catch (Exception ex)
-                    {
-                        Globals.WriteToLog("Failed to save settings", ex);
-                    }
+                    Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
+                    if (_instance == null) _instance = new AppSettings();
+                    var json = JsonConvert.SerializeObject(_instance, Formatting.Indented);
+                    File.WriteAllText(SettingsPath, json);
                 }
-            });
+                catch (Exception ex)
+                {
+                    Globals.WriteToLog("Failed to save settings", ex);
+                }
+            }
         }
     }
 }

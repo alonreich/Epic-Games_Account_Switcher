@@ -61,6 +61,7 @@ namespace Epic_Games_Account_Switcher_Client
             Globals.CreateDataFolder(false);
             Directory.SetCurrentDirectory(Globals.UserDataFolder);
             IsRunningAlready();
+            AccountService.PrepareLauncherForInitialSync();
             try { new MainWindow().Show(); } catch (Exception ex) { try { File.AppendAllText(logPath, "[LAUNCH_ERROR] " + ex.ToString() + Environment.NewLine); } catch { } Environment.Exit(1); }
         }
 
