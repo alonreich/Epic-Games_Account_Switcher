@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:Epic_Games_Account_Switcher_Client"
         mc:Ignorable="d"
         Title="Epic Games Account Switcher" Height="880" Width="1250"
-        Background="#1F2335" WindowStyle="None" AllowsTransparency="True"
+        Background="{DynamicResource MainBackground}" WindowStyle="None" AllowsTransparency="True"
         Icon="..\Application_Icons\Epic-Games_Account_Switcher.ico">
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="40" ResizeBorderThickness="12" GlassFrameThickness="0" CornerRadius="0"/>
@@ -27,9 +27,9 @@
                                             </Border.RenderTransform>
                                             <Grid>
                                                 <Border x:Name="ShadowBorder" Background="Black" CornerRadius="10" Opacity="0.3" Margin="5,5,0,0"/>
-                                                <Border x:Name="CardBorder" Background="#292E42" CornerRadius="10" Padding="15" BorderThickness="1" BorderBrush="#414868">
+                                                <Border x:Name="CardBorder" Background="#292E42" CornerRadius="10" Padding="15" BorderThickness="1" BorderBrush="{DynamicResource BtnBorder}">
                                                     <StackPanel Orientation="Vertical">
-                                                        <TextBlock Text="{Binding LastPlayed, StringFormat='Last played on {0:dd/MM/yyyy}'}" Foreground="#737AA2" FontSize="9" HorizontalAlignment="Center" Margin="0,-8,0,6" Opacity="0.8"/>
+                                                        <TextBlock Text="{Binding LastPlayed, StringFormat='Last played on {0:dd/MM/yyyy}'}" Foreground="#737AA2" FontSize="9" HorizontalAlignment="Center" Margin="0,2,0,6" Opacity="0.8"/>
                                                         <Border x:Name="ActiveIndicator" Height="4" CornerRadius="2" Margin="0,0,0,12" VerticalAlignment="Top">
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
@@ -48,7 +48,7 @@
                                                             </Ellipse.Fill>
                                                         </Ellipse>
                                                         <TextBlock x:Name="ProfileName" Text="{Binding Name}" Foreground="White" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,0,1"/>
-                                                        <TextBlock x:Name="ProfileEmail" Text="{Binding Email}" Foreground="#7AA2F7" FontSize="10" FontWeight="Normal" HorizontalAlignment="Center" TextAlignment="Center" Opacity="0.9"/>
+                                                        <TextBlock x:Name="ProfileEmail" Text="{Binding Email}" Foreground="{DynamicResource IconFill}" FontSize="10" FontWeight="Normal" HorizontalAlignment="Center" TextAlignment="Center" Opacity="0.9"/>
                                                     </StackPanel>
                                                 </Border>
                                             </Grid>
@@ -79,19 +79,19 @@
                                     </ControlTemplate>
                                 </Button.Template>
                                 <Button.ContextMenu>
-                                    <ContextMenu Background="#24283B" Foreground="White" BorderBrush="#414868">
-                                        <MenuItem Header="SAVE CURRENT PROFILE" Command="{Binding PlacementTarget.Tag.SaveCurrentProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="#7AA2F7" ToolTip="Recapture the current logged-in Epic-Games account into this existing profile">
+                                    <ContextMenu Background="{DynamicResource BtnBackgroundActive}" Foreground="White" BorderBrush="{DynamicResource BtnBorder}">
+                                        <MenuItem Header="SAVE CURRENT PROFILE" Command="{Binding PlacementTarget.Tag.SaveCurrentProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="{DynamicResource IconFill}" ToolTip="Recapture the current logged-in Epic-Games account into this existing profile">
                                             <MenuItem.Icon>
-                                                <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" Foreground="#7AA2F7" FontSize="14"/>
+                                                <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource IconFill}" FontSize="14"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
-                                        <Separator Background="#414868"/>
+                                        <Separator Background="{DynamicResource BtnBorder}"/>
                                         <MenuItem Header="EDIT" Command="{Binding PlacementTarget.Tag.EditCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" FontWeight="Bold" Foreground="White">
                                             <MenuItem.Icon>
-                                                <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" Foreground="#7AA2F7" FontSize="14" FontWeight="Bold"/>
+                                                <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource IconFill}" FontSize="14" FontWeight="Bold"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
-                                        <Separator Background="#414868"/>
+                                        <Separator Background="{DynamicResource BtnBorder}"/>
                                         <MenuItem Header="DELETE" Command="{Binding PlacementTarget.Tag.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="#F7768E">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" Foreground="#F7768E" FontSize="14"/>
@@ -126,7 +126,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="#24283B">
+        <Border Grid.Row="0" Background="{DynamicResource BtnBackgroundActive}">
             <Grid>
                 <TextBlock Text="EPIC GAMES ACCOUNT SWITCHER" VerticalAlignment="Center" Margin="15,0" Foreground="#737AA2" FontSize="12" FontWeight="Bold"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" WindowChrome.IsHitTestVisibleInChrome="True">
@@ -147,14 +147,16 @@
                         <CheckBox Content="Close once launched"
                                   IsChecked="{Binding CloseOnceLaunchedSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   Foreground="#9AA5CE"
+                                  Cursor="Hand"
                                   Margin="0,0,16,0"/>
                         <CheckBox Content="Prompt on unsaved login"
                                   IsChecked="{Binding PromptOnUnsavedLoginSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  Cursor="Hand"
                                   Foreground="#9AA5CE"/>
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="+ CAPTURE CURRENT EPIC GAMES ACCOUNT" Padding="25,10" Background="#4A4A4A" Foreground="White" BorderThickness="0" FontWeight="Bold" Command="{Binding AddAccountCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanToEnabledConverter}}" Cursor="Hand" FontSize="14">
+                        <Button Content="+ CAPTURE CURRENT EPIC GAMES ACCOUNT" Padding="25,10" Background="#4A4A4A" Foreground="White" BorderThickness="0" FontWeight="Bold" Command="{Binding AddAccountCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanToEnabledConverter}}" Cursor="Hand" FontSize="14" ToolTip="Instantly record and preserve your active Epic Games Launcher login state into a reusable profile card.">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="4"/>
@@ -186,7 +188,12 @@
             </ListBox.ItemsPanel>
         </ListBox>
 
-        
+        <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="{Binding IsAccountsEmpty, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <TextBlock Text="D" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource IconFill}" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,15" Opacity="0.8"/>
+            <TextBlock Text="No Saved Account Profiles Yet" Foreground="White" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Click '+ CAPTURE CURRENT EPIC GAMES ACCOUNT' above to create your first fast-switch profile." Foreground="#737AA2" FontSize="14" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+        </StackPanel>
+
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,20">
             <Button Content="RESTORE" Command="{Binding RestoreCommand}" Width="100" Height="32" Margin="0,0,10,0" Background="Transparent" Foreground="#737AA2" BorderBrush="#414868" BorderThickness="1" Cursor="Hand" FontSize="11" FontWeight="Bold"/>
             <Button Content="BACKUP" Command="{Binding BackupCommand}" Width="100" Height="32" Background="#363952" Foreground="White" BorderBrush="#414868" BorderThickness="1" Cursor="Hand" FontSize="11" FontWeight="Bold"/>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -86,8 +87,11 @@ namespace Epic_Games_Account_Switcher_Client
         public ICommand BackupCommand { get; }
         public ICommand RestoreCommand { get; }
 
+        public bool IsAccountsEmpty => Accounts == null || Accounts.Count == 0;
+
         public MainViewModel()
         {
+            Accounts.CollectionChanged += (s, e) => OnPropertyChanged(nameof(IsAccountsEmpty));
             SwitchCommand = new RelayCommand<Account>(async (acc) => await SwitchToAccount(acc));
             AddAccountCommand = new RelayCommand(async () => await StartCapture());
             EditCommand = new RelayCommand<Account>((acc) => EditAccount(acc));
