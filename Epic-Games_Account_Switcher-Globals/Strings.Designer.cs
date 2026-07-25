@@ -67,9 +67,9 @@ namespace Epic_Games_Account_Switcher_Globals {
             }
         }
 
-        internal static string SteamSwitcherFuncs_PrepareProfileImages_ {
+        internal static string ErrProfileImageDownload {
             get {
-                return ResourceManager.GetString("SteamSwitcherFuncs_PrepareProfileImages_", resourceCulture);
+                return ResourceManager.GetString("ErrProfileImageDownload", resourceCulture);
             }
         }
     }

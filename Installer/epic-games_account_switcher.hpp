@@ -1,21 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #pragma once
 
 #pragma comment(lib, "urlmon.lib")
@@ -36,14 +18,45 @@
 #include <urlmon.h>
 #include "progress_bar.hpp"
 
-#ifndef CURL_STATICLIB
-#define CURL_STATICLIB
-#endif
-#include <curl/curl.h>
-
 #include "runtime_check.hpp"
 #include "versions.h"
 using namespace std;
+
+class DownloadCallback : public IBindStatusCallback {
+private:
+    ProgressBar* m_bar;
+    unsigned long m_last_progress = 0;
+public:
+    DownloadCallback(ProgressBar* bar) : m_bar(bar) {}
+
+    STDMETHOD(OnProgress)(ULONG ulProgress, ULONG ulProgressMax, ULONG ulStatusCode, LPCWSTR szStatusText) {
+        if (ulProgressMax > 0 && m_bar) {
+            unsigned long percentage = static_cast<unsigned long>((static_cast<double>(ulProgress) * 100.0) / static_cast<double>(ulProgressMax));
+            if (percentage != m_last_progress) {
+                m_bar->Progressed(percentage);
+                m_last_progress = percentage;
+            }
+        }
+        return S_OK;
+    }
+
+    STDMETHOD(OnStartBinding)(DWORD dwReserved, IBinding* pib) { return S_OK; }
+    STDMETHOD(GetPriority)(LONG* pnPriority) { return S_OK; }
+    STDMETHOD(OnLowResource)(DWORD reserved) { return S_OK; }
+    STDMETHOD(OnStopBinding)(HRESULT hresult, LPCWSTR szError) { return S_OK; }
+    STDMETHOD(GetBindInfo)(DWORD* grfBINDF, BINDINFO* pbindinfo) { return S_OK; }
+    STDMETHOD(OnDataAvailable)(DWORD grfBSCF, DWORD dwSize, FORMATETC* pformatetc, STGMEDIUM* pstgmed) { return S_OK; }
+    STDMETHOD(OnObjectAvailable)(REFIID riid, IUnknown* punk) { return S_OK; }
+    STDMETHOD_(ULONG, AddRef)() { return 1; }
+    STDMETHOD_(ULONG, Release)() { return 1; }
+    STDMETHOD(QueryInterface)(REFIID riid, void** ppvObject) {
+        if (riid == IID_IUnknown || riid == IID_IBindStatusCallback) {
+            *ppvObject = static_cast<IBindStatusCallback*>(this);
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+};
 
 inline bool min_vc_met = false,
 	min_webview_met = false,
@@ -74,19 +87,9 @@ inline void wait_for_input()
 }
 #pragma endregion
 
-
-
 #pragma region File Operations
 inline string current_download;
 inline chrono::time_point<chrono::system_clock> last_time = std::chrono::system_clock::now();
-inline std::unique_ptr<ProgressBar> g_download_progress;
-inline double g_progress_total = 0.0;
-inline string g_progress_label;
-
-inline size_t write_data(const void* ptr, const size_t size, const size_t n_mem_b, FILE* stream) {
-	const size_t written = fwrite(ptr, size, n_mem_b, stream);
-	return written;
-}
 
 inline string convert_size(size_t size) {
 	static const char* sizes[] = { "B", "KB", "MB", "GB" };
@@ -104,66 +107,18 @@ inline string convert_size(size_t size) {
 	return result;
 }
 
-inline int progress_bar(
-	void* client_progress_data,
-	const double dl_total,
-	const double dl_now,
-	double ul_total,
-	double ul_now)
-{
-	if (const double n = dl_total; n > 0)
-	{
-		const string dls = "Downloading " + current_download + " (" + convert_size(static_cast<size_t>(dl_total)) + ")";
-
-		if (!g_download_progress || g_progress_total != dl_total || g_progress_label != dls)
-		{
-			g_download_progress = std::make_unique<ProgressBar>(static_cast<unsigned long>(n), dls.c_str());
-			g_progress_total = dl_total;
-			g_progress_label = dls;
-		}
-
-		if (const std::chrono::duration<double> elapsed_seconds = std::chrono::system_clock::now() - last_time; elapsed_seconds.count() >= 0.2)
-		{
-			last_time = std::chrono::system_clock::now();
-			g_download_progress->Progressed(static_cast<unsigned long>(dl_now));
-		}
-	}
-	return 0;
-}
-
 inline bool download_file(const char* url, const char* dest) {
-	if (CURL* curl = curl_easy_init(); curl) {
-		FILE* fp = nullptr;
-		if (fopen_s(&fp, dest, "wb") != 0 || fp == nullptr)
-		{
-			curl_easy_cleanup(curl);
-			return false;
-		}
-		curl_easy_setopt(curl, CURLOPT_URL, url);
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
-		curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-		curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_bar);
-		curl_easy_setopt(curl, CURLOPT_FRESH_CONNECT, true);
-		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-		curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, true); 
-		const CURLcode res = curl_easy_perform(curl);
-		
-		curl_easy_cleanup(curl);
-		fclose(fp);
-		g_download_progress.reset();
-		g_progress_total = 0.0;
-		g_progress_label.clear();
-
-		insert_empty_line();
-
-		last_time = std::chrono::system_clock::from_time_t(0);
-		cout << " Finished downloading " << current_download << endl;
-		return res == CURLE_OK;
-	}
-	return false;
+    ProgressBar bar(100, "Downloading", cout); 
+    DownloadCallback callback(&bar);
+    
+    HRESULT hr = URLDownloadToFileA(NULL, url, dest, 0, &callback);
+    
+    insert_empty_line();
+    if (SUCCEEDED(hr)) {
+        cout << " Finished downloading " << current_download << endl;
+        return true;
+    }
+    return false;
 }
 
 inline bool file_exists(const std::string& name) {
@@ -172,12 +127,7 @@ inline bool file_exists(const std::string& name) {
 }
 #pragma endregion
 
-
 #pragma region Runtime Operations
-
-
-
-
 inline bool is_winget_available()
 {
 	STARTUPINFO si = { sizeof(STARTUPINFO) };
@@ -187,11 +137,9 @@ inline bool is_winget_available()
 	si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 	PROCESS_INFORMATION pi;
 	
-	
 	wstring cmd_line = L"cmd.exe /c winget --version";
 	wchar_t* cmd_line_writable = new wchar_t[cmd_line.length() + 1];
 	wcscpy_s(cmd_line_writable, cmd_line.length() + 1, cmd_line.c_str());
-	
 	
 	bool success = CreateProcessW(nullptr, cmd_line_writable, nullptr, nullptr, FALSE, 
 		CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, nullptr, nullptr, &si, &pi);
@@ -209,9 +157,6 @@ inline bool is_winget_available()
 	}
 	return false;
 }
-
-
-
 
 inline bool is_winget_package_installed(const string& package_id)
 {
@@ -247,12 +192,8 @@ inline bool is_winget_package_installed(const string& package_id)
 			output += buffer;
 		}
 		
-		
-		
 		DWORD exit_code;
 		GetExitCodeProcess(pi.hProcess, &exit_code);
-		
-		
 		installed = (exit_code == 0) && (output.find(package_id) != string::npos);
 		
 		CloseHandle(h_read);
@@ -268,9 +209,6 @@ inline bool is_winget_package_installed(const string& package_id)
 	delete[] cmd_line_writable;
 	return installed;
 }
-
-
-
 
 inline bool install_winget_package(const string& package_id, const string& display_name)
 {
@@ -317,9 +255,6 @@ inline bool install_winget_package(const string& package_id, const string& displ
 	return false;
 }
 
-
-
-
 inline void install_runtime(const string& path, const string& name, const bool& passive)
 {
 	cout << "Installing: " << name << endl;
@@ -346,8 +281,7 @@ inline void download_install_missing_runtimes()
 {
 	const string operating_path = get_operating_path();
 
-	
-	if (!min_webview_met || !min_aspcore_met || !min_desktop_runtime_met || !min_vc_met)
+	if (!min_vc_met || !min_webview_met || !min_desktop_runtime_met || !min_aspcore_met)
 	{
 		cout << "One or more runtimes were not installed:" << endl;
 		int total = 0;
@@ -363,7 +297,6 @@ inline void download_install_missing_runtimes()
 			cout << " + Microsoft .NET 8.0 Desktop Runtime [~57,9 MB]" << endl;
 			total += 52;
 		}
-
 		if (!min_vc_met) {
 			cout << " + C++ Redistributable 2015-2022 [~24 MB]" << endl;
 			total += 24;
@@ -374,7 +307,6 @@ inline void download_install_missing_runtimes()
 
 		wait_for_input();
 
-		
 		bool use_winget = is_winget_available();
 		if (use_winget)
 		{
@@ -385,7 +317,6 @@ inline void download_install_missing_runtimes()
 			cout << "winget not available. Falling back to direct download..." << endl << endl;
 		}
 
-		
 		bool w_runtime_install = false,
 			d_runtime_install = false,
 			a_runtime_install = false,
@@ -407,7 +338,6 @@ inline void download_install_missing_runtimes()
 			}
 		}
 
-		
 		if (!min_webview_met)
 		{
 			if (!use_winget)
@@ -416,14 +346,12 @@ inline void download_install_missing_runtimes()
 				if (!download_file(w_runtime.c_str(), w_runtime_local.c_str()))
 				{
 					cout << "Failed to download and install Microsoft WebView2 Runtime. To download: 1. Click the link below:" << endl <<
-						"https://go.microsoft.com/fwlink/p/?LinkId=2124703" << endl <<
-						"2. Click 'Download Hosting Bundle' under Run server apps." << endl << endl;
+						"https://go.microsoft.com/fwlink/p/?LinkId=2124703" << endl;
 				}
 				else w_runtime_install = true;
 			}
 		}
 
-		
 		if (!min_desktop_runtime_met)
 		{
 			if (use_winget)
@@ -450,7 +378,6 @@ inline void download_install_missing_runtimes()
 			}
 		}
 
-		
 		if (!min_aspcore_met)
 		{
 			if (use_winget)
@@ -471,14 +398,12 @@ inline void download_install_missing_runtimes()
 				if (!download_file(a_runtime.c_str(), a_runtime_local.c_str()))
 				{
 					cout << "Failed to download and install ASP.NET Core 8.0 Runtime. To download: 1. Click the link below:" << endl <<
-						"https://dotnet.microsoft.com/en-us/download/dotnet/8.0" << endl <<
-						"2. Click 'x64' under ASP.NET Core Runtime 8." << endl << endl;
+						"https://dotnet.microsoft.com/en-us/download/dotnet/8.0" << endl;
 				}
 				else a_runtime_install = true;
 			}
 		}
 
-		
 		if (!min_vc_met)
 		{
 			if (use_winget)
@@ -493,10 +418,6 @@ inline void download_install_missing_runtimes()
 						c_runtime_install = true;
 					}
 				}
-				else
-				{
-					cout << "C++ Redistributable 2015-2022 (x64) is already installed via winget." << endl;
-				}
 				
 				if (!vc_x86_installed)
 				{
@@ -505,11 +426,6 @@ inline void download_install_missing_runtimes()
 						c_runtime_install = true;
 					}
 				}
-				else
-				{
-					cout << "C++ Redistributable 2015-2022 (x86) is already installed via winget." << endl;
-				}
-				
 				
 				if (vc_x64_installed || vc_x86_installed || c_runtime_install)
 				{
@@ -522,16 +438,12 @@ inline void download_install_missing_runtimes()
 				if (!download_file(c_runtime.c_str(), c_runtime_local.c_str()))
 				{
 					cout << "Failed to download and install C++ Redistributable 2015-2022. To download: 1. Click the link below:" << endl <<
-						"https://docs.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170" << endl <<
-						"2. Click the link next to 'X64', under the \"Visual Studio 2015, 2017, 2019, and 2022\" heading." << endl << endl;
+						"https://docs.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170" << endl;
 				}
 				else c_runtime_install = true;
 			}
 		}
 
-		cout << endl;
-
-		
 		if (!use_winget && (w_runtime_install || d_runtime_install || a_runtime_install || c_runtime_install))
 		{
 			cout << "------------------------------------------------------------------------" << endl << endl <<
@@ -539,13 +451,10 @@ inline void download_install_missing_runtimes()
 
 			if (w_runtime_install)
 				install_runtime(w_runtime_local, w_runtime_name, false); 
-
 			if (d_runtime_install)
 				install_runtime(d_runtime_local, d_runtime_name, true);
-
 			if (a_runtime_install)
 				install_runtime(a_runtime_local, a_runtime_name, true);
-
 			if (c_runtime_install)
 				install_runtime(c_runtime_local, c_runtime_name, true);
 		}
@@ -572,10 +481,6 @@ inline void download_install_missing_runtimes()
 		"https://github.com/Epic-Games/Epic-Games_Account_Switcher#required-runtimes-download-and-install" << endl << endl;
 }
 
-
-
-
-
 inline void verify_vc()
 {
 	cout << "Downloading C++ Redistributable 2015-2022" << endl;
@@ -597,17 +502,13 @@ inline void verify_vc()
 	if (!download_file(c_runtime.c_str(), c_runtime_local.c_str()))
 	{
 		cout << "Failed to download and install C++ Redistributable 2015-2022. To download: 1. Click the link below:" << endl <<
-			"https://docs.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170" << endl <<
-			"2. Click the link next to 'X64', under the \"Visual Studio 2015, 2017, 2019, and 2022\" heading." << endl << endl;
+			"https://docs.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170" << endl;
 	}
 	else c_runtime_install = true;
 
 	if (c_runtime_install)
 		install_runtime(c_runtime_local, c_runtime_name, true);
 }
-
-
-
 
 inline void verify_net()
 {
