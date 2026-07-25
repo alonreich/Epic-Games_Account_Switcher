@@ -33,7 +33,7 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             try
             {
-                var ld = Path.Combine(UserDataFolder, "Logs");
+                var ld = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Epic-Games_Account_Switcher");
                 if (!Directory.Exists(ld)) Directory.CreateDirectory(ld);
                 return Path.Combine(ld, "Epic-Games_Account_Switcher.log");
             } catch { return Path.Combine(UserDataFolder, "Epic-Games_Account_Switcher.log"); }
