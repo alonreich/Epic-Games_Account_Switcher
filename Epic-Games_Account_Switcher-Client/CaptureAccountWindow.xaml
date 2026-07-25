@@ -2,9 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Account Wizard" Height="740" Width="570"
-        Background="#1F2335" WindowStyle="None" AllowsTransparency="True"
+        Background="{DynamicResource MainBackground}" WindowStyle="None" AllowsTransparency="True"
         ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
-    <Border BorderBrush="#7AA2F7" BorderThickness="1" CornerRadius="12" Background="#1F2335">
+    <Border BorderBrush="{DynamicResource IconFill}" BorderThickness="1" CornerRadius="12" Background="{DynamicResource MainBackground}">
         <Grid Margin="30">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -17,13 +17,13 @@
 
             
             <Grid Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,30">
-                <Ellipse Width="150" Height="150" Stroke="#7AA2F7" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality">
+                <Ellipse Width="150" Height="150" Stroke="{DynamicResource IconFill}" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality">
                     <Ellipse.Fill>
                         <ImageBrush x:Name="ProfileImageBrush" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Ellipse.Fill>
                 </Ellipse>
 
-                <Button Click="SelectImage_Click" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="35" Height="35" Background="#7AA2F7" BorderThickness="0" Cursor="Hand">
+                <Button Click="SelectImage_Click" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="35" Height="35" Background="{DynamicResource IconFill}" BorderThickness="0" Cursor="Hand" ToolTip="Change profile custom avatar icon">
                     <Button.Resources>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="18"/>
@@ -36,22 +36,64 @@
             
             <StackPanel Grid.Row="2" VerticalAlignment="Top">
                 <TextBlock Text="Friendly Name *" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
-                <TextBox x:Name="AccountNameInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Margin="0,0,0,20" VerticalContentAlignment="Center" FontSize="14" CaretBrush="White"/>
+                <Grid Margin="0,0,0,20">
+                    <TextBox x:Name="AccountNameInput" Background="{DynamicResource BtnBackgroundActive}" Foreground="White" BorderBrush="{DynamicResource BtnBorder}" Padding="12" VerticalContentAlignment="Center" FontSize="14" CaretBrush="White" ToolTip="Required. Unique display name for this account card."/>
+                    <TextBlock Text="e.g., Main Account / Alt 1" Foreground="#555A7B" Padding="14,12" VerticalAlignment="Center" IsHitTestVisible="False" FontStyle="Italic">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=AccountNameInput}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
 
                 <TextBlock Text="Connected Email *" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
-                <TextBox x:Name="AccountEmailInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Margin="0,0,0,20" VerticalContentAlignment="Center" FontSize="14" IsReadOnly="False" BorderThickness="1" CaretBrush="White"/>
+                <Grid Margin="0,0,0,20">
+                    <TextBox x:Name="AccountEmailInput" Background="{DynamicResource BtnBackgroundActive}" Foreground="White" BorderBrush="{DynamicResource BtnBorder}" Padding="12" VerticalContentAlignment="Center" FontSize="14" IsReadOnly="False" BorderThickness="1" CaretBrush="White" ToolTip="Required. Connected Epic Games email address."/>
+                    <TextBlock Text="e.g., user@domain.com" Foreground="#555A7B" Padding="14,12" VerticalAlignment="Center" IsHitTestVisible="False" FontStyle="Italic">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=AccountEmailInput}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
 
                 <TextBlock Text="Fallback Password (Optional)" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
-                <PasswordBox x:Name="AccountPasswordInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Margin="0,0,0,20" VerticalContentAlignment="Center" FontSize="14" CaretBrush="White"/>
+                <PasswordBox x:Name="AccountPasswordInput" Background="{DynamicResource BtnBackgroundActive}" Foreground="White" BorderBrush="{DynamicResource BtnBorder}" Padding="12" Margin="0,0,0,20" VerticalContentAlignment="Center" FontSize="14" CaretBrush="White" ToolTip="Optional fallback password encrypted in Windows Credential Manager."/>
 
                 <TextBlock Text="Description" Foreground="#737AA2" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
-                <TextBox x:Name="AccountDescriptionInput" Background="#24283B" Foreground="White" BorderBrush="#414868" Padding="12" Height="100" TextWrapping="Wrap" AcceptsReturn="False" VerticalContentAlignment="Top" FontSize="14" CaretBrush="White"/>
+                <Grid>
+                    <TextBox x:Name="AccountDescriptionInput" Background="{DynamicResource BtnBackgroundActive}" Foreground="White" BorderBrush="{DynamicResource BtnBorder}" Padding="12" Height="100" TextWrapping="Wrap" AcceptsReturn="False" VerticalContentAlignment="Top" FontSize="14" CaretBrush="White" ToolTip="Optional notes or character details."/>
+                    <TextBlock Text="Add optional notes about ranks, games, or login details..." Foreground="#555A7B" Padding="14,12" VerticalAlignment="Top" IsHitTestVisible="False" FontStyle="Italic">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=AccountDescriptionInput}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
             </StackPanel>
 
             
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
-                <Button Content="CANCEL" Click="Cancel_Click" Width="120" Height="40" Margin="0,0,20,0" Background="Transparent" Foreground="#F7768E" BorderBrush="#F7768E" BorderThickness="1" Cursor="Hand"/>
-                <Button Content="SAVE CHANGES" Click="Capture_Click" Width="180" Height="40" Background="#7AA2F7" Foreground="Black" FontWeight="Bold" BorderThickness="0" Cursor="Hand" IsDefault="True">
+                <Button Content="CANCEL" Click="Cancel_Click" Width="120" Height="40" Margin="0,0,20,0" Background="Transparent" Foreground="#F7768E" BorderBrush="#F7768E" BorderThickness="1" Cursor="Hand" ToolTip="Discard changes and close dialog"/>
+                <Button Content="SAVE CHANGES" Click="Capture_Click" Width="180" Height="40" Background="{DynamicResource IconFill}" Foreground="Black" FontWeight="Bold" BorderThickness="0" Cursor="Hand" IsDefault="True" ToolTip="Validate entries and save profile">
                     <Button.Resources>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="4"/>
