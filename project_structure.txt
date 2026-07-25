@@ -39,9 +39,10 @@ Epic Games Account Switcher is a high-performance, atomic session manager for th
 4. **Path Management**: Always use the consolidated properties (`LocalAppData`, `EpicSavedPath`) in `AccountService.cs` to ensure path consistency.
 5. **No Halt Build**: The build script is designed for automated pipelines; use `timeout /t 10` instead of `pause`.
 
-## 5) DATA MODEL (%LOCALAPPDATA%\Epic-Games_Account_Switcher\)
-- `LoginCache\Epic_Games\accounts.json`: Global account registry.
-- `LoginCache\Epic_Games\<Id>\`:
+## 5) DATA MODEL (%LOCALAPPDATA%\EpicAccountSwitcher\ & %PROGRAMDATA%\Epic-Games_Account_Switcher\)
+- `EG\accounts.json`: Global account registry (%LOCALAPPDATA%).
+- `EG\<Id>\` (%LOCALAPPDATA%):
   - `Saved\`: Cloned authentication and config files.
   - `EOS_Data\`: Cloned Epic Online Services local state.
   - `Roaming_Data\`: Cloned AppData/Roaming state for the launcher.
+- `%PROGRAMDATA%\Epic-Games_Account_Switcher\Epic-Games_Account_Switcher.log`: Ongoing application log file.
