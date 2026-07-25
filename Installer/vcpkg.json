@@ -1,7 +1,5 @@
 {
     "name": "installer",
     "version": "1.0",
-    "dependencies": [
-        "curl"
-    ]
+    "dependencies": []
 }

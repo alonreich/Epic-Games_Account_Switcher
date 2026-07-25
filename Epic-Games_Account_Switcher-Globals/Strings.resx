@@ -74,8 +74,8 @@ Full path:</value>
   <data name="ErrUnhandledExceptionHeader" xml:space="preserve">
     <value>Epic Games Account Switcher Unhandled exception</value>
   </data>
-  <data name="SteamSwitcherFuncs_PrepareProfileImages_" xml:space="preserve">
-    <value>ERROR: Could not connect and download Steam profile's image from Steam servers.
+  <data name="ErrProfileImageDownload" xml:space="preserve">
+    <value>ERROR: Could not connect and download profile image from Epic Games servers.
 Check your internet connection.
 
 Details: </value>

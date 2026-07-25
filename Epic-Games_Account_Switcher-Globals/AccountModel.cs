@@ -4,10 +4,11 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Epic_Games_Account_Switcher_Globals
 {
-    public class Account : INotifyPropertyChanged
+    public class Account : ObservableObject
     {
         public string Id { get; set; }
         
@@ -101,12 +102,6 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             Id = id;
             _name = name;
-        }
-
-        public event PropertyChangedEventHandler PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }
