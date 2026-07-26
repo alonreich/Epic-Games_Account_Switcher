@@ -1,18 +1,19 @@
 <Window x:Class="Epic_Games_Account_Switcher_Client.ProgressWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Epic Games Account Switcher - Setup" Height="500" Width="750"
-        WindowStyle="None" Background="#1F2335"
+        Title="Epic Games Account Switcher - Setup" MinHeight="450" MinWidth="650"
+        SizeToContent="WidthAndHeight"
+        WindowStyle="None" Background="{DynamicResource MainBackground}"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen" Topmost="True" ShowInTaskbar="True">
-    <Border Background="#2D2D30" CornerRadius="12" BorderBrush="#7AA2F7" BorderThickness="2">
+    <Border Background="{DynamicResource CardBackground}" CornerRadius="12" BorderBrush="{DynamicResource IconFill}" BorderThickness="2">
         <Grid Margin="25">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock x:Name="TitleLabel" Text="INSTALLER INITIALIZED" Foreground="#7AA2F7" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,20"/>
-            <ListBox x:Name="LogList" Grid.Row="1" Background="#14151E" BorderThickness="0" Foreground="#C0CAF5" FontFamily="Consolas" FontSize="12" Padding="10">
+            <TextBlock x:Name="TitleLabel" Text="INSTALLER INITIALIZED" Foreground="{DynamicResource IconFill}" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+            <ListBox x:Name="LogList" Grid.Row="1" Background="{DynamicResource HeaderbarBackground}" BorderThickness="0" Foreground="{DynamicResource AccentTextForeground}" FontFamily="Consolas" FontSize="12" Padding="10">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
                         <Setter Property="Focusable" Value="False"/>
@@ -24,11 +25,7 @@
                 <Grid Margin="0,0,0,5">
                     <TextBlock x:Name="PercentageLabel" Text="0%" Foreground="White" HorizontalAlignment="Right" FontWeight="Bold"/>
                 </Grid>
-                <ProgressBar x:Name="MainProgressBar" Height="15" Minimum="0" Maximum="100" Value="0" Background="#14151E" BorderThickness="0">
-                    <ProgressBar.Foreground>
-                        <SolidColorBrush Color="#7AA2F7"/>
-                    </ProgressBar.Foreground>
-                </ProgressBar>
+                <ProgressBar x:Name="MainProgressBar" Height="15" Minimum="0" Maximum="100" Value="0" Background="{DynamicResource HeaderbarBackground}" Foreground="{DynamicResource IconFill}" BorderThickness="0"/>
             </StackPanel>
         </Grid>
     </Border>

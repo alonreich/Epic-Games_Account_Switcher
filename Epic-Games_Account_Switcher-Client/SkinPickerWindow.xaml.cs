@@ -31,11 +31,37 @@ namespace Epic_Games_Account_Switcher_Client
             }
             SkinsList.ItemsSource = skins;
         }
-        private void SkinsList_MouseDoubleClick(object sender, MouseButtonEventArgs e) { Select_Click(null, null); }
+        private void SkinsList_MouseDoubleClick(object sender, MouseButtonEventArgs e) { SelectCurrentSkin(); }
+        private void SkinTile_Click(object sender, RoutedEventArgs e)
+        {
+            SelectSkinFromSender(sender);
+        }
+        private void SkinTile_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            SelectSkinFromSender(sender);
+            SelectCurrentSkin();
+            e.Handled = true;
+        }
+        private void SelectSkinFromSender(object sender)
+        {
+            var element = sender as FrameworkElement;
+            var skin = element == null ? null : element.DataContext as SkinItem;
+            if (skin == null) return;
+            SkinsList.SelectedItem = skin;
+            SelectedSkinPath = skin.FullPath;
+        }
         private void Select_Click(object sender, RoutedEventArgs e)
         {
+            SelectCurrentSkin();
+        }
+        private bool SelectCurrentSkin()
+        {
             var skin = SkinsList.SelectedItem as SkinItem;
-            if (skin != null) { SelectedSkinPath = skin.FullPath; DialogResult = true; Close(); }
+            if (skin == null) return false;
+            SelectedSkinPath = skin.FullPath;
+            DialogResult = true;
+            Close();
+            return true;
         }
         private void Cancel_Click(object sender, RoutedEventArgs e) { DialogResult = false; Close(); }
     }

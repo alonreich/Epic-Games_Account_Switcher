@@ -5,8 +5,9 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Epic_Games_Account_Switcher_Client"
         mc:Ignorable="d"
-        Title="Epic Games Account Switcher" Height="880" Width="1250"
+        Title="Epic Games Account Switcher" MinHeight="560" MinWidth="720" Height="880" Width="1250"
         Background="{DynamicResource MainBackground}" WindowStyle="None" AllowsTransparency="True"
+        PreviewKeyDown="Window_PreviewKeyDown" PreviewMouseWheel="Window_PreviewMouseWheel"
         Icon="..\Application_Icons\Epic-Games_Account_Switcher.ico">
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="40" ResizeBorderThickness="12" GlassFrameThickness="0" CornerRadius="0"/>
@@ -18,48 +19,85 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
                         <StackPanel Margin="10" Width="180">
-                            <Button Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand" Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                            <Button Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    ToolTipService.ShowDuration="30000"
+                                    AutomationProperties.Name="{Binding Name, StringFormat=Switch to {0}}"
+                                    AutomationProperties.HelpText="{Binding Email}">
+                                <Button.ToolTip>
+                                    <ToolTip Background="{DynamicResource BtnBackgroundActive}" BorderBrush="{DynamicResource BtnBorder}" Foreground="White" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <StackPanel MaxWidth="340">
+                                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding Email}" Foreground="{DynamicResource IconFill}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                            <TextBlock Text="{Binding Description}" Foreground="{DynamicResource SubTextForeground}" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                            <TextBlock Text="{Binding LastPlayedDisplay, StringFormat='Last played: {0}'}" Foreground="{DynamicResource SubTextForeground}" FontSize="11" Margin="0,8,0,0"/>
+                                            <TextBlock Text="{Binding UsageLabel}" Foreground="{DynamicResource AccentTextForeground}" FontSize="11" Margin="0,3,0,0"/>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </Button.ToolTip>
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="CardOuter" Background="Transparent" Padding="0,0,5,5" RenderTransformOrigin="0.5,0.5">
+                                        <Border x:Name="CardBorder" Background="{DynamicResource CardBackground}" CornerRadius="10" Padding="15" Margin="2" BorderThickness="1" BorderBrush="{DynamicResource BtnBorder}" RenderTransformOrigin="0.5,0.5">
                                             <Border.RenderTransform>
                                                 <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
                                             </Border.RenderTransform>
-                                            <Grid>
-                                                <Border x:Name="ShadowBorder" Background="Black" CornerRadius="10" Opacity="0.3" Margin="5,5,0,0"/>
-                                                <Border x:Name="CardBorder" Background="#292E42" CornerRadius="10" Padding="15" BorderThickness="1" BorderBrush="{DynamicResource BtnBorder}">
-                                                    <StackPanel Orientation="Vertical">
-                                                        <TextBlock Text="{Binding LastPlayed, StringFormat='Last played on {0:dd/MM/yyyy}'}" Foreground="#737AA2" FontSize="9" HorizontalAlignment="Center" Margin="0,2,0,6" Opacity="0.8"/>
-                                                        <Border x:Name="ActiveIndicator" Height="4" CornerRadius="2" Margin="0,0,0,12" VerticalAlignment="Top">
-                                                            <Border.Style>
-                                                                <Style TargetType="Border">
-                                                                    <Setter Property="Background" Value="#4A4A4A"/>
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                                                            <Setter Property="Background" Value="#BB9AF7"/>
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Border.Style>
-                                                        </Border>
-                                                        <Ellipse x:Name="ProfilePic" Width="110" Height="110" Margin="0,0,0,12" Stroke="{Binding AccentColor}" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality">
-                                                            <Ellipse.Fill>
-                                                                <ImageBrush ImageSource="{Binding ProfileImagePath, Converter={StaticResource ProfileImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                                            </Ellipse.Fill>
-                                                        </Ellipse>
-                                                        <TextBlock x:Name="ProfileName" Text="{Binding Name}" Foreground="White" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,0,1"/>
-                                                        <TextBlock x:Name="ProfileEmail" Text="{Binding Email}" Foreground="{DynamicResource IconFill}" FontSize="10" FontWeight="Normal" HorizontalAlignment="Center" TextAlignment="Center" Opacity="0.9"/>
-                                                    </StackPanel>
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="12" Opacity="0.3" ShadowDepth="4" Direction="315" Color="#000000"/>
+                                            </Border.Effect>
+                                            <StackPanel Orientation="Vertical">
+                                                <Grid Margin="0,0,0,8">
+                                                    <TextBlock Text="{Binding RecencyLabel}" Foreground="{DynamicResource IconFill}" FontSize="9" FontWeight="Bold" HorizontalAlignment="Left"/>
+                                                    <TextBlock Text="{Binding LastPlayedDisplay}" Foreground="{DynamicResource SubTextForeground}" FontSize="9" HorizontalAlignment="Right" Opacity="0.9"/>
+                                                </Grid>
+                                                <Border Height="3" Width="112" CornerRadius="2" Background="{DynamicResource ActiveIndicatorInactive}" HorizontalAlignment="Center" Margin="0,0,0,10" Opacity="0.75">
+                                                    <Border Width="{Binding UsageHeatWidth}" CornerRadius="2" Background="{DynamicResource IconFill}" HorizontalAlignment="Left"/>
                                                 </Border>
-                                            </Grid>
+                                                <Border x:Name="ActiveIndicator" Height="4" CornerRadius="2" Margin="0,0,0,12" VerticalAlignment="Top" Background="{DynamicResource ActiveIndicatorInactive}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{DynamicResource ActiveIndicatorInactive}"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource ActiveIndicatorActive}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+                                                <Ellipse x:Name="ProfilePic" Width="110" Height="110" Margin="0,0,0,12" Stroke="{Binding AccentColor}" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality">
+                                                    <Ellipse.Fill>
+                                                        <ImageBrush ImageSource="{Binding ProfileImagePath, Converter={StaticResource ProfileImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    </Ellipse.Fill>
+                                                </Ellipse>
+                                                <TextBlock x:Name="ProfileName" Text="{Binding Name}" Foreground="White" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="150" Margin="0,0,0,1" ToolTip="{Binding Name}"/>
+                                                <TextBlock x:Name="ProfileEmail" Text="{Binding Email}" Foreground="{DynamicResource IconFill}" FontSize="10" FontWeight="Normal" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="150" Opacity="0.9" ToolTip="{Binding Email}"/>
+                                                <TextBlock Text="{Binding UsageLabel}" Foreground="{DynamicResource SubTextForeground}" FontSize="9" HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="150" Margin="0,6,0,0" Opacity="0.85"/>
+                                            </StackPanel>
                                         </Border>
                                         <ControlTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsRecentlyUsed}" Value="True">
+                                                <Setter TargetName="CardBorder" Property="Effect">
+                                                    <Setter.Value>
+                                                        <DropShadowEffect BlurRadius="18" Opacity="0.42" ShadowDepth="4" Direction="315" Color="#7AA2F7"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </DataTrigger>
                                             <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#CCCC00"/>
+                                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource CardActiveBorder}"/>
                                                 <Setter TargetName="CardBorder" Property="BorderThickness" Value="2"/>
-                                                <Setter TargetName="CardOuter" Property="RenderTransform">
+                                                <Setter TargetName="CardBorder" Property="RenderTransform">
                                                     <Setter.Value>
                                                         <ScaleTransform ScaleX="1.05" ScaleY="1.05"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Setter TargetName="CardBorder" Property="Effect">
+                                                    <Setter.Value>
+                                                        <DropShadowEffect BlurRadius="24" Opacity="0.58" ShadowDepth="4" Direction="315" Color="#BB9AF7"/>
                                                     </Setter.Value>
                                                 </Setter>
                                                 <Setter TargetName="ProfileName" Property="FontSize" Value="18"/>
@@ -67,46 +105,70 @@
                                                 <Setter TargetName="ProfilePic" Property="Width" Value="120"/>
                                                 <Setter TargetName="ProfilePic" Property="Height" Value="120"/>
                                             </DataTrigger>
+                                            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="DropTarget">
+                                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource SuccessBackground}"/>
+                                                <Setter TargetName="CardBorder" Property="BorderThickness" Value="3"/>
+                                                <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource CardHoverBackground}"/>
+                                            </DataTrigger>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="CardBorder" Property="Background" Value="#3B4261"/>
+                                                <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource CardHoverBackground}"/>
                                                 <Setter TargetName="CardBorder" Property="BorderBrush" Value="{Binding AccentColor}"/>
                                             </Trigger>
                                             <Trigger Property="IsPressed" Value="True">
-                                                <Setter TargetName="CardBorder" Property="Margin" Value="3,3,0,0"/>
-                                                <Setter TargetName="ShadowBorder" Property="Visibility" Value="Collapsed"/>
+                                                <Setter TargetName="CardBorder" Property="Margin" Value="4,4,0,0"/>
+                                                <Setter TargetName="CardBorder" Property="Effect">
+                                                    <Setter.Value>
+                                                        <DropShadowEffect BlurRadius="8" Opacity="0.12" ShadowDepth="2" Direction="315" Color="#000000"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="White"/>
+                                                <Setter TargetName="CardBorder" Property="BorderThickness" Value="2"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Button.Template>
                                 <Button.ContextMenu>
                                     <ContextMenu Background="{DynamicResource BtnBackgroundActive}" Foreground="White" BorderBrush="{DynamicResource BtnBorder}">
-                                        <MenuItem Header="SAVE CURRENT PROFILE" Command="{Binding PlacementTarget.Tag.SaveCurrentProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="{DynamicResource IconFill}" ToolTip="Recapture the current logged-in Epic-Games account into this existing profile">
+                                        <MenuItem Header="SAVE CURRENT PROFILE" Command="{Binding PlacementTarget.Tag.SaveCurrentProfileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="{DynamicResource IconFill}" ToolTip="WARNING: Destroys existing token and replaces with current login state.">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource IconFill}" FontSize="14"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <Separator Background="{DynamicResource BtnBorder}"/>
-                                        <MenuItem Header="EDIT" Command="{Binding PlacementTarget.Tag.EditCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" FontWeight="Bold" Foreground="White">
+                                        <MenuItem Header="MOVE EARLIER" Command="{Binding PlacementTarget.Tag.MoveAccountEarlierCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="White" ToolTip="Move this profile one position earlier.">
+                                            <MenuItem.Icon>
+                                                <TextBlock Text="&#xE70E;" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource IconFill}" FontSize="14"/>
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="MOVE LATER" Command="{Binding PlacementTarget.Tag.MoveAccountLaterCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="White" ToolTip="Move this profile one position later.">
+                                            <MenuItem.Icon>
+                                                <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource IconFill}" FontSize="14"/>
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <Separator Background="{DynamicResource BtnBorder}"/>
+                                        <MenuItem Header="EDIT" Command="{Binding PlacementTarget.Tag.EditCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" FontWeight="Bold" Foreground="White" ToolTip="Edit this profile's name, email, avatar, password, or notes.">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource IconFill}" FontSize="14" FontWeight="Bold"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <Separator Background="{DynamicResource BtnBorder}"/>
-                                        <MenuItem Header="DELETE" Command="{Binding PlacementTarget.Tag.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="#F7768E">
+                                        <MenuItem Header="DELETE" Command="{Binding PlacementTarget.Tag.DeleteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="{DynamicResource WarningForeground}" ToolTip="WARNING: Permanently deletes this profile and its credential token.">
                                             <MenuItem.Icon>
-                                                <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" Foreground="#F7768E" FontSize="14"/>
+                                                <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource WarningForeground}" FontSize="14"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                     </ContextMenu>
                                 </Button.ContextMenu>
                             </Button>
-                            <TextBlock x:Name="ProfileDesc" Text="{Binding Description}" Foreground="#66B2FF" FontSize="18" FontFamily="Microsoft Sans Serif" TextWrapping="Wrap" TextAlignment="Center" Margin="10,2,10,0" Height="50" TextTrimming="CharacterEllipsis">
+                            <TextBlock x:Name="ProfileDesc" Text="{Binding Description}" Foreground="{DynamicResource AccentTextForeground}" FontSize="16" FontFamily="Microsoft Sans Serif" TextWrapping="Wrap" TextAlignment="Center" Margin="10,4,10,0" MinHeight="40" TextTrimming="CharacterEllipsis" ToolTip="{Binding Description}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                                <Setter Property="FontSize" Value="20"/>
-                                                <Setter Property="Margin" Value="10,40,10,0"/>
+                                                <Setter Property="FontSize" Value="18"/>
+                                                <Setter Property="Margin" Value="10,15,10,0"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -128,100 +190,211 @@
 
         <Border Grid.Row="0" Background="{DynamicResource BtnBackgroundActive}">
             <Grid>
-                <TextBlock Text="EPIC GAMES ACCOUNT SWITCHER" VerticalAlignment="Center" Margin="15,0" Foreground="#737AA2" FontSize="12" FontWeight="Bold"/>
+                <TextBlock Text="EPIC GAMES ACCOUNT SWITCHER" VerticalAlignment="Center" Margin="15,0" Foreground="{DynamicResource SubTextForeground}" FontSize="12" FontWeight="Bold"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" WindowChrome.IsHitTestVisibleInChrome="True">
-                    <Button Content="&#xE921;" FontFamily="Segoe MDL2 Assets" Width="40" Background="Transparent" Foreground="White" BorderThickness="0" Click="Minimize_Click" Cursor="Hand"/>
-                    <Button Content="" FontFamily="Segoe MDL2 Assets" Width="40" Background="Transparent" Foreground="#F7768E" BorderThickness="0" Click="Close_Click" Cursor="Hand"/>
+                    <Button Content="&#xE921;" FontFamily="Segoe MDL2 Assets" Width="40" Click="Minimize_Click" Style="{StaticResource BtnMin}" ToolTip="Minimize" AutomationProperties.Name="Minimize window"/>
+                    <Button Content="" FontFamily="Segoe MDL2 Assets" Width="40" Click="Close_Click" Style="{StaticResource BtnClose}" ToolTip="Close" AutomationProperties.Name="Close window"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Border Grid.Row="1" Padding="30,20">
+        <Grid Grid.Row="1" Grid.RowSpan="2">
+            <Grid.LayoutTransform>
+                <ScaleTransform ScaleX="{Binding ZoomFactor}" ScaleY="{Binding ZoomFactor}"/>
+            </Grid.LayoutTransform>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Padding="30,20">
             <Grid>
-                <StackPanel>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,24,0">
                     <TextBlock Text="Select your Account" Foreground="White" FontSize="28" FontWeight="Light"/>
-                    <TextBlock Text="Click a card to switch instantly. Right-click to edit." Foreground="#737AA2" FontSize="14" Margin="0,5,0,0"/>
+                    <TextBlock Text="{Binding UsageTrackerSummary}" Foreground="{DynamicResource SubTextForeground}" FontSize="14" Margin="0,5,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
-                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8">
-                        <CheckBox Content="Close once launched"
-                                  IsChecked="{Binding CloseOnceLaunchedSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  Foreground="#9AA5CE"
-                                  Cursor="Hand"
-                                  Margin="0,0,16,0"/>
-                        <CheckBox Content="Prompt on unsaved login"
-                                  IsChecked="{Binding PromptOnUnsavedLoginSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  Cursor="Hand"
-                                  Foreground="#9AA5CE"/>
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="+ CAPTURE CURRENT EPIC GAMES ACCOUNT" Padding="25,10" Background="#4A4A4A" Foreground="White" BorderThickness="0" FontWeight="Bold" Command="{Binding AddAccountCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanToEnabledConverter}}" Cursor="Hand" FontSize="14" ToolTip="Instantly record and preserve your active Epic Games Launcher login state into a reusable profile card.">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="4"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
+                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <Button Content="+ CAPTURE CURRENT EPIC GAMES ACCOUNT" Style="{StaticResource OkButton}" Padding="25,10" Command="{Binding AddAccountCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanToEnabledConverter}}" FontSize="14" ToolTip="Instantly record and preserve your active Epic Games Launcher login state into a reusable profile card." AutomationProperties.Name="Capture current Epic Games account"/>
+                        <Expander ExpandDirection="Down" Margin="12,0,0,0" Foreground="{DynamicResource SubTextForeground}" HorizontalAlignment="Right" ToolTip="Show account automation options." AutomationProperties.Name="Account automation options">
+                            <Expander.Header>
+                                <TextBlock Text="OPTIONS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SubTextForeground}"/>
+                            </Expander.Header>
+                            <StackPanel Margin="0,10,0,0" MaxWidth="460">
+                                <CheckBox Content="Close once launched"
+                                          IsChecked="{Binding CloseOnceLaunchedSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Foreground="{DynamicResource SubTextForeground}"
+                                          Cursor="Hand"
+                                          Margin="0,0,0,8"
+                                          AutomationProperties.Name="Close once launched"
+                                          ToolTip="Automatically exit Account Switcher after Epic Games Launcher starts and confirms the session."/>
+                                <CheckBox Content="Prompt on unsaved login"
+                                          IsChecked="{Binding PromptOnUnsavedLoginSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Cursor="Hand"
+                                          Foreground="{DynamicResource SubTextForeground}"
+                                          Margin="0,0,0,8"
+                                          AutomationProperties.Name="Prompt on unsaved login"
+                                          ToolTip="Display an alert prompt to capture and save your login session if an unrecorded account is detected."/>
+                                <CheckBox Content="Allow Minimize to SysTray"
+                                          IsChecked="{Binding MinimizeToTraySetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Foreground="{DynamicResource SubTextForeground}"
+                                          Cursor="Hand"
+                                          Margin="0,0,0,8"
+                                          AutomationProperties.Name="Allow Minimize to SysTray"
+                                          ToolTip="When enabled, closing or minimizing the window will hide it to the Windows notification area (system tray) for background fast-switching."/>
+                                <CheckBox IsChecked="{Binding OpenEpicLauncherOnStartupSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Cursor="Hand"
+                                          Foreground="{DynamicResource SubTextForeground}"
+                                          AutomationProperties.Name="Open Epic Games Launcher on startup"
+                                          ToolTip="Launches Epic Games Launcher on app startup to improve current-login detection, but may update Epic online activity for the locally signed-in account.">
+                                    <TextBlock Text="Open Epic-Games Launcher when app opens (Better current login account detection)" TextWrapping="Wrap" MaxWidth="360"/>
+                                </CheckBox>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </StackPanel>
             </Grid>
-        </Border>
+            </Border>
 
-        <ListBox x:Name="AccountsList"
-                 Grid.Row="2"
-                 ItemsSource="{Binding Accounts}"
-                 ItemContainerStyle="{StaticResource AccountCardStyle}"
-                 Background="Transparent"
-                 BorderThickness="0"
-                 Margin="12,0,12,12"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 AllowDrop="True"
-                 PreviewMouseLeftButtonDown="AccountsList_PreviewMouseLeftButtonDown"
-                 PreviewMouseMove="AccountsList_PreviewMouseMove"
-                 DragOver="AccountsList_DragOver"
-                 Drop="AccountsList_Drop">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <local:AnimatedWrapPanel Margin="20,0" HorizontalAlignment="Center"/>
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-        </ListBox>
+            <ListBox x:Name="AccountsList"
+                     Grid.Row="1"
+                     ItemsSource="{Binding Accounts}"
+                     ItemContainerStyle="{StaticResource AccountCardStyle}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Margin="12,0,12,12"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     AllowDrop="True"
+                     PreviewMouseLeftButtonDown="AccountsList_PreviewMouseLeftButtonDown"
+                     PreviewMouseMove="AccountsList_PreviewMouseMove"
+                     DragOver="AccountsList_DragOver"
+                     DragLeave="AccountsList_DragLeave"
+                     Drop="AccountsList_Drop">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <local:AnimatedWrapPanel Margin="20,0" HorizontalAlignment="Center"/>
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+            </ListBox>
 
-        <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="{Binding IsAccountsEmpty, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border Grid.Row="1" Panel.ZIndex="5" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="30,6,30,0" Padding="18" CornerRadius="12" Background="{DynamicResource BtnBackgroundActive}" BorderBrush="{DynamicResource IconFill}" BorderThickness="2" MaxWidth="760" ToolTip="Save the currently detected Epic login as a tracked account card.">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasUnsavedLoginSuggestion}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="28" Opacity="0.48" ShadowDepth="0" Color="#7AA2F7"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="64" Height="64" CornerRadius="32" Background="{DynamicResource CardHoverBackground}" BorderBrush="{DynamicResource IconFill}" BorderThickness="2" Margin="0,0,16,0">
+                    <TextBlock Text="+" Foreground="{DynamicResource IconFill}" FontSize="36" FontWeight="Light" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="UNSAVED LOGIN DETECTED" Foreground="{DynamicResource IconFill}" FontSize="10" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding UnsavedLoginName}" Foreground="White" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding UnsavedLoginEmail}" Foreground="{DynamicResource SubTextForeground}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding UnsavedLoginHint}" Foreground="{DynamicResource AccentTextForeground}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+                    <Button Content="SAVE NOW" Command="{Binding CaptureUnsavedLoginCommand}" Style="{StaticResource OkButton}" Padding="20,8" FontSize="12" ToolTip="Create a tracked account card from this live login." AutomationProperties.Name="Save detected login"/>
+                    <Button Content="DISMISS" Command="{Binding DismissUnsavedLoginCommand}" Style="{StaticResource SecondaryButton}" Padding="16,8" FontSize="12" Margin="10,0,0,0" ToolTip="Hide this detected login card." AutomationProperties.Name="Dismiss detected login"/>
+                </StackPanel>
+            </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="{Binding IsAccountsEmpty, Converter={StaticResource BooleanToVisibilityConverter}}" MaxWidth="720" Margin="24">
             <TextBlock Text="D" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource IconFill}" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,15" Opacity="0.8"/>
-            <TextBlock Text="No Saved Account Profiles Yet" Foreground="White" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-            <TextBlock Text="Click '+ CAPTURE CURRENT EPIC GAMES ACCOUNT' above to create your first fast-switch profile." Foreground="#737AA2" FontSize="14" HorizontalAlignment="Center" Margin="0,8,0,0"/>
-        </StackPanel>
+            <TextBlock Text="{Binding EmptyStateTitle}" Foreground="White" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" TextAlignment="Center"/>
+            <TextBlock Text="{Binding EmptyStateSubtitle}" Foreground="{DynamicResource SubTextForeground}" FontSize="14" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="620" Margin="20,8,20,18"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="SAVE DETECTED LOGIN" Command="{Binding CaptureUnsavedLoginCommand}" Padding="22,10" FontSize="13" ToolTip="Create your first tracked account card from the live Epic login." AutomationProperties.Name="Save detected login from empty state">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource OkButton}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasUnsavedLoginSuggestion}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="SCAN CURRENT LOGIN" Command="{Binding AddAccountCommand}" Padding="22,10" FontSize="13" ToolTip="Detect the Epic account that is currently signed in." AutomationProperties.Name="Scan current Epic login">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasNoUnsavedLoginSuggestion}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+            </StackPanel>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,20">
-            <Button Content="RESTORE" Command="{Binding RestoreCommand}" Width="100" Height="32" Margin="0,0,10,0" Background="Transparent" Foreground="#737AA2" BorderBrush="#414868" BorderThickness="1" Cursor="Hand" FontSize="11" FontWeight="Bold"/>
-            <Button Content="BACKUP" Command="{Binding BackupCommand}" Width="100" Height="32" Background="#363952" Foreground="White" BorderBrush="#414868" BorderThickness="1" Cursor="Hand" FontSize="11" FontWeight="Bold"/>
-        </StackPanel>
+            <Grid Grid.Row="1" VerticalAlignment="Bottom" Margin="30,0,30,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Content="SHOW LOGS" Click="ShowLogs_Click" Width="118" Height="34" Padding="16,8" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" FontSize="11" ToolTip="Open the current app log file so it can be shared for troubleshooting." AutomationProperties.Name="Open app log file"/>
+                
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Button Content="-" Command="{Binding ZoomOutCommand}" Width="36" Height="34" Style="{StaticResource SecondaryButton}" FontSize="16" FontWeight="Bold" ToolTip="Zoom Out (Ctrl + Mouse Wheel Down)" AutomationProperties.Name="Zoom Out"/>
+                    <Button Content="{Binding ZoomDisplayLabel}" Command="{Binding ZoomResetCommand}" MinWidth="150" Height="34" Padding="12,6" Margin="8,0,8,0" Style="{StaticResource SecondaryButton}" FontSize="11" FontWeight="Bold" ToolTip="Reset UI scale to default 100%" AutomationProperties.Name="Reset Zoom to Default"/>
+                    <Button Content="+" Command="{Binding ZoomInCommand}" Width="36" Height="34" Style="{StaticResource SecondaryButton}" FontSize="16" FontWeight="Bold" ToolTip="Zoom In (Ctrl + Mouse Wheel Up)" AutomationProperties.Name="Zoom In"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="RESTORE" Command="{Binding RestoreCommand}" Width="118" Height="34" Padding="16,8" Margin="0,0,10,0" Style="{StaticResource SecondaryButton}" FontSize="11" ToolTip="Restore saved account profile cards and credentials from an encrypted backup or legacy ZIP backup." AutomationProperties.Name="Restore backup"/>
+                    <Button Content="BACKUP" Command="{Binding BackupCommand}" Width="118" Height="34" Padding="16,8" Style="{StaticResource SecondaryButton}" FontSize="11" ToolTip="Export all existing account profiles into a password-encrypted backup file for disaster recovery or migration." AutomationProperties.Name="Create backup"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
 
         <ResizeGrip Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Bottom" WindowChrome.ResizeGripDirection="BottomRight" Opacity="0.3" Margin="0,0,2,2"/>
 
-        <Grid Grid.RowSpan="3" Background="#AA16161E" Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <Grid Grid.RowSpan="3" Background="{DynamicResource OverlayBackground}" Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <ProgressBar IsIndeterminate="True" Width="100" Height="2" Background="Transparent" Foreground="#7AA2F7" BorderThickness="0"/>
-                <TextBlock Text="Loading accounts..." Foreground="#737AA2" Margin="0,10" HorizontalAlignment="Center" FontSize="12"/>
+                <ProgressBar IsIndeterminate="True" Width="100" Height="2" Background="Transparent" Foreground="{DynamicResource IconFill}" BorderThickness="0"/>
+                <TextBlock Text="Loading accounts..." Foreground="{DynamicResource SubTextForeground}" Margin="0,10" HorizontalAlignment="Center" FontSize="12"/>
             </StackPanel>
         </Grid>
 
-        <Grid Grid.RowSpan="3" Background="#AA16161E" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <Grid Grid.RowSpan="3" Background="{DynamicResource OverlayBackground}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <ProgressBar IsIndeterminate="True" Width="200" Height="4" Background="Transparent" Foreground="#7AA2F7" BorderThickness="0"/>
+                <ProgressBar IsIndeterminate="True" Width="200" Height="4" Background="Transparent" Foreground="{DynamicResource IconFill}" BorderThickness="0"/>
                 <TextBlock Text="{Binding BusyStatus}" Foreground="White" Margin="0,15" HorizontalAlignment="Center"/>
+                <Button Content="CANCEL" Command="{Binding CancelBusyCommand}" Width="120" Height="34" Style="{StaticResource CancelButton}" HorizontalAlignment="Center" ToolTip="Cancel the current operation." AutomationProperties.Name="Cancel current operation"/>
             </StackPanel>
         </Grid>
 
-        <Border Grid.RowSpan="3" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0" Background="#24283B" BorderBrush="#7AA2F7" BorderThickness="2" CornerRadius="12" Padding="34,22" Visibility="{Binding IsToastVisible, Converter={StaticResource BooleanToVisibilityConverter}}" MaxWidth="1300">
+        <Border Grid.RowSpan="3" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="20" Background="{DynamicResource BtnBackgroundActive}" BorderBrush="{DynamicResource IconFill}" BorderThickness="2" CornerRadius="12" Padding="28,18" Visibility="{Binding IsToastVisible, Converter={StaticResource BooleanToVisibilityConverter}}" MaxWidth="850">
             <Border.Effect>
                 <DropShadowEffect BlurRadius="22" Opacity="0.45" ShadowDepth="0"/>
             </Border.Effect>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock Text="" FontFamily="Segoe MDL2 Assets" Foreground="#7AA2F7" VerticalAlignment="Center" Margin="0,0,18,0" FontSize="28"/>
-                <TextBlock Text="{Binding ToastMessage}" Foreground="White" FontSize="26" VerticalAlignment="Center" FontWeight="Bold" TextAlignment="Center" TextWrapping="Wrap"/>
+                <TextBlock Text="" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource IconFill}" VerticalAlignment="Center" Margin="0,0,18,0" FontSize="28"/>
+                <TextBlock Text="{Binding ToastMessage}" Foreground="White" FontSize="20" VerticalAlignment="Center" FontWeight="Bold" TextAlignment="Center" TextWrapping="Wrap"/>
+                <Button Content="UNDO" Command="{Binding UndoReorderCommand}" Visibility="{Binding CanUndoReorder, Converter={StaticResource BooleanToVisibilityConverter}}" Style="{StaticResource SecondaryButton}" Padding="18,7" Margin="18,0,0,0" ToolTip="Restore the previous account order." AutomationProperties.Name="Undo account order change"/>
             </StackPanel>
         </Border>
     </Grid>

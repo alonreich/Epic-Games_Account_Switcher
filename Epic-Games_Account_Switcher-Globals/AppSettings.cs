@@ -38,6 +38,10 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public bool PromptOnUnsavedLogin { get; set; } = true;
         public bool CloseOnceLaunched { get; set; } = false;
+        public bool OpenEpicLauncherOnStartup { get; set; } = false;
+        public int ModernAuthBlobMaxAgeDays { get; set; } = 30;
+        public bool MinimizeToTray { get; set; } = false;
+        public List<string> DismissedUnsavedLoginIds { get; set; } = new List<string>();
 
         public int WindowWidth { get; set; } = 1250;
         public int WindowHeight { get; set; } = 880;
@@ -46,6 +50,7 @@ namespace Epic_Games_Account_Switcher_Globals
         public int WindowRelativeLeft { get; set; } = -1;
         public int WindowRelativeTop { get; set; } = -1;
         public string WindowMonitorDeviceName { get; set; } = "";
+        public double ZoomFactor { get; set; } = 1.0;
 
         public static void LoadSettings()
         {
@@ -65,6 +70,8 @@ namespace Epic_Games_Account_Switcher_Globals
                 }
 
                 if (_instance == null) _instance = new AppSettings();
+                if (_instance.DismissedUnsavedLoginIds == null) _instance.DismissedUnsavedLoginIds = new List<string>();
+                if (_instance.ZoomFactor < 0.35 || _instance.ZoomFactor > 2.50) _instance.ZoomFactor = 1.0;
             }
         }
 
@@ -77,7 +84,18 @@ namespace Epic_Games_Account_Switcher_Globals
                     Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
                     if (_instance == null) _instance = new AppSettings();
                     var json = JsonConvert.SerializeObject(_instance, Formatting.Indented);
-                    File.WriteAllText(SettingsPath, json);
+                    var tmpPath = SettingsPath + ".tmp_" + Guid.NewGuid().ToString("N");
+                    File.WriteAllText(tmpPath, json);
+                    if (File.Exists(SettingsPath))
+                    {
+                        var bakPath = SettingsPath + ".bak_" + Guid.NewGuid().ToString("N");
+                        File.Replace(tmpPath, SettingsPath, bakPath, true);
+                        try { if (File.Exists(bakPath)) File.Delete(bakPath); } catch { }
+                    }
+                    else
+                    {
+                        File.Move(tmpPath, SettingsPath);
+                    }
                 }
                 catch (Exception ex)
                 {

@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -17,6 +18,22 @@ namespace Epic_Games_Account_Switcher_Globals
 {
     public class AccountService
     {
+        public enum BackupProtectionMode
+        {
+            CurrentUser,
+            Password
+        }
+
+        public sealed class BackupPasswordRequiredException : Exception
+        {
+            public BackupPasswordRequiredException() : base("This backup is password-protected. Enter the backup password to continue.") { }
+        }
+
+        public sealed class BackupPasswordInvalidException : Exception
+        {
+            public BackupPasswordInvalidException() : base("The backup password is incorrect or the encrypted backup is damaged.") { }
+        }
+
         private sealed class SessionValidationResult
         {
             public bool IsValid { get; set; }
@@ -25,8 +42,23 @@ namespace Epic_Games_Account_Switcher_Globals
             public DateTime? ExpiresUtc { get; set; }
         }
 
+        private sealed class ModernAuthBlobInfo
+        {
+            public string AccountId { get; set; }
+            public string Path { get; set; }
+            public DateTime LastWriteUtc { get; set; }
+            public DateTime FreshUntilUtc { get; set; }
+        }
+
+        private static string _lastSwitchFailureMessage;
         private static readonly object AccountsFileLock = new object();
-        private static readonly SemaphoreSlim SessionOperationLock = new SemaphoreSlim(1, 1);
+        public static readonly SemaphoreSlim SessionOperationLock = new SemaphoreSlim(1, 1);
+        private static readonly byte[] EncryptedBackupMagic = Encoding.ASCII.GetBytes("EGASBKP2");
+        private const int EncryptedBackupPasswordMode = 1;
+        private const int EncryptedBackupCurrentUserMode = 2;
+        private const int BackupKeyBytes = 32;
+        private const int BackupHmacBytes = 32;
+        private const int BackupPasswordIterations = 150000;
         private static string BaseDataPath { get { return Path.Combine(Globals.UserDataFolder, "EG"); } }
         private static string AccountsJsonPath { get { return Path.Combine(BaseDataPath, "accounts.json"); } }
         private static List<string> RegistryKeysToSwap { get { return AppSettings.Instance.RegistryKeysToSwap; } }
@@ -42,6 +74,8 @@ namespace Epic_Games_Account_Switcher_Globals
         private static readonly string[] SessionItemsToCapture = { "Config", "Common", "SocialCache", "WebCaches", "Manifests", "Data", "UserVaultSettings", "PersistentStorage", "Portal", "Overlay", "LoginCache.json", "Engine.ini" };
         private static readonly string[] EOSFoldersToCapture = { "Epic Online Services", "EOSOverlay", "EOSUserHelper", "EpicOnlineServicesUserHelper", "EpicOnlineServices", "EpicGamesLauncher\\Data", "EpicGamesLauncher\\Saved\\SocialCache" };
         private static readonly string[] RegistryRootsToCapture = { @"HKCU\Software\Epic Games\Unreal Engine\Identifiers", @"HKCU\Software\Epic Games\Unreal Engine\EOS", @"HKCU\Software\Epic Games\EOS", @"HKCU\Software\Epic Games\EpicGamesLauncher" };
+
+        public static string LastSwitchFailureMessage { get { return _lastSwitchFailureMessage ?? ""; } }
 
         public static string GetDefaultProfileImagePath()
         {
@@ -173,7 +207,8 @@ namespace Epic_Games_Account_Switcher_Globals
 
                 var accountId = expectedAccountId ?? GetCurrentAccountId();
                 var hasLegacyJson = AuthFiles.Any(f => File.Exists(Path.Combine(folder, f)));
-                var hasModernBinary = !string.IsNullOrEmpty(accountId) && File.Exists(Path.Combine(folder, "Data", "OC_" + accountId + ".dat"));
+                var modernBlob = SelectModernAuthBlob(folder, accountId);
+                var hasModernBinary = modernBlob != null;
 
                 if (!hasLegacyJson && !hasModernBinary)
                 {
@@ -183,10 +218,13 @@ namespace Epic_Games_Account_Switcher_Globals
 
                 if (hasModernBinary)
                 {
-                    result.IsValid = true;
-                    result.AccountId = accountId;
-                    result.Message = "Modern binary auth blob detected. [v1.0.1]";
-                    return result;
+                    if (modernBlob.FreshUntilUtc <= DateTime.UtcNow.AddMinutes(5))
+                    {
+                        result.Message = "Modern auth blob is stale. Last write: " + modernBlob.LastWriteUtc.ToString("o") + "; freshness window ended: " + modernBlob.FreshUntilUtc.ToString("o") + " [v1.0.1]";
+                        return result;
+                    }
+                    result.AccountId = modernBlob.AccountId;
+                    result.ExpiresUtc = modernBlob.FreshUntilUtc;
                 }
 
                 var authPaths = AuthFiles.Select(f => Path.Combine(folder, f)).Where(File.Exists).ToList();
@@ -217,6 +255,13 @@ namespace Epic_Games_Account_Switcher_Globals
                 }
                 if (!bestExpiry.HasValue)
                 {
+                    if (hasModernBinary)
+                    {
+                        result.IsValid = true;
+                        result.AccountId = modernBlob.AccountId;
+                        result.Message = "Modern binary auth blob is fresh until " + modernBlob.FreshUntilUtc.ToString("o") + " [v1.0.1]";
+                        return result;
+                    }
                     result.Message = "No future auth expiration could be read." + (unreadable.Count > 0 ? " Errors: " + string.Join("; ", unreadable.ToArray()) : "") + " [v1.0.1]";
                     return result;
                 }
@@ -231,8 +276,13 @@ namespace Epic_Games_Account_Switcher_Globals
                     result.Message = "Auth blob account id mismatch. Expected " + expectedAccountId + ". Found " + string.Join(",", allAccountIds.ToArray()) + " [v1.0.1]";
                     return result;
                 }
+                if (hasModernBinary && !string.Equals(modernBlob.AccountId, expectedAccountId ?? modernBlob.AccountId, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Message = "Modern auth blob account id mismatch. Expected " + expectedAccountId + ". Found " + modernBlob.AccountId + " [v1.0.1]";
+                    return result;
+                }
                 result.IsValid = true;
-                result.AccountId = allAccountIds.FirstOrDefault();
+                result.AccountId = allAccountIds.FirstOrDefault() ?? (hasModernBinary ? modernBlob.AccountId : null);
                 result.Message = "Auth blob is valid until " + bestExpiry.Value.ToString("o") + " [v1.0.1]";
                 return result;
             }
@@ -241,6 +291,47 @@ namespace Epic_Games_Account_Switcher_Globals
                 result.Message = ex.Message + " [v1.0.1]";
                 Globals.WriteToLog("[AUTH-CHECK] Validation error in " + folder, ex);
                 return result;
+            }
+        }
+
+        private static ModernAuthBlobInfo SelectModernAuthBlob(string folder, string expectedAccountId)
+        {
+            try
+            {
+                var dataPath = Path.Combine(folder, "Data");
+                if (!Directory.Exists(dataPath)) return null;
+
+                var maxAgeDays = Math.Max(1, AppSettings.Instance.ModernAuthBlobMaxAgeDays);
+                var blobs = Directory.GetFiles(dataPath, "OC_*.dat", SearchOption.TopDirectoryOnly)
+                    .Select(path =>
+                    {
+                        var id = Path.GetFileNameWithoutExtension(path);
+                        if (!string.IsNullOrWhiteSpace(id) && id.StartsWith("OC_", StringComparison.OrdinalIgnoreCase)) id = id.Substring(3);
+                        if (string.IsNullOrWhiteSpace(id)) return null;
+
+                        var lastWrite = File.GetLastWriteTimeUtc(path);
+                        if (lastWrite <= DateTime.MinValue.AddYears(1)) lastWrite = File.GetCreationTimeUtc(path);
+
+                        return new ModernAuthBlobInfo
+                        {
+                            AccountId = id.Trim(),
+                            Path = path,
+                            LastWriteUtc = lastWrite,
+                            FreshUntilUtc = lastWrite.AddDays(maxAgeDays)
+                        };
+                    })
+                    .Where(b => b != null)
+                    .ToList();
+
+                if (!string.IsNullOrWhiteSpace(expectedAccountId))
+                    return blobs.FirstOrDefault(b => string.Equals(b.AccountId, expectedAccountId, StringComparison.OrdinalIgnoreCase));
+
+                return blobs.Count == 1 ? blobs[0] : null;
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("[AUTH-CHECK] Failed to inspect modern auth blobs in " + folder, ex);
+                return null;
             }
         }
 
@@ -572,44 +663,189 @@ namespace Epic_Games_Account_Switcher_Globals
 
         private static string GetShortId() { return Guid.NewGuid().ToString("N").Substring(0, 8); }
 
-        private static async Task<bool> EnsureEpicIsClosed(int timeoutMs = 60000)
+        private static void SetLastSwitchFailure(string message)
+        {
+            _lastSwitchFailureMessage = string.IsNullOrWhiteSpace(message) ? "" : message.Trim();
+        }
+
+        private static void LogSwitch(string operationId, string message, Exception ex = null)
+        {
+            Globals.WriteToLog("[SWITCH:" + operationId + "] " + message, ex);
+        }
+
+        private static string ValidationSummary(SessionValidationResult result)
+        {
+            if (result == null) return "NULL";
+            return "Valid=" + result.IsValid
+                + "; Account=" + Globals.SafeLogId(result.AccountId)
+                + "; ExpiresUtc=" + (result.ExpiresUtc.HasValue ? result.ExpiresUtc.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "Z" : "NULL")
+                + "; Message=" + (string.IsNullOrWhiteSpace(result.Message) ? "OK" : result.Message);
+        }
+
+        private static string PathStateSummary(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path)) return "NULL";
+                if (File.Exists(path))
+                {
+                    var fi = new FileInfo(path);
+                    return "file bytes=" + fi.Length + "; updatedUtc=" + fi.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "Z";
+                }
+                if (!Directory.Exists(path)) return "missing";
+
+                long bytes = 0;
+                var count = 0;
+                var capped = false;
+                DateTime newest = Directory.GetLastWriteTimeUtc(path);
+                foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                {
+                    var fi = new FileInfo(file);
+                    bytes += fi.Length;
+                    count++;
+                    if (fi.LastWriteTimeUtc > newest) newest = fi.LastWriteTimeUtc;
+                    if (count >= 5000)
+                    {
+                        capped = true;
+                        break;
+                    }
+                }
+                return "dir files=" + count + (capped ? "+" : "") + "; bytes=" + bytes + (capped ? "+" : "") + "; updatedUtc=" + newest.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "Z";
+            }
+            catch (Exception ex)
+            {
+                return "unknown: " + ex.Message;
+            }
+        }
+
+        private static string ProcessSummary(IEnumerable<Process> processes)
+        {
+            if (processes == null) return "none";
+            var parts = new List<string>();
+            foreach (var p in processes)
+            {
+                try { parts.Add(p.ProcessName + "(" + p.Id + ")"); }
+                catch { }
+            }
+            return parts.Count == 0 ? "none" : string.Join(", ", parts);
+        }
+
+        private static List<string> GetStateRoots()
+        {
+            var roots = new List<string> { EpicSavedPath, Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher") };
+            if (Directory.Exists(ProgramDataManifestsPath)) roots.Add(ProgramDataManifestsPath);
+            foreach (var rel in EOSFoldersToCapture)
+            {
+                roots.Add(Path.Combine(LocalAppData, "Epic Games", rel));
+                roots.Add(Path.Combine(LocalAppData, rel));
+            }
+            return roots.Where(r => !string.IsNullOrWhiteSpace(r)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private static List<string> GetBlockedStateRoots()
+        {
+            var blocked = new List<string>();
+            foreach (var root in GetStateRoots())
+            {
+                if (!Directory.Exists(root)) continue;
+                if (!ProbeDirectoryWritable(root)) blocked.Add(root);
+            }
+            return blocked;
+        }
+
+        private static bool WaitForProcessRunning(string processName, int timeoutMs)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(Math.Max(0, timeoutMs));
+            while (DateTime.UtcNow <= deadline)
+            {
+                if (Globals.IsProcessRunning(processName)) return true;
+                Thread.Sleep(250);
+            }
+            return Globals.IsProcessRunning(processName);
+        }
+
+        private static async Task<bool> EnsureEpicIsClosed(int timeoutMs = 60000, CancellationToken cancellationToken = default(CancellationToken))
         {
             var sw = Stopwatch.StartNew();
             var epicPaths = GetEpicInstallPaths();
-            Globals.WriteToLog("[KILL] Starting Epic process cleanup...");
+            var lastWritableLogAt = -10000L;
+            var loggedPids = new HashSet<int>();
+            var sysTaskkill = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "taskkill.exe");
+            var sysPowershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
+
+            Globals.WriteToLog("[KILL] Starting Epic process cleanup. KnownInstallRoots=" + epicPaths.Count);
             while (sw.ElapsedMilliseconds < timeoutMs)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var active = GetEpicProcesses(epicPaths);
                 if (active.Count == 0)
                 {
                     if (VerifyWritableStateRoots())
                     {
-                        await Task.Delay(2000);
+                        Globals.WriteToLog("[KILL] Epic cleanup complete. ElapsedMs=" + sw.ElapsedMilliseconds);
                         return true;
                     }
-                    await Task.Delay(1000);
+                    if (sw.ElapsedMilliseconds - lastWritableLogAt >= 5000)
+                    {
+                        lastWritableLogAt = sw.ElapsedMilliseconds;
+                        Globals.WriteToLog("[KILL] Waiting for writable Epic state roots. BlockedRoots=" + string.Join(" | ", GetBlockedStateRoots()));
+                    }
+                    await Task.Delay(100, cancellationToken);
                     continue;
                 }
+
                 foreach (var p in active)
                 {
                     try
                     {
                         var pid = p.Id;
                         var name = p.ProcessName;
-                        var psi = new ProcessStartInfo("taskkill", "/F /T /PID " + pid) { CreateNoWindow = true, UseShellExecute = false };
-                        Process.Start(psi)?.WaitForExit(5000);
-                        if (name.IndexOf("EpicGamesLauncher", StringComparison.OrdinalIgnoreCase) >= 0)
+                        if (!loggedPids.Contains(pid))
                         {
-                            var psi2 = new ProcessStartInfo("taskkill", "/F /IM EpicGamesLauncher.exe") { CreateNoWindow = true, UseShellExecute = false };
-                            Process.Start(psi2)?.WaitForExit(5000);
+                            loggedPids.Add(pid);
+                            Globals.WriteToLog("[KILL] Terminating process: " + name + " (" + pid + ")");
                         }
-                        Globals.WriteToLog("[KILL] Terminated: " + name + " (" + pid + ")");
+                        try { p.Kill(); } catch { }
+                        try { Process.Start(new ProcessStartInfo(sysTaskkill, "/F /T /PID " + pid) { CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(1000); } catch { }
                     }
                     catch { }
                     finally { try { p.Dispose(); } catch { } }
                 }
-                try { Process.Start(new ProcessStartInfo("taskkill", "/F /IM EpicGamesLauncher.exe /IM EpicWebHelper.exe /IM EOSUserHelper.exe") { CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(2000); } catch { }
-                await Task.Delay(1000);
+
+                var targetImages = new[] { "EpicGamesLauncher.exe", "EpicWebHelper.exe", "EpicOnlineServices.exe", "EpicOnlineServicesHost.exe", "EpicOnlineServicesUserHelper.exe", "EOSUserHelper.exe", "EOSOverlay.exe", "CrashReportClient.exe", "UnrealCEFSubProcess.exe" };
+                foreach (var img in targetImages)
+                {
+                    try { Process.Start(new ProcessStartInfo(sysTaskkill, "/F /IM " + img) { CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(500); } catch { }
+                }
+
+                try
+                {
+                    if (File.Exists(sysPowershell))
+                    {
+                        Process.Start(new ProcessStartInfo(sysPowershell, "-NoProfile -ExecutionPolicy Bypass -Command \"Stop-Process -Name 'EpicGamesLauncher','EpicWebHelper','EpicOnlineServices','EpicOnlineServicesHost','EpicOnlineServicesUserHelper','EOSUserHelper','EOSOverlay','CrashReportClient','UnrealCEFSubProcess' -Force -ErrorAction SilentlyContinue\"") { CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(1000);
+                    }
+                }
+                catch { }
+
+                var pollSw = Stopwatch.StartNew();
+                while (pollSw.ElapsedMilliseconds < 1000)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var check = GetEpicProcesses(epicPaths);
+                    try { if (check.Count == 0 && VerifyWritableStateRoots()) break; }
+                    finally { foreach (var p in check) try { p.Dispose(); } catch { } }
+                    await Task.Delay(50, cancellationToken);
+                }
+            }
+
+            var remaining = GetEpicProcesses(epicPaths);
+            try
+            {
+                Globals.WriteToLog("[KILL] Timed out closing Epic. ElapsedMs=" + sw.ElapsedMilliseconds + "; Remaining=" + ProcessSummary(remaining) + "; BlockedRoots=" + string.Join(" | ", GetBlockedStateRoots()));
+            }
+            finally
+            {
+                foreach (var p in remaining) try { p.Dispose(); } catch { }
             }
             return false;
         }
@@ -619,38 +855,97 @@ namespace Epic_Games_Account_Switcher_Globals
             var result = new List<string>();
             try
             {
-                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
+                foreach (var hive in new[] { RegistryHive.LocalMachine, RegistryHive.CurrentUser })
                 {
-                    var loc = key == null ? null : key.GetValue("InstallLocation");
-                    if (loc != null) result.Add(loc.ToString().TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant());
+                    foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+                    {
+                        try
+                        {
+                            using (var baseKey = RegistryKey.OpenBaseKey(hive, view))
+                            using (var key = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
+                            {
+                                if (key == null) continue;
+                                AddEpicInstallPathCandidate(result, key.GetValue("InstallLocation") as string);
+                                AddEpicInstallPathCandidate(result, key.GetValue("DisplayIcon") as string);
+                                AddEpicInstallPathCandidate(result, key.GetValue("UninstallString") as string);
+                            }
+                        }
+                        catch { }
+                    }
                 }
-                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\EpicGamesLauncher"))
-                {
-                    var loc = key == null ? null : key.GetValue("InstallLocation");
-                    if (loc != null) result.Add(loc.ToString().TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant());
-                }
+
+                AddEpicInstallPathCandidate(result, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Epic Games", "Launcher"));
+                AddEpicInstallPathCandidate(result, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Epic Games", "Launcher"));
             }
             catch { }
-            return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+            var cleaned = new List<string>();
+            foreach (var p in result)
+            {
+                if (string.IsNullOrWhiteSpace(p)) continue;
+                try
+                {
+                    var fp = Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).ToLowerInvariant();
+                    if (!cleaned.Contains(fp, StringComparer.OrdinalIgnoreCase))
+                        cleaned.Add(fp);
+                }
+                catch { }
+            }
+            return cleaned;
+        }
+
+        private static void AddEpicInstallPathCandidate(List<string> result, string value)
+        {
+            if (result == null || string.IsNullOrWhiteSpace(value)) return;
+            try
+            {
+                var text = value.Trim().Trim('"');
+                var exeMatch = Regex.Match(text, @"[A-Za-z]:\\[^""]*EpicGamesLauncher\.exe", RegexOptions.IgnoreCase);
+                if (exeMatch.Success) text = exeMatch.Value;
+
+                string root = null;
+                if (File.Exists(text)) root = Path.GetDirectoryName(text);
+                else if (Directory.Exists(text)) root = text;
+
+                if (string.IsNullOrWhiteSpace(root)) return;
+
+                var full = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var launcherIndex = full.LastIndexOf(Path.DirectorySeparatorChar + "Launcher", StringComparison.OrdinalIgnoreCase);
+                if (launcherIndex >= 0) full = full.Substring(0, launcherIndex + "\\Launcher".Length);
+                result.Add(full);
+            }
+            catch { }
         }
 
         private static List<Process> GetEpicProcesses(List<string> epicPaths)
         {
+            var launcherProcessNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "EpicGamesLauncher",
+                "EpicWebHelper",
+                "EpicOnlineServices",
+                "EpicOnlineServicesUserHelper",
+                "EOSUserHelper",
+                "EOSOverlay"
+            };
+
             var active = new List<Process>();
             foreach (var p in Process.GetProcesses())
             {
                 try
                 {
-                    var n = p.ProcessName.ToLowerInvariant();
-                    if (n.Contains("epicgames") || n.Contains("epicwebhelper") || n.Contains("epiconlineservices") || n.Contains("eosuserhelper") || n.Contains("eosoverlay") || n.Contains("fortnite"))
+                    var n = p.ProcessName;
+                    var path = "";
+                    try { if (p.MainModule != null) path = p.MainModule.FileName; } catch { }
+                    var lower = string.IsNullOrWhiteSpace(path) ? "" : Path.GetFullPath(path).ToLowerInvariant();
+
+                    if (launcherProcessNames.Contains(n))
                     {
                         active.Add(p);
                         continue;
                     }
-                    var path = "";
-                    try { if (p.MainModule != null) path = p.MainModule.FileName; } catch { }
-                    var lower = string.IsNullOrWhiteSpace(path) ? "" : path.ToLowerInvariant();
-                    if (epicPaths.Any(ep => lower.StartsWith(ep, StringComparison.OrdinalIgnoreCase))) active.Add(p);
+
+                    if (!string.IsNullOrWhiteSpace(lower) && epicPaths.Any(ep => IsPathUnder(lower, ep))) active.Add(p);
                     else p.Dispose();
                 }
                 catch { try { p.Dispose(); } catch { } }
@@ -658,17 +953,22 @@ namespace Epic_Games_Account_Switcher_Globals
             return active;
         }
 
+        private static bool IsPathUnder(string path, string root)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(root)) return false;
+                var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
         private static bool VerifyWritableStateRoots()
         {
-            var roots = new List<string> { EpicSavedPath, Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher") };
-            if (Directory.Exists(ProgramDataManifestsPath)) roots.Add(ProgramDataManifestsPath);
-            foreach (var rel in EOSFoldersToCapture)
-            {
-                roots.Add(Path.Combine(LocalAppData, "Epic Games", rel));
-                roots.Add(Path.Combine(LocalAppData, rel));
-            }
             var ok = true;
-            foreach (var root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var root in GetStateRoots())
             {
                 if (!Directory.Exists(root)) continue;
                 ok = ok && ProbeDirectoryWritable(root);
@@ -684,101 +984,314 @@ namespace Epic_Games_Account_Switcher_Globals
                 var probe = Path.Combine(root, ".epic_switcher_probe_" + Guid.NewGuid().ToString("N"));
                 File.WriteAllText(probe, "probe");
                 File.Delete(probe);
-                foreach (var f in Directory.GetFiles(root, "*", SearchOption.TopDirectoryOnly))
-                {
-                    using (var fs = new FileStream(f, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
-                }
                 return true;
             }
             catch { return false; }
         }
 
-        private static async Task<bool> SafeDeleteDirectoryAsync(string path, int retries = 10)
+        private static async Task<bool> SafeDeleteDirectoryAsync(string path, int retries = 3, CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (!Directory.Exists(path)) return true;
-            await Globals.RetryActionAsync(() => { Globals.ForceDeleteDirectory(path); return Task.FromResult(0); }, retries, 500, true);
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return true;
+            try
+            {
+                await Task.Run(() => Globals.ForceDeleteDirectory(path), cancellationToken);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { }
             return !Directory.Exists(path);
         }
 
-        private static async Task<bool> SafeReplaceDirectoryAsync(string source, string target)
+        private static async Task<bool> SafeReplaceDirectoryAsync(string source, string target, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (!Directory.Exists(source)) return true;
             var tmp = target + "_t" + GetShortId();
-            await SafeDeleteDirectoryAsync(tmp);
-            await CopyDirectoryStrictAsync(source, tmp);
-            await SafeDeleteDirectoryAsync(target);
+            await SafeDeleteDirectoryAsync(tmp, 10, cancellationToken);
+            await CopyDirectoryStrictAsync(source, tmp, cancellationToken);
+            await SafeDeleteDirectoryAsync(target, 10, cancellationToken);
             Directory.CreateDirectory(Path.GetDirectoryName(target));
-            Directory.Move(tmp, target);
+            await SafeMovePathAsync(tmp, target, cancellationToken);
             return true;
         }
 
-        private static async Task SafeReplaceFileAsync(string source, string target)
+        private static async Task SafeReplaceFileAsync(string source, string target, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (!File.Exists(source)) return;
             await Globals.RetryActionAsync(() =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 Directory.CreateDirectory(Path.GetDirectoryName(target));
                 var tmp = target + ".t" + GetShortId();
                 File.Copy(source, tmp, true);
                 AtomicReplaceFile(tmp, target);
                 return Task.FromResult(0);
-            }, 5, 500, true);
+            }, 5, 500, true, cancellationToken);
         }
 
-        private static async Task CopyDirectoryStrictAsync(string source, string dest)
+        private static async Task CopyDirectoryStrictAsync(string source, string dest, CancellationToken cancellationToken = default(CancellationToken))
         {
             var success = await Globals.RetryAsync(async () =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 return await Globals.CopyFilesRecursiveAsync(source, dest, true);
-            }, 5, 1000, true);
+            }, 5, 1000, true, cancellationToken);
             if (!success) throw new IOException("Recursive copy failed from " + source + " to " + dest + ". [MAX_PATH? LOCK?]");
         }
 
-        private static async Task CaptureSessionToFolder(string source, string dest)
+        private static async Task CaptureSessionToFolder(string source, string dest, CancellationToken cancellationToken = default(CancellationToken))
         {
-            await SafeDeleteDirectoryAsync(dest);
+            await SafeDeleteDirectoryAsync(dest, 10, cancellationToken);
             Directory.CreateDirectory(dest);
             foreach (var f in AuthFiles.Concat(AuthBinaryFiles))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var s = Path.Combine(source, f);
-                if (File.Exists(s)) await SafeReplaceFileAsync(s, Path.Combine(dest, f));
+                if (File.Exists(s)) await SafeReplaceFileAsync(s, Path.Combine(dest, f), cancellationToken);
             }
             foreach (var item in SessionItemsToCapture)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var sPath = Path.Combine(source, item);
                 var dPath = Path.Combine(dest, item);
-                if (Directory.Exists(sPath)) await CopyDirectoryStrictAsync(sPath, dPath);
-                else if (File.Exists(sPath)) await SafeReplaceFileAsync(sPath, dPath);
+                if (Directory.Exists(sPath)) await CopyDirectoryStrictAsync(sPath, dPath, cancellationToken);
+                else if (File.Exists(sPath)) await SafeReplaceFileAsync(sPath, dPath, cancellationToken);
             }
             var eosDest = Path.Combine(dest, "EOS_Data");
             foreach (var rel in EOSFoldersToCapture)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var sPath = Path.Combine(LocalAppData, "Epic Games", rel);
                 var isRoot = false;
                 if (!Directory.Exists(sPath)) { sPath = Path.Combine(LocalAppData, rel); isRoot = true; }
                 if (Directory.Exists(sPath))
                 {
                     var dPath = Path.Combine(eosDest, rel);
-                    await CopyDirectoryStrictAsync(sPath, dPath);
+                    await CopyDirectoryStrictAsync(sPath, dPath, cancellationToken);
                     if (isRoot) File.WriteAllText(dPath + ".is_root", "");
                 }
             }
             var rDest = Path.Combine(dest, "Roaming_Data");
             var rSrc = Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher");
-            if (Directory.Exists(rSrc)) await CopyDirectoryStrictAsync(rSrc, Path.Combine(rDest, "EpicGamesLauncher"));
-            if (Directory.Exists(ProgramDataManifestsPath)) await CopyDirectoryStrictAsync(ProgramDataManifestsPath, Path.Combine(dest, "ProgramData_Data", "Manifests"));
+            if (Directory.Exists(rSrc)) await CopyDirectoryStrictAsync(rSrc, Path.Combine(rDest, "EpicGamesLauncher"), cancellationToken);
+            if (Directory.Exists(ProgramDataManifestsPath)) await CopyDirectoryStrictAsync(ProgramDataManifestsPath, Path.Combine(dest, "ProgramData_Data", "Manifests"), cancellationToken);
         }
 
-        public static async Task<Tuple<bool, string>> CaptureCurrentAccount(string nameOverride = null, string emailOverride = null, string imagePathOverride = null, string descriptionOverride = null, string passwordOverride = null, Action<string> progress = null, Func<string, Task<bool>> confirmOverwrite = null, bool forceOverwrite = false)
+        private static async Task SafeMovePathAsync(string source, string target, CancellationToken cancellationToken = default(CancellationToken))
         {
-            await SessionOperationLock.WaitAsync();
+            await Globals.RetryActionAsync(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!Directory.Exists(source) && !File.Exists(source)) return Task.FromResult(0);
+
+                var parent = Path.GetDirectoryName(target);
+                if (!string.IsNullOrWhiteSpace(parent)) Directory.CreateDirectory(parent);
+
+                if (File.Exists(target)) try { File.Delete(target); } catch { }
+                if (Directory.Exists(target))
+                {
+                    try { Globals.ForceDeleteDirectory(target); } catch { }
+                    if (Directory.Exists(target))
+                    {
+                        try { Directory.Move(target, target + "_old_" + Guid.NewGuid().ToString("N").Substring(0, 6)); } catch { }
+                    }
+                }
+
+                var srcRoot = Path.GetPathRoot(Path.GetFullPath(source));
+                var dstRoot = Path.GetPathRoot(Path.GetFullPath(target));
+                var isCrossVolume = !string.Equals(srcRoot, dstRoot, StringComparison.OrdinalIgnoreCase);
+
+                if (Directory.Exists(source))
+                {
+                    if (Directory.Exists(target) || File.Exists(target)) throw new IOException("Move target already exists: " + target);
+                    if (isCrossVolume)
+                    {
+                        Globals.CopyFilesRecursive(source, target, true);
+                        Globals.ForceDeleteDirectory(source);
+                    }
+                    else
+                    {
+                        try { Directory.Move(source, target); }
+                        catch (IOException) { Globals.CopyFilesRecursive(source, target, true); Globals.ForceDeleteDirectory(source); }
+                    }
+                }
+                else
+                {
+                    if (Directory.Exists(target) || File.Exists(target)) throw new IOException("Move target already exists: " + target);
+                    if (isCrossVolume)
+                    {
+                        File.Copy(source, target, true);
+                        File.Delete(source);
+                    }
+                    else
+                    {
+                        try { File.Move(source, target); }
+                        catch (IOException) { File.Copy(source, target, true); File.Delete(source); }
+                    }
+                }
+
+                return Task.FromResult(0);
+            }, 10, 500, true, cancellationToken);
+        }
+
+        private static void SafeMovePathBlocking(string source, string target)
+        {
+            for (var i = 0; i < 10; i++)
+            {
+                try
+                {
+                    if (!Directory.Exists(source) && !File.Exists(source)) return;
+
+                    var parent = Path.GetDirectoryName(target);
+                    if (!string.IsNullOrWhiteSpace(parent)) Directory.CreateDirectory(parent);
+
+                    if (File.Exists(target)) try { File.Delete(target); } catch { }
+                    if (Directory.Exists(target))
+                    {
+                        try { Globals.ForceDeleteDirectory(target); } catch { }
+                        if (Directory.Exists(target))
+                        {
+                            try { Directory.Move(target, target + "_old_" + Guid.NewGuid().ToString("N").Substring(0, 6)); } catch { }
+                        }
+                    }
+
+                    var srcRoot = Path.GetPathRoot(Path.GetFullPath(source));
+                    var dstRoot = Path.GetPathRoot(Path.GetFullPath(target));
+                    var isCrossVolume = !string.Equals(srcRoot, dstRoot, StringComparison.OrdinalIgnoreCase);
+
+                    if (Directory.Exists(source))
+                    {
+                        if (Directory.Exists(target) || File.Exists(target)) throw new IOException("Move target already exists: " + target);
+                        if (isCrossVolume)
+                        {
+                            Globals.CopyFilesRecursive(source, target, true);
+                            Globals.ForceDeleteDirectory(source);
+                        }
+                        else
+                        {
+                            try { Directory.Move(source, target); }
+                            catch (IOException) { Globals.CopyFilesRecursive(source, target, true); Globals.ForceDeleteDirectory(source); }
+                        }
+                    }
+                    else
+                    {
+                        if (Directory.Exists(target) || File.Exists(target)) throw new IOException("Move target already exists: " + target);
+                        if (isCrossVolume)
+                        {
+                            File.Copy(source, target, true);
+                            File.Delete(source);
+                        }
+                        else
+                        {
+                            try { File.Move(source, target); }
+                            catch (IOException) { File.Copy(source, target, true); File.Delete(source); }
+                        }
+                    }
+
+                    return;
+                }
+                catch
+                {
+                    if (i == 9) throw;
+                    Thread.Sleep(500 * (i + 1));
+                }
+            }
+        }
+
+        public static void CleanOrphanedTempFolders()
+        {
             try
             {
+                if (!Directory.Exists(BaseDataPath)) return;
+                var now = DateTime.UtcNow;
+                foreach (var dir in Directory.GetDirectories(BaseDataPath))
+                {
+                    var name = Path.GetFileName(dir);
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+                    var isTemp = name.StartsWith("_tmp_res", StringComparison.OrdinalIgnoreCase) ||
+                                 name.Equals("_switch_rb", StringComparison.OrdinalIgnoreCase) ||
+                                 name.IndexOf("_rollback_", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 name.IndexOf("_n", StringComparison.Ordinal) > 3 ||
+                                 name.IndexOf("_r", StringComparison.Ordinal) > 3;
+                    if (isTemp)
+                    {
+                        try
+                        {
+                            var info = new DirectoryInfo(dir);
+                            if (info.LastWriteTimeUtc < now.AddHours(-1) || info.CreationTimeUtc < now.AddHours(-1))
+                            {
+                                Globals.ForceDeleteDirectory(dir);
+                                Globals.WriteToLog("[CLEANUP] Purged orphaned temp directory: " + name);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("[CLEANUP] Failed to clean orphaned temp folders", ex);
+            }
+        }
+
+        private static async Task ReplacePathWithRollbackAsync(string source, string target, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (!Directory.Exists(source) && !File.Exists(source)) return;
+
+            var rollback = target + "_rollback_" + GetShortId();
+            var rollbackPrepared = false;
+            try
+            {
+                if (Directory.Exists(rollback)) await SafeDeleteDirectoryAsync(rollback, 10, cancellationToken);
+                if (File.Exists(rollback)) File.Delete(rollback);
+
+                if (Directory.Exists(target) || File.Exists(target))
+                {
+                    await SafeMovePathAsync(target, rollback, cancellationToken);
+                    rollbackPrepared = true;
+                }
+
+                await SafeMovePathAsync(source, target, cancellationToken);
+
+                if (rollbackPrepared)
+                {
+                    try
+                    {
+                        if (Directory.Exists(rollback)) await SafeDeleteDirectoryAsync(rollback, 3, cancellationToken);
+                        else if (File.Exists(rollback)) File.Delete(rollback);
+                    }
+                    catch { }
+                }
+            }
+            catch
+            {
+                try
+                {
+                    if (!Directory.Exists(target) && !File.Exists(target) && rollbackPrepared && (Directory.Exists(rollback) || File.Exists(rollback)))
+                    {
+                        await SafeMovePathAsync(rollback, target, CancellationToken.None);
+                    }
+                }
+                catch (Exception rollbackEx)
+                {
+                    Globals.WriteToLog("[IO] Failed to restore rollback after replacement failure. Target=" + target, rollbackEx);
+                }
+                throw;
+            }
+        }
+
+        public static async Task<Tuple<bool, string>> CaptureCurrentAccount(string nameOverride = null, string emailOverride = null, string imagePathOverride = null, string descriptionOverride = null, string passwordOverride = null, Action<string> progress = null, Func<string, Task<bool>> confirmOverwrite = null, bool forceOverwrite = false, CancellationToken cancellationToken = default(CancellationToken), string expectedAccountId = null)
+        {
+            await SessionOperationLock.WaitAsync(cancellationToken);
+            string tmp = null;
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 _lastDetected = new Tuple<string, string, string>(null, "N/A", "N/A");
                 var det = await GetDetectedMetadataAsync();
                 if (string.IsNullOrWhiteSpace(det.Item1)) return new Tuple<bool, string>(false, "No Epic Games account is currently logged in.");
+                if (!string.IsNullOrWhiteSpace(expectedAccountId) && !string.Equals(det.Item1, expectedAccountId, StringComparison.OrdinalIgnoreCase))
+                    return new Tuple<bool, string>(false, "The current Epic login does not match the selected profile. Expected " + Globals.SafeLogId(expectedAccountId) + " but detected " + Globals.SafeLogId(det.Item1) + ".");
                 progress?.Invoke("Closing Epic Games...");
-                if (!await EnsureEpicIsClosed()) return new Tuple<bool, string>(false, "Could not close all Epic Games processes. Please close the Launcher manually and try again.");
+                if (!await EnsureEpicIsClosed(60000, cancellationToken)) return new Tuple<bool, string>(false, "Could not close all Epic Games processes. Please close the Launcher manually and try again.");
                 var liveValidation = ValidateSession(EpicSavedPath, det.Item1);
                 if (!liveValidation.IsValid) return new Tuple<bool, string>(false, "Current session is invalid: " + liveValidation.Message);
                 var accounts = GetAccounts();
@@ -797,31 +1310,36 @@ namespace Epic_Games_Account_Switcher_Globals
                 if (!string.IsNullOrWhiteSpace(imagePathOverride)) acc.ProfileImagePath = imagePathOverride;
                 acc.ProfileImagePath = NormalizeProfileImagePath(acc.ProfileImagePath);
                 acc.AccentColor = GetDeterministicColor(acc.Name ?? acc.Id);
-                acc.LastPlayed = DateTime.Now;
+                StampAccountUsage(acc, true);
                 progress?.Invoke("Capturing session...");
                 var target = Path.Combine(BaseDataPath, acc.Id);
-                var tmp = target + "_n" + GetShortId();
-                await CaptureSessionToFolder(EpicSavedPath, tmp);
+                tmp = target + "_n" + GetShortId();
+                await CaptureSessionToFolder(EpicSavedPath, tmp, cancellationToken);
                 var capturedValidation = ValidateSession(tmp, acc.Id);
-                if (!capturedValidation.IsValid) { await SafeDeleteDirectoryAsync(tmp); return new Tuple<bool, string>(false, "Failed to verify captured session: " + capturedValidation.Message); }
+                if (!capturedValidation.IsValid) { await SafeDeleteDirectoryAsync(tmp, 10, cancellationToken); return new Tuple<bool, string>(false, "Failed to verify captured session: " + capturedValidation.Message); }
                 acc.RegistryData = CaptureRegistryData();
-                acc.Credentials = CredentialService.CaptureCredentials();
+                acc.Credentials = CredentialService.CaptureCredentials(acc.Id);
                 acc.RememberMeDataByPath = GetRememberMeDataByPath();
                 acc.RememberMeData = acc.RememberMeDataByPath.Values.FirstOrDefault();
                 acc.LauncherWindowSettingsByPath = GetLauncherWindowSettingsByPath();
                 acc.LauncherWindowSettings = acc.LauncherWindowSettingsByPath.Values.FirstOrDefault();
-                if (Directory.Exists(target)) await SafeDeleteDirectoryAsync(target);
-                Directory.Move(tmp, target);
+                await ReplacePathWithRollbackAsync(tmp, target, cancellationToken);
                 if (existing == null) accounts.Add(acc);
                 SaveAccounts(accounts);
                 return new Tuple<bool, string>(true, null);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!string.IsNullOrWhiteSpace(tmp) && Directory.Exists(tmp)) await SafeDeleteDirectoryAsync(tmp);
+                throw;
             }
             catch (Exception ex) { Globals.WriteToLog("[CAPTURE] Fatal error", ex); return new Tuple<bool, string>(false, "An unexpected error occurred: " + ex.Message); }
             finally { SessionOperationLock.Release(); }
         }
 
-        private static async Task RefreshSnapshotOfCurrentSavedAccount(List<Account> accounts, string switchingToAccountId, string currentAccountIdHint, Action<string> progress)
+        private static async Task RefreshSnapshotOfCurrentSavedAccount(List<Account> accounts, string switchingToAccountId, string currentAccountIdHint, Action<string> progress, CancellationToken cancellationToken = default(CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var curId = string.IsNullOrWhiteSpace(currentAccountIdHint) ? GetCurrentAccountId() : currentAccountIdHint;
             if (string.IsNullOrWhiteSpace(curId)) curId = accounts.FirstOrDefault(a => a.IsActive)?.Id;
             if (string.IsNullOrWhiteSpace(curId) || string.Equals(curId, switchingToAccountId, StringComparison.OrdinalIgnoreCase)) return;
@@ -831,25 +1349,39 @@ namespace Epic_Games_Account_Switcher_Globals
             if (!liveValidation.IsValid) return;
             progress?.Invoke("Saving current session...");
             acc.RegistryData = CaptureRegistryData();
-            acc.Credentials = CredentialService.CaptureCredentials();
+            acc.Credentials = CredentialService.CaptureCredentials(acc.Id);
             acc.RememberMeDataByPath = GetRememberMeDataByPath();
             acc.RememberMeData = acc.RememberMeDataByPath.Values.FirstOrDefault();
             acc.LauncherWindowSettingsByPath = GetLauncherWindowSettingsByPath();
             acc.LauncherWindowSettings = acc.LauncherWindowSettingsByPath.Values.FirstOrDefault();
-            acc.LastPlayed = DateTime.Now;
+            StampAccountUsage(acc, false);
             var target = Path.Combine(BaseDataPath, acc.Id);
             var tmp = target + "_r" + GetShortId();
-            await CaptureSessionToFolder(EpicSavedPath, tmp);
-            var capturedValidation = ValidateSession(tmp, acc.Id);
-            if (!capturedValidation.IsValid) { await SafeDeleteDirectoryAsync(tmp); return; }
-            if (Directory.Exists(target)) await SafeDeleteDirectoryAsync(target);
-            Directory.Move(tmp, target);
-            SaveAccounts(accounts);
+            try
+            {
+                await CaptureSessionToFolder(EpicSavedPath, tmp, cancellationToken);
+                var capturedValidation = ValidateSession(tmp, acc.Id);
+                if (!capturedValidation.IsValid) { await SafeDeleteDirectoryAsync(tmp, 10, cancellationToken); return; }
+                await ReplacePathWithRollbackAsync(tmp, target, cancellationToken);
+                SaveAccounts(accounts);
+            }
+            catch (OperationCanceledException)
+            {
+                if (Directory.Exists(tmp)) await SafeDeleteDirectoryAsync(tmp);
+                throw;
+            }
         }
 
         private static void MarkActiveAccount(List<Account> accounts, string activeId)
         {
             foreach (var acc in accounts) acc.IsActive = string.Equals(acc.Id, activeId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void StampAccountUsage(Account account, bool incrementUsage)
+        {
+            if (account == null) return;
+            account.LastPlayed = DateTime.Now;
+            if (incrementUsage) account.UsageCount = Math.Max(0, account.UsageCount) + 1;
         }
 
         public static void PrepareLauncherForInitialSync(int maxWaitMs = 8000)
@@ -883,16 +1415,27 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public static bool AutoLaunchEpicLauncher(bool minimized = true)
         {
-            if (Globals.IsProcessRunning("EpicGamesLauncher")) return true;
+            if (Globals.IsProcessRunning("EpicGamesLauncher"))
+            {
+                Globals.WriteToLog("[LAUNCHER] Epic Games Launcher already running.");
+                return true;
+            }
             try
             {
                 var exe = ResolveEpicLauncherExecutable();
                 if (!string.IsNullOrEmpty(exe))
                 {
-                    Process.Start(new ProcessStartInfo { FileName = exe, Arguments = minimized ? "-minimized -silent" : "", UseShellExecute = true });
+                    var args = minimized ? "-minimized -silent" : "";
+                    Globals.WriteToLog("[LAUNCHER] Starting Epic Games Launcher by executable. Exe=" + exe + "; Args=" + (string.IsNullOrWhiteSpace(args) ? "none" : args));
+                    var started = Process.Start(new ProcessStartInfo { FileName = exe, Arguments = args, UseShellExecute = true });
+                    var running = WaitForProcessRunning("EpicGamesLauncher", 8000);
+                    Globals.WriteToLog("[LAUNCHER] Executable launch requested. ProcessObject=" + (started != null) + "; RunningAfterWait=" + running);
                     return true;
                 }
-                Process.Start(new ProcessStartInfo { FileName = "com.epicgames.launcher://", UseShellExecute = true });
+                Globals.WriteToLog("[LAUNCHER] Launcher executable not found. Starting by URI protocol.");
+                var uriStarted = Process.Start(new ProcessStartInfo { FileName = "com.epicgames.launcher://", UseShellExecute = true });
+                var uriRunning = WaitForProcessRunning("EpicGamesLauncher", 8000);
+                Globals.WriteToLog("[LAUNCHER] URI launch requested. ProcessObject=" + (uriStarted != null) + "; RunningAfterWait=" + uriRunning);
                 return true;
             }
             catch (Exception ex) { Globals.WriteToLog("[LAUNCHER] Failed to launch Epic Games Launcher", ex); return false; }
@@ -921,31 +1464,52 @@ namespace Epic_Games_Account_Switcher_Globals
             return null;
         }
 
-        public static async Task<bool> WaitForLaunchedAccountAsync(string expectedAccountId, Action<string> progress = null, int timeoutMs = 45000)
+        public static async Task<bool> WaitForLaunchedAccountAsync(string expectedAccountId, Action<string> progress = null, int timeoutMs = 45000, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (string.IsNullOrWhiteSpace(expectedAccountId)) return false;
 
             var sw = Stopwatch.StartNew();
             DateTime? healthySince = null;
             var launchRequested = false;
+            var lastStatus = "";
+            var lastStatusLogAt = -10000L;
+
+            Globals.WriteToLog("[VERIFY] Waiting for launched account. Expected=" + Globals.SafeLogId(expectedAccountId) + "; TimeoutMs=" + timeoutMs);
 
             while (sw.ElapsedMilliseconds < timeoutMs)
             {
-                if (!Globals.IsProcessRunning("EpicGamesLauncher"))
+                cancellationToken.ThrowIfCancellationRequested();
+                var launcherRunning = Globals.IsProcessRunning("EpicGamesLauncher");
+                if (!launcherRunning)
                 {
                     if (!launchRequested)
                     {
                         progress?.Invoke("Launching Epic Games...");
-                        AutoLaunchEpicLauncher(false);
+                        var launchOk = AutoLaunchEpicLauncher(false);
+                        Globals.WriteToLog("[VERIFY] Launcher was not running. LaunchRequestAccepted=" + launchOk);
                         launchRequested = true;
                     }
                     healthySince = null;
-                    await Task.Delay(500);
+                    var stoppedStatus = "LauncherRunning=False; Current=NULL; SessionValid=NULL";
+                    if (!string.Equals(stoppedStatus, lastStatus, StringComparison.Ordinal) || sw.ElapsedMilliseconds - lastStatusLogAt >= 5000)
+                    {
+                        Globals.WriteToLog("[VERIFY] Poll " + stoppedStatus + "; ElapsedMs=" + sw.ElapsedMilliseconds);
+                        lastStatus = stoppedStatus;
+                        lastStatusLogAt = sw.ElapsedMilliseconds;
+                    }
+                    await Task.Delay(500, cancellationToken);
                     continue;
                 }
 
                 var currentId = GetCurrentAccountId();
                 var session = ValidateSession(EpicSavedPath, expectedAccountId);
+                var status = "LauncherRunning=True; Current=" + Globals.SafeLogId(currentId) + "; " + ValidationSummary(session);
+                if (!string.Equals(status, lastStatus, StringComparison.Ordinal) || sw.ElapsedMilliseconds - lastStatusLogAt >= 5000)
+                {
+                    Globals.WriteToLog("[VERIFY] Poll " + status + "; ElapsedMs=" + sw.ElapsedMilliseconds);
+                    lastStatus = status;
+                    lastStatusLogAt = sw.ElapsedMilliseconds;
+                }
                 if (string.Equals(currentId, expectedAccountId, StringComparison.OrdinalIgnoreCase) && session.IsValid)
                 {
                     if (!healthySince.HasValue)
@@ -956,7 +1520,7 @@ namespace Epic_Games_Account_Switcher_Globals
 
                     if (DateTime.UtcNow - healthySince.Value >= TimeSpan.FromSeconds(5))
                     {
-                        Globals.WriteToLog("[VERIFY] Epic launcher is running with expected account: " + expectedAccountId);
+                        Globals.WriteToLog("[VERIFY] Epic launcher is running with expected account: " + Globals.SafeLogId(expectedAccountId) + "; ElapsedMs=" + sw.ElapsedMilliseconds);
                         return true;
                     }
                 }
@@ -965,137 +1529,226 @@ namespace Epic_Games_Account_Switcher_Globals
                     healthySince = null;
                 }
 
-                await Task.Delay(1000);
+                await Task.Delay(1000, cancellationToken);
             }
 
-            Globals.WriteToLog("[VERIFY] Timed out waiting for launched account. Expected=" + expectedAccountId + "; Current=" + (GetCurrentAccountId() ?? "NULL"));
+            var finalSession = ValidateSession(EpicSavedPath, expectedAccountId);
+            Globals.WriteToLog("[VERIFY] Timed out waiting for launched account. Expected=" + Globals.SafeLogId(expectedAccountId) + "; Current=" + Globals.SafeLogId(GetCurrentAccountId()) + "; LauncherRunning=" + Globals.IsProcessRunning("EpicGamesLauncher") + "; " + ValidationSummary(finalSession) + "; ElapsedMs=" + sw.ElapsedMilliseconds);
             return false;
         }
 
-        public static async Task<bool> SwitchToAccount(string accId, Action<string> progress = null)
+        public static async Task<bool> SwitchToAccount(string accId, Action<string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
         {
-            await SessionOperationLock.WaitAsync();
+            var operationId = GetShortId();
+            var sw = Stopwatch.StartNew();
+            await SessionOperationLock.WaitAsync(cancellationToken);
             try
             {
+                SetLastSwitchFailure("");
+                cancellationToken.ThrowIfCancellationRequested();
+                LogSwitch(operationId, "BEGIN Target=" + Globals.SafeLogId(accId));
                 var accs = GetAccounts();
+                LogSwitch(operationId, "Accounts loaded. Count=" + accs.Count);
                 var t = accs.FirstOrDefault(a => string.Equals(a.Id, accId, StringComparison.OrdinalIgnoreCase));
-                if (t == null) return false;
+                if (t == null)
+                {
+                    SetLastSwitchFailure("Target account is not saved.");
+                    LogSwitch(operationId, "FAILED Target account not found.");
+                    return false;
+                }
                 NormalizeAccount(t);
                 var src = Path.Combine(BaseDataPath, t.Id);
-                if (!Directory.Exists(src)) return false;
+                LogSwitch(operationId, "Target resolved. Target=" + Globals.SafeLogId(t.Id) + "; SourceState=" + PathStateSummary(src));
+                if (!Directory.Exists(src))
+                {
+                    SetLastSwitchFailure("Saved account session folder is missing.");
+                    LogSwitch(operationId, "FAILED Source folder missing. Source=" + src);
+                    return false;
+                }
                 var sourceValidation = ValidateSession(src, t.Id);
-                if (!sourceValidation.IsValid) return false;
+                LogSwitch(operationId, "Source validation. " + ValidationSummary(sourceValidation));
+                if (!sourceValidation.IsValid)
+                {
+                    SetLastSwitchFailure("Saved account session is invalid: " + sourceValidation.Message);
+                    LogSwitch(operationId, "FAILED Source validation rejected target session.");
+                    return false;
+                }
                 var curB = GetCurrentAccountId();
+                LogSwitch(operationId, "Current live account before close=" + Globals.SafeLogId(curB));
                 progress?.Invoke("Closing Epic Games...");
-                if (!await EnsureEpicIsClosed()) return false;
-                await RefreshSnapshotOfCurrentSavedAccount(accs, t.Id, curB, progress);
+                if (!await EnsureEpicIsClosed(60000, cancellationToken))
+                {
+                    SetLastSwitchFailure("Epic Games Launcher or one of its helper processes could not be closed.");
+                    LogSwitch(operationId, "FAILED Epic process cleanup timed out.");
+                    return false;
+                }
+                LogSwitch(operationId, "Epic process cleanup completed. ElapsedMs=" + sw.ElapsedMilliseconds);
+                await RefreshSnapshotOfCurrentSavedAccount(accs, t.Id, curB, progress, cancellationToken);
+                LogSwitch(operationId, "Current account snapshot refresh completed.");
                 var rbB = Path.Combine(BaseDataPath, "_switch_rb");
                 var tmpB = Path.Combine(BaseDataPath, "_tmp_res" + GetShortId());
                 var registryRollback = CaptureRegistryData();
-                var credentialRollback = CredentialService.CaptureCredentials();
+                LogSwitch(operationId, "Registry rollback captured. Keys=" + (registryRollback == null ? 0 : registryRollback.Count));
+                var credentialRollback = CredentialService.CaptureCredentials(curB);
+                LogSwitch(operationId, "Credential rollback captured. Count=" + (credentialRollback == null ? 0 : credentialRollback.Count));
                 try
                 {
                     progress?.Invoke("Preparing session...");
-                    if (Directory.Exists(rbB)) await SafeDeleteDirectoryAsync(rbB);
+                    LogSwitch(operationId, "Preparing target session. RollbackState=" + PathStateSummary(rbB) + "; TempState=" + PathStateSummary(tmpB));
+                    if (Directory.Exists(rbB)) await SafeDeleteDirectoryAsync(rbB, 10, cancellationToken);
                     Directory.CreateDirectory(rbB);
                     Directory.CreateDirectory(tmpB);
                     var tS = Path.Combine(tmpB, "Saved");
                     Directory.CreateDirectory(tS);
+                    var copiedSessionItems = 0;
+                    var missingSessionItems = 0;
                     foreach (var item in SessionItemsToCapture)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         var s = Path.Combine(src, item);
                         var d = Path.Combine(tS, item);
-                        if (Directory.Exists(s)) await CopyDirectoryStrictAsync(s, d);
-                        else if (File.Exists(s)) await SafeReplaceFileAsync(s, d);
+                        if (Directory.Exists(s)) { await CopyDirectoryStrictAsync(s, d, cancellationToken); copiedSessionItems++; }
+                        else if (File.Exists(s)) { await SafeReplaceFileAsync(s, d, cancellationToken); copiedSessionItems++; }
+                        else missingSessionItems++;
                     }
+                    var copiedAuthFiles = 0;
+                    var missingAuthFiles = 0;
                     foreach (var f in AuthFiles.Concat(AuthBinaryFiles))
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         var sf = Path.Combine(src, f);
-                        if (File.Exists(sf)) await SafeReplaceFileAsync(sf, Path.Combine(tS, f));
+                        if (File.Exists(sf)) { await SafeReplaceFileAsync(sf, Path.Combine(tS, f), cancellationToken); copiedAuthFiles++; }
+                        else missingAuthFiles++;
                     }
+                    LogSwitch(operationId, "Prepared Saved payload. SessionItemsCopied=" + copiedSessionItems + "; SessionItemsMissing=" + missingSessionItems + "; AuthFilesCopied=" + copiedAuthFiles + "; AuthFilesMissing=" + missingAuthFiles + "; SavedState=" + PathStateSummary(tS));
                     var tE = Path.Combine(tmpB, "EOS_Data");
                     var sE = Path.Combine(src, "EOS_Data");
-                    if (Directory.Exists(sE)) await CopyDirectoryStrictAsync(sE, tE);
+                    if (Directory.Exists(sE)) await CopyDirectoryStrictAsync(sE, tE, cancellationToken);
+                    LogSwitch(operationId, "Prepared EOS payload. Source=" + PathStateSummary(sE) + "; Temp=" + PathStateSummary(tE));
                     var tR = Path.Combine(tmpB, "Roaming_Data");
                     var sR = Path.Combine(src, "Roaming_Data");
-                    if (Directory.Exists(sR)) await CopyDirectoryStrictAsync(sR, tR);
+                    if (Directory.Exists(sR)) await CopyDirectoryStrictAsync(sR, tR, cancellationToken);
+                    LogSwitch(operationId, "Prepared Roaming payload. Source=" + PathStateSummary(sR) + "; Temp=" + PathStateSummary(tR));
                     var tP = Path.Combine(tmpB, "ProgramData_Data", "Manifests");
                     var sP = Path.Combine(src, "ProgramData_Data", "Manifests");
-                    if (Directory.Exists(sP)) await CopyDirectoryStrictAsync(sP, tP);
+                    if (Directory.Exists(sP)) await CopyDirectoryStrictAsync(sP, tP, cancellationToken);
+                    LogSwitch(operationId, "Prepared ProgramData payload. Source=" + PathStateSummary(sP) + "; Temp=" + PathStateSummary(tP));
                     var preparedValidation = ValidateSession(tS, t.Id);
+                    LogSwitch(operationId, "Prepared validation. " + ValidationSummary(preparedValidation));
                     if (!preparedValidation.IsValid) throw new InvalidDataException(preparedValidation.Message);
-                    await MovePathToRollback(EpicSavedPath, rbB, "Saved");
+                    LogSwitch(operationId, "Moving live state to rollback.");
+                    await MovePathToRollback(EpicSavedPath, rbB, "Saved", cancellationToken);
                     foreach (var rel in EOSFoldersToCapture)
                     {
-                        await MovePathToRollback(Path.Combine(LocalAppData, "Epic Games", rel), rbB, "EOS_" + rel.Replace("\\", "_"));
-                        await MovePathToRollback(Path.Combine(LocalAppData, rel), rbB, "EOS_R_" + rel.Replace("\\", "_"));
+                        await MovePathToRollback(Path.Combine(LocalAppData, "Epic Games", rel), rbB, "EOS_" + rel.Replace("\\", "_"), cancellationToken);
+                        await MovePathToRollback(Path.Combine(LocalAppData, rel), rbB, "EOS_R_" + rel.Replace("\\", "_"), cancellationToken);
                     }
-                    await MovePathToRollback(Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher"), rbB, "Roaming");
-                    if (Directory.Exists(tP)) await MovePathToRollback(ProgramDataManifestsPath, rbB, "PD_Manifests");
+                    await MovePathToRollback(Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher"), rbB, "Roaming", cancellationToken);
+                    if (Directory.Exists(tP)) await MovePathToRollback(ProgramDataManifestsPath, rbB, "PD_Manifests", cancellationToken);
+                    LogSwitch(operationId, "Rollback prepared. RollbackState=" + PathStateSummary(rbB));
                     Directory.CreateDirectory(Path.GetDirectoryName(EpicSavedPath));
-                    Directory.Move(tS, EpicSavedPath);
-                    if (Directory.Exists(tE)) RestoreEOSData(tE);
-                    if (Directory.Exists(tR)) RestoreRoamingData(tR);
-                    if (Directory.Exists(tP)) { Directory.CreateDirectory(Path.GetDirectoryName(ProgramDataManifestsPath)); Directory.Move(tP, ProgramDataManifestsPath); }
+                    await SafeMovePathAsync(tS, EpicSavedPath, cancellationToken);
+                    LogSwitch(operationId, "Restored Saved state. LiveSaved=" + PathStateSummary(EpicSavedPath));
+                    if (Directory.Exists(tE)) await RestoreEOSData(tE, cancellationToken);
+                    LogSwitch(operationId, "Restored EOS state. TempRemaining=" + PathStateSummary(tE));
+                    if (Directory.Exists(tR)) await RestoreRoamingData(tR, cancellationToken);
+                    LogSwitch(operationId, "Restored Roaming state. TempRemaining=" + PathStateSummary(tR));
+                    if (Directory.Exists(tP)) { Directory.CreateDirectory(Path.GetDirectoryName(ProgramDataManifestsPath)); await SafeMovePathAsync(tP, ProgramDataManifestsPath, cancellationToken); }
+                    LogSwitch(operationId, "Restored ProgramData manifests. LiveProgramData=" + PathStateSummary(ProgramDataManifestsPath));
                     RestoreRegistryIdentity(t);
-                    CredentialService.DeleteCredentials();
-                    if (t.Credentials != null && t.Credentials.Count > 0) CredentialService.RestoreCredentials(t.Credentials);
+                    LogSwitch(operationId, "Registry identity restored. TargetRegistryKeys=" + (t.RegistryData == null ? 0 : t.RegistryData.Count));
+                    var deletedCurrentCredentials = CredentialService.DeleteCredentials(credentialRollback);
+                    var restoredTargetCredentials = true;
+                    if (t.Credentials != null && t.Credentials.Count > 0) restoredTargetCredentials = CredentialService.RestoreCredentials(t.Credentials);
+                    LogSwitch(operationId, "Credentials swapped. DeletedCurrent=" + deletedCurrentCredentials + "; TargetCredentialCount=" + (t.Credentials == null ? 0 : t.Credentials.Count) + "; RestoredTarget=" + restoredTargetCredentials);
                     SetEmailSurgically(t.Email);
                     SetRememberMeDataSurgically(t);
                     SetLauncherWindowSettingsSurgically(t);
+                    LogSwitch(operationId, "Launcher config patched. RememberMePaths=" + (t.RememberMeDataByPath == null ? 0 : t.RememberMeDataByPath.Count) + "; WindowSettingPaths=" + (t.LauncherWindowSettingsByPath == null ? 0 : t.LauncherWindowSettingsByPath.Count));
                     var liveValidation = ValidateRestoredState(t);
+                    LogSwitch(operationId, "Live validation. " + ValidationSummary(liveValidation));
                     if (!liveValidation.IsValid) throw new InvalidDataException(liveValidation.Message);
-                    t.LastPlayed = DateTime.Now;
+                    StampAccountUsage(t, true);
                     MarkActiveAccount(accs, t.Id);
                     SaveAccounts(accs);
-                    await SafeDeleteDirectoryAsync(rbB);
-                    await SafeDeleteDirectoryAsync(tmpB);
+                    LogSwitch(operationId, "Account metadata saved. UsageCount=" + t.UsageCount + "; LastPlayed=" + (t.HasUsageHistory ? t.LastPlayed.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) : "NULL"));
+                    await SafeDeleteDirectoryAsync(rbB, 10, cancellationToken);
+                    await SafeDeleteDirectoryAsync(tmpB, 10, cancellationToken);
+                    LogSwitch(operationId, "Temporary folders cleaned. RollbackExists=" + Directory.Exists(rbB) + "; TempExists=" + Directory.Exists(tmpB));
                     progress?.Invoke("Launching Epic Games...");
-                    AutoLaunchEpicLauncher(false);
+                    var launchAccepted = AutoLaunchEpicLauncher(false);
+                    LogSwitch(operationId, "END SUCCESS. LaunchRequestAccepted=" + launchAccepted + "; ElapsedMs=" + sw.ElapsedMilliseconds);
                     return true;
                 }
-                catch
+                catch (OperationCanceledException)
                 {
+                    SetLastSwitchFailure("Switch was cancelled.");
+                    LogSwitch(operationId, "CANCELLED. Starting rollback. ElapsedMs=" + sw.ElapsedMilliseconds);
                     await RollbackSwitchAsync(rbB);
                     RestoreRegistrySnapshot(registryRollback);
-                    if (CredentialService.DeleteCredentials() && credentialRollback != null) CredentialService.RestoreCredentials(credentialRollback);
+                    if (CredentialService.DeleteCredentials(t.Credentials ?? new List<CredentialService.SavedCredential>()) && credentialRollback != null) CredentialService.RestoreCredentials(credentialRollback);
                     if (Directory.Exists(tmpB)) await SafeDeleteDirectoryAsync(tmpB);
+                    LogSwitch(operationId, "Rollback after cancellation completed.");
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    SetLastSwitchFailure("Switch failed during restore: " + ex.Message);
+                    LogSwitch(operationId, "FAILED during restore. Starting rollback. RollbackState=" + PathStateSummary(rbB) + "; TempState=" + PathStateSummary(tmpB), ex);
+                    await RollbackSwitchAsync(rbB);
+                    RestoreRegistrySnapshot(registryRollback);
+                    if (CredentialService.DeleteCredentials(t.Credentials ?? new List<CredentialService.SavedCredential>()) && credentialRollback != null) CredentialService.RestoreCredentials(credentialRollback);
+                    if (Directory.Exists(tmpB)) await SafeDeleteDirectoryAsync(tmpB);
+                    LogSwitch(operationId, "Rollback after restore failure completed. LiveSaved=" + PathStateSummary(EpicSavedPath));
                     return false;
                 }
             }
-            catch { return false; }
-            finally { SessionOperationLock.Release(); }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                SetLastSwitchFailure("Switch failed before restore: " + ex.Message);
+                LogSwitch(operationId, "FAILED before restore phase. ElapsedMs=" + sw.ElapsedMilliseconds, ex);
+                return false;
+            }
+            finally
+            {
+                if (!string.IsNullOrWhiteSpace(LastSwitchFailureMessage))
+                    LogSwitch(operationId, "END FAILED. Reason=" + LastSwitchFailureMessage + "; ElapsedMs=" + sw.ElapsedMilliseconds);
+                SessionOperationLock.Release();
+            }
         }
 
-        private static async Task MovePathToRollback(string source, string rollbackRoot, string rollbackName)
+        private static async Task MovePathToRollback(string source, string rollbackRoot, string rollbackName, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (!Directory.Exists(source) && !File.Exists(source)) return;
             var rb = Path.Combine(rollbackRoot, rollbackName);
             Directory.CreateDirectory(Path.GetDirectoryName(rb));
-            if (Directory.Exists(rb)) await SafeDeleteDirectoryAsync(rb);
+            if (Directory.Exists(rb)) await SafeDeleteDirectoryAsync(rb, 10, cancellationToken);
             if (File.Exists(rb)) File.Delete(rb);
-            Directory.Move(source, rb);
+            await SafeMovePathAsync(source, rb, cancellationToken);
         }
 
-        private static void RestoreEOSData(string sourceRoot)
+        private static async Task RestoreEOSData(string sourceRoot, CancellationToken cancellationToken = default(CancellationToken))
         {
             foreach (var rel in EOSFoldersToCapture)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var s = Path.Combine(sourceRoot, rel);
                 if (!Directory.Exists(s)) continue;
                 var dest = File.Exists(s + ".is_root") ? Path.Combine(LocalAppData, rel) : Path.Combine(LocalAppData, "Epic Games", rel);
                 Directory.CreateDirectory(Path.GetDirectoryName(dest));
-                Directory.Move(s, dest);
+                await SafeMovePathAsync(s, dest, cancellationToken);
             }
         }
 
-        private static void RestoreRoamingData(string sourceRoot)
+        private static async Task RestoreRoamingData(string sourceRoot, CancellationToken cancellationToken = default(CancellationToken))
         {
             foreach (var folder in Directory.GetDirectories(sourceRoot))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var dest = Path.Combine(RoamingAppData, "Epic Games", Path.GetFileName(folder));
                 Directory.CreateDirectory(Path.GetDirectoryName(dest));
-                Directory.Move(folder, dest);
+                await SafeMovePathAsync(folder, dest, cancellationToken);
             }
         }
 
@@ -1112,7 +1765,10 @@ namespace Epic_Games_Account_Switcher_Globals
                 await RestoreRollbackPath(rollbackRoot, "Roaming", Path.Combine(RoamingAppData, "Epic Games", "EpicGamesLauncher"));
                 await RestoreRollbackPath(rollbackRoot, "PD_Manifests", ProgramDataManifestsPath);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("[ROLLBACK] Switch rollback failed.", ex);
+            }
         }
 
         private static async Task RestoreRollbackPath(string rollbackRoot, string name, string target)
@@ -1122,21 +1778,39 @@ namespace Epic_Games_Account_Switcher_Globals
             if (Directory.Exists(target)) await SafeDeleteDirectoryAsync(target);
             else if (File.Exists(target)) File.Delete(target);
             Directory.CreateDirectory(Path.GetDirectoryName(target));
-            Directory.Move(s, target);
+            await SafeMovePathAsync(s, target);
         }
 
         private static void RestoreRegistryIdentity(Account target)
         {
-            ClearRegistryIdentity(CaptureRegistryData());
-            if (target.RegistryData != null)
+            var backup = CaptureRegistryData();
+            try
             {
-                foreach (var kv in target.RegistryData) Globals.SetRegistryKey(kv.Key, kv.Value);
+                ClearRegistryIdentity(backup);
+                if (target.RegistryData != null)
+                {
+                    foreach (var kv in target.RegistryData)
+                    {
+                        if (!Globals.SetRegistryKey(kv.Key, kv.Value))
+                            throw new InvalidOperationException("Failed to restore registry identity key: " + kv.Key);
+                    }
+                }
+                if (!string.IsNullOrWhiteSpace(target.Id))
+                {
+                    if (!Globals.SetRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:AccountId", "sz:" + target.Id))
+                        throw new InvalidOperationException("Failed to set AccountId registry key.");
+                    if (target.RegistryData == null || !target.RegistryData.Keys.Any(k => k.EndsWith(":EpicAccountId", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        if (!Globals.SetRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:EpicAccountId", "sz:" + target.Id))
+                            throw new InvalidOperationException("Failed to set EpicAccountId registry key.");
+                    }
+                }
             }
-            if (!string.IsNullOrWhiteSpace(target.Id))
+            catch (Exception ex)
             {
-                Globals.SetRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:AccountId", "sz:" + target.Id);
-                if (target.RegistryData == null || !target.RegistryData.Keys.Any(k => k.EndsWith(":EpicAccountId", StringComparison.OrdinalIgnoreCase)))
-                    Globals.SetRegistryKey(@"HKCU\Software\Epic Games\Unreal Engine\Identifiers:EpicAccountId", "sz:" + target.Id);
+                Globals.WriteToLog("Registry identity modification failed; rolling back.", ex);
+                RestoreRegistrySnapshot(backup);
+                throw;
             }
         }
 
@@ -1144,7 +1818,14 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             ClearRegistryIdentity(CaptureRegistryData());
             if (snapshot == null) return;
-            foreach (var kv in snapshot) Globals.SetRegistryKey(kv.Key, kv.Value);
+            foreach (var kv in snapshot)
+            {
+                for (int r = 0; r < 3; r++)
+                {
+                    if (Globals.SetRegistryKey(kv.Key, kv.Value)) break;
+                    Thread.Sleep(100);
+                }
+            }
         }
 
         private static void ClearRegistryIdentity(Dictionary<string, string> current)
@@ -1183,7 +1864,8 @@ namespace Epic_Games_Account_Switcher_Globals
 
         private static void AtomicReplaceFile(string tmp, string target)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            var dir = Path.GetDirectoryName(Path.GetFullPath(target));
+            if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
             if (File.Exists(target))
             {
                 var backup = target + ".bak_" + Guid.NewGuid().ToString("N");
@@ -1200,14 +1882,53 @@ namespace Epic_Games_Account_Switcher_Globals
             return Uri.UnescapeDataString(rootUri.MakeRelativeUri(pathUri).ToString()).Replace('/', Path.DirectorySeparatorChar);
         }
 
+        private static readonly object _metadataLock = new object();
         private static Tuple<string, string, string> _lastDetected;
+
+        private static IEnumerable<string> ReadAllLinesSafe(string path)
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                try
+                {
+                    var lines = new List<string>();
+                    using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    using (var reader = new StreamReader(fs))
+                    {
+                        string line;
+                        while ((line = reader.ReadLine()) != null) lines.Add(line);
+                    }
+                    return lines;
+                }
+                catch (IOException)
+                {
+                    try
+                    {
+                        var tmpCopy = Path.Combine(Path.GetTempPath(), "read_copy_" + Guid.NewGuid().ToString("N") + ".tmp");
+                        File.Copy(path, tmpCopy, true);
+                        try { return File.ReadAllLines(tmpCopy); }
+                        finally { try { File.Delete(tmpCopy); } catch { } }
+                    }
+                    catch { }
+                    Thread.Sleep(100 * (i + 1));
+                }
+                catch { break; }
+            }
+            return new string[0];
+        }
 
         public static async Task<Tuple<string, string, string>> GetDetectedMetadataAsync()
         {
-            return await Task.Run(() =>
-            {
+            return await Task.Run(() => GetDetectedMetadata());
+        }
+
+        public static Tuple<string, string, string> GetDetectedMetadata()
+        {
                 var id = GetCurrentAccountId();
-                if (!string.IsNullOrEmpty(id) && _lastDetected != null && _lastDetected.Item1 == id && _lastDetected.Item2 != "N/A") return _lastDetected;
+                lock (_metadataLock)
+                {
+                    if (!string.IsNullOrEmpty(id) && _lastDetected != null && _lastDetected.Item1 == id && _lastDetected.Item2 != "N/A") return _lastDetected;
+                }
                 var name = "N/A";
                 var email = "N/A";
                 try
@@ -1218,7 +1939,7 @@ namespace Epic_Games_Account_Switcher_Globals
                         var ini = files.FirstOrDefault(f => f.IndexOf("WindowsEditor", StringComparison.OrdinalIgnoreCase) >= 0) ?? files.FirstOrDefault();
                         if (ini != null)
                         {
-                            var lines = File.ReadAllLines(ini);
+                            var lines = ReadAllLinesSafe(ini);
                             foreach (var raw in lines)
                             {
                                 var line = raw.Trim();
@@ -1237,27 +1958,24 @@ namespace Epic_Games_Account_Switcher_Globals
                             {
                                 try
                                 {
-                                    using (var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                                    using (var reader = new StreamReader(fs))
+                                    var lines = ReadAllLinesSafe(f);
+                                    var q = new Queue<string>(1000);
+                                    foreach (var l in lines) { if (q.Count >= 1000) q.Dequeue(); q.Enqueue(l ?? ""); }
+                                    foreach (var line in q.Reverse())
                                     {
-                                        var q = new Queue<string>(1000);
-                                        while (!reader.EndOfStream) { if (q.Count >= 1000) q.Dequeue(); q.Enqueue(reader.ReadLine() ?? ""); }
-                                        foreach (var line in q.Reverse())
+                                        if (name == "N/A" && line.Contains("-epicusername=\""))
                                         {
-                                            if (name == "N/A" && line.Contains("-epicusername=\""))
-                                            {
-                                                var k = "-epicusername=\"";
-                                                var s = line.IndexOf(k, StringComparison.Ordinal);
-                                                if (s >= 0) { s += k.Length; var e = line.IndexOf('"', s); if (e > s) { var v = line.Substring(s, e - s).Trim(); if (!string.IsNullOrWhiteSpace(v)) name = v; } }
-                                            }
-                                            if (name == "N/A" && line.Contains("DisplayName: "))
-                                            {
-                                                var idx = line.IndexOf("DisplayName: ", StringComparison.Ordinal);
-                                                if (idx >= 0) { var v = line.Substring(idx + "DisplayName: ".Length).Trim(); if (!string.IsNullOrWhiteSpace(v)) name = v; }
-                                            }
-                                            if (email == "N/A" && line.Contains("@")) { var m = Regex.Match(line, @"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"); if (m.Success) email = m.Value; }
-                                            if (name != "N/A" && email != "N/A") break;
+                                            var k = "-epicusername=\"";
+                                            var s = line.IndexOf(k, StringComparison.Ordinal);
+                                            if (s >= 0) { s += k.Length; var e = line.IndexOf('"', s); if (e > s) { var v = line.Substring(s, e - s).Trim(); if (!string.IsNullOrWhiteSpace(v)) name = v; } }
                                         }
+                                        if (name == "N/A" && line.Contains("DisplayName: "))
+                                        {
+                                            var idx = line.IndexOf("DisplayName: ", StringComparison.Ordinal);
+                                            if (idx >= 0) { var v = line.Substring(idx + "DisplayName: ".Length).Trim(); if (!string.IsNullOrWhiteSpace(v)) name = v; }
+                                        }
+                                        if (email == "N/A" && line.Contains("@")) { var m = Regex.Match(line, @"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"); if (m.Success) email = m.Value; }
+                                        if (name != "N/A" && email != "N/A") break;
                                     }
                                 }
                                 catch { }
@@ -1267,12 +1985,10 @@ namespace Epic_Games_Account_Switcher_Globals
                     }
                 }
                 catch { }
-                _lastDetected = new Tuple<string, string, string>(id, name, email);
-                return _lastDetected;
-            });
+                var res = new Tuple<string, string, string>(id, name, email);
+                lock (_metadataLock) { _lastDetected = res; }
+                return res;
         }
-
-        public static Tuple<string, string, string> GetDetectedMetadata() { return Task.Run(async () => await GetDetectedMetadataAsync()).GetAwaiter().GetResult(); }
 
         public static async Task<Tuple<string, string, string>> WaitForDetectedMetadata(int sec = 120, int interval = 1500)
         {
@@ -1281,18 +1997,36 @@ namespace Epic_Games_Account_Switcher_Globals
             return new Tuple<string, string, string>(null, "N/A", "N/A");
         }
 
-        public static void BackupAccounts(string zip, Action<string> log = null)
+        public static void BackupAccounts(string zip, Action<string> log = null, CancellationToken cancellationToken = default(CancellationToken))
         {
-            Directory.CreateDirectory(BaseDataPath);
+            BackupAccounts(zip, null, BackupProtectionMode.CurrentUser, log, cancellationToken);
+        }
+
+        public static void BackupAccounts(string zip, string password, Action<string> log = null, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            BackupAccounts(zip, password, BackupProtectionMode.Password, log, cancellationToken);
+        }
+
+        public static void BackupAccounts(string zip, string password, BackupProtectionMode protectionMode, Action<string> log = null, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            SessionOperationLock.Wait(cancellationToken);
             var tmp = Path.Combine(Path.GetTempPath(), "e_bak_" + GetShortId());
+            var plainZip = Path.Combine(Path.GetTempPath(), "e_bak_zip_" + GetShortId() + ".zip");
+            var outputTmp = zip + ".tmp_" + Guid.NewGuid().ToString("N");
             try
             {
+                if (protectionMode == BackupProtectionMode.Password && string.IsNullOrWhiteSpace(password))
+                    throw new BackupPasswordRequiredException();
+
+                cancellationToken.ThrowIfCancellationRequested();
+                Directory.CreateDirectory(BaseDataPath);
                 Directory.CreateDirectory(tmp);
                 var sPath = Path.Combine(Globals.UserDataFolder, "appsettings.json");
                 if (File.Exists(sPath)) File.Copy(sPath, Path.Combine(tmp, "appsettings.json"), true);
                 var accs = GetAccounts();
                 foreach (var a in accs)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var f = Path.Combine(BaseDataPath, a.Id);
                     if (Directory.Exists(f)) Globals.CopyFilesRecursive(f, Path.Combine(tmp, a.Id), true);
                 }
@@ -1306,42 +2040,69 @@ namespace Epic_Games_Account_Switcher_Globals
 
                 var zipDir = Path.GetDirectoryName(Path.GetFullPath(zip));
                 if (!string.IsNullOrWhiteSpace(zipDir)) Directory.CreateDirectory(zipDir);
-                if (File.Exists(zip)) File.Delete(zip);
+                if (File.Exists(plainZip)) File.Delete(plainZip);
 
-                using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create))
+                using (var archive = ZipFile.Open(plainZip, ZipArchiveMode.Create))
                 {
                     foreach (var file in Directory.GetFiles(tmp, "*", SearchOption.AllDirectories))
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         string rel = file.Substring(tmp.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                         var entry = archive.CreateEntry(rel.Replace(Path.DirectorySeparatorChar, '/'), CompressionLevel.Optimal);
                         using (var entryStream = entry.Open())
-                        using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                         {
                             fs.CopyTo(entryStream);
                         }
                     }
                 }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                EncryptBackupFile(plainZip, outputTmp, password, protectionMode, cancellationToken);
+                AtomicReplaceFile(outputTmp, zip);
             }
             catch { throw; }
-            finally { if (Directory.Exists(tmp)) try { Globals.ForceDeleteDirectory(tmp); } catch { } }
+            finally
+            {
+                if (Directory.Exists(tmp)) try { Globals.ForceDeleteDirectory(tmp); } catch { }
+                if (File.Exists(plainZip)) try { File.Delete(plainZip); } catch { }
+                if (File.Exists(outputTmp)) try { File.Delete(outputTmp); } catch { }
+                SessionOperationLock.Release();
+            }
         }
 
-        public static void RestoreAccounts(string zip)
+        public static void RestoreAccounts(string zip, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            RestoreAccounts(zip, null, cancellationToken);
+        }
+
+        public static void RestoreAccounts(string zip, string password, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (!File.Exists(zip)) throw new FileNotFoundException("Backup file not found: " + zip);
+            string restoreZip = zip;
+            string decryptedZip = null;
+            var lockTaken = false;
             var tmp = Path.Combine(Path.GetTempPath(), "e_res_" + GetShortId());
             var rb = BaseDataPath + "_rb";
+            var rollbackAvailable = false;
             try
             {
+                restoreZip = PrepareBackupForRestore(zip, password, out decryptedZip, cancellationToken);
+                SessionOperationLock.Wait(cancellationToken);
+                lockTaken = true;
+                cancellationToken.ThrowIfCancellationRequested();
+                Globals.WriteToLog("[RESTORE] Starting account restore. Zip=" + zip + "; Target=" + BaseDataPath);
                 if (Directory.Exists(tmp)) try { Globals.ForceDeleteDirectory(tmp); } catch { }
                 Directory.CreateDirectory(tmp);
 
+                var extractedEntryCount = 0;
                 try
                 {
-                    using (var archive = ZipFile.OpenRead(zip))
+                    using (var archive = ZipFile.OpenRead(restoreZip))
                     {
                         foreach (var entry in archive.Entries.Where(e => !string.IsNullOrEmpty(e.Name)))
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             string fullPath = GetSafeExtractionPath(tmp, entry.FullName);
                             string longPath = fullPath.StartsWith(@"\\") ? fullPath : @"\\?\" + fullPath;
 
@@ -1351,10 +2112,12 @@ namespace Epic_Games_Account_Switcher_Globals
                             {
                                 stream.CopyTo(fs);
                             }
+                            extractedEntryCount++;
                         }
                     }
                 }
                 catch (Exception ex) { throw new IOException("Failed to extract backup safely. [LONG_PATH?] Error: " + ex.Message, ex); }
+                Globals.WriteToLog("[RESTORE] Backup extracted. Entries=" + extractedEntryCount + "; Temp=" + tmp);
 
                 var aJson = Path.Combine(tmp, "accounts.json");
                 if (!File.Exists(aJson)) throw new InvalidDataException("Backup is invalid: accounts.json is missing.");
@@ -1362,35 +2125,432 @@ namespace Epic_Games_Account_Switcher_Globals
                 RestoreBackupSkins(tmp);
 
                 var accs = JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(aJson)) ?? new List<Account>();
+                Globals.WriteToLog("[RESTORE] Backup accounts parsed. Count=" + accs.Count);
                 foreach (var a in accs)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     a.ProfileImagePath = ResolveRestoredProfileImagePath(a.ProfileImagePath, tmp);
                     NormalizeAccount(a);
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 if (Directory.Exists(rb)) try { Globals.ForceDeleteDirectory(rb); } catch { }
-                if (Directory.Exists(BaseDataPath)) Directory.Move(BaseDataPath, rb);
+                if (Directory.Exists(BaseDataPath))
+                {
+                    try
+                    {
+                        SafeMovePathBlocking(BaseDataPath, rb);
+                        rollbackAvailable = Directory.Exists(rb);
+                        Globals.WriteToLog("[RESTORE] Existing account data moved to rollback. Rollback=" + rb);
+                    }
+                    catch (Exception ex)
+                    {
+                        rollbackAvailable = false;
+                        Globals.WriteToLog("[RESTORE] Existing account data could not be moved to rollback. Falling back to in-place overwrite.", ex);
+                    }
+                }
 
                 try
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     Directory.CreateDirectory(BaseDataPath);
-                    Globals.CopyFilesRecursive(tmp, BaseDataPath, true);
+                    if (!Globals.CopyFilesRecursive(tmp, BaseDataPath, true))
+                        throw new IOException("Failed to copy restored account files into " + BaseDataPath + ".");
 
                     var sRestored = Path.Combine(tmp, "appsettings.json");
                     if (File.Exists(sRestored)) { File.Copy(sRestored, Path.Combine(Globals.UserDataFolder, "appsettings.json"), true); AppSettings.LoadSettings(); }
 
                     RestoreBackupSkins(tmp);
                     SaveAccounts(accs);
+                    Globals.WriteToLog("[RESTORE] Account restore completed. Count=" + accs.Count + "; RollbackAvailable=" + rollbackAvailable);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    if (Directory.Exists(BaseDataPath)) try { Globals.ForceDeleteDirectory(BaseDataPath); } catch { }
-                    if (Directory.Exists(rb)) Directory.Move(rb, BaseDataPath);
+                    Globals.WriteToLog("[RESTORE] Restore copy/save failed.", ex);
+                    if (rollbackAvailable)
+                    {
+                        if (Directory.Exists(BaseDataPath)) try { Globals.ForceDeleteDirectory(BaseDataPath); } catch { }
+                        try
+                        {
+                            if (Directory.Exists(rb)) SafeMovePathBlocking(rb, BaseDataPath);
+                            Globals.WriteToLog("[RESTORE] Rollback restored after restore failure.");
+                        }
+                        catch (Exception rollbackEx)
+                        {
+                            Globals.WriteToLog("[RESTORE] Rollback restore failed after restore failure.", rollbackEx);
+                        }
+                    }
+                    else
+                    {
+                        Globals.WriteToLog("[RESTORE] Rollback was unavailable because the existing account data folder was locked. Original data was left in place where possible.");
+                    }
                     throw;
                 }
-                if (Directory.Exists(rb)) try { Globals.ForceDeleteDirectory(rb); } catch { }
+                if (rollbackAvailable && Directory.Exists(rb)) try { Globals.ForceDeleteDirectory(rb); } catch { }
             }
-            finally { if (Directory.Exists(tmp)) try { Globals.ForceDeleteDirectory(tmp); } catch { } }
+            finally
+            {
+                if (Directory.Exists(tmp)) try { Globals.ForceDeleteDirectory(tmp); } catch { }
+                if (File.Exists(decryptedZip)) try { File.Delete(decryptedZip); } catch { }
+                if (lockTaken) SessionOperationLock.Release();
+            }
+        }
+
+        public static bool IsEncryptedBackup(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return false;
+                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    if (fs.Length < EncryptedBackupMagic.Length) return false;
+                    var buffer = new byte[EncryptedBackupMagic.Length];
+                    fs.Read(buffer, 0, buffer.Length);
+                    return BytesEqual(buffer, EncryptedBackupMagic);
+                }
+            }
+            catch { return false; }
+        }
+
+        private static string PrepareBackupForRestore(string path, string password, out string decryptedZip, CancellationToken cancellationToken)
+        {
+            decryptedZip = null;
+            if (!IsEncryptedBackup(path)) return path;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                decryptedZip = Path.Combine(Path.GetTempPath(), "e_res_zip_" + GetShortId() + ".zip");
+                DecryptBackupFile(path, decryptedZip, password, cancellationToken);
+                return decryptedZip;
+            }
+            catch
+            {
+                if (File.Exists(decryptedZip)) try { File.Delete(decryptedZip); } catch { }
+                throw;
+            }
+        }
+
+        private static void EncryptBackupFile(string plainPath, string destPath, string password, BackupProtectionMode protectionMode, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var mode = protectionMode == BackupProtectionMode.Password ? EncryptedBackupPasswordMode : EncryptedBackupCurrentUserMode;
+            byte[] salt = new byte[16];
+            byte[] protectedKey = new byte[0];
+            byte[] keyMaterial = null;
+            try
+            {
+                using (var rng = RandomNumberGenerator.Create())
+                {
+                    if (mode == EncryptedBackupPasswordMode)
+                    {
+                        rng.GetBytes(salt);
+                        keyMaterial = DeriveBackupKeyMaterial(password, salt);
+                    }
+                    else
+                    {
+                        keyMaterial = new byte[BackupKeyBytes + BackupHmacBytes];
+                        rng.GetBytes(keyMaterial);
+                        salt = new byte[0];
+                        protectedKey = ProtectedData.Protect(keyMaterial, null, DataProtectionScope.CurrentUser);
+                    }
+                }
+                var iv = new byte[16];
+                using (var rng = RandomNumberGenerator.Create()) rng.GetBytes(iv);
+
+                using (var hmac = new HMACSHA256(keyMaterial.Skip(BackupKeyBytes).Take(BackupHmacBytes).ToArray()))
+                using (var outStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    long plainLen = new FileInfo(plainPath).Length;
+                    int cipherLen = (int)(((plainLen / 16) + 1) * 16);
+
+                    using (var msHeader = new MemoryStream())
+                    using (var writer = new BinaryWriter(msHeader))
+                    {
+                        writer.Write(EncryptedBackupMagic);
+                        writer.Write(mode);
+                        writer.Write(BackupPasswordIterations);
+                        WriteLengthPrefixed(writer, salt);
+                        WriteLengthPrefixed(writer, protectedKey);
+                        WriteLengthPrefixed(writer, iv);
+                        writer.Write(cipherLen);
+                        writer.Flush();
+
+                        var headerBytes = msHeader.ToArray();
+                        outStream.Write(headerBytes, 0, headerBytes.Length);
+                        hmac.TransformBlock(headerBytes, 0, headerBytes.Length, null, 0);
+                    }
+
+                    using (var aes = Aes.Create())
+                    {
+                        aes.Key = keyMaterial.Take(BackupKeyBytes).ToArray();
+                        aes.IV = iv;
+                        aes.Mode = CipherMode.CBC;
+                        aes.Padding = PaddingMode.PKCS7;
+
+                        using (var plainStream = new FileStream(plainPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                        using (var cs = new CryptoStream(plainStream, aes.CreateEncryptor(), CryptoStreamMode.Read))
+                        {
+                            byte[] buffer = new byte[81920];
+                            int read;
+                            while ((read = cs.Read(buffer, 0, buffer.Length)) > 0)
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                                outStream.Write(buffer, 0, read);
+                                hmac.TransformBlock(buffer, 0, read, null, 0);
+                            }
+                        }
+                    }
+
+                    hmac.TransformFinalBlock(new byte[0], 0, 0);
+                    outStream.Write(hmac.Hash, 0, hmac.Hash.Length);
+                }
+            }
+            finally
+            {
+                if (keyMaterial != null) Array.Clear(keyMaterial, 0, keyMaterial.Length);
+            }
+        }
+
+        private static void DecryptBackupFile(string encryptedPath, string destPath, string password, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            byte[] keyMaterial = null;
+            try
+            {
+                using (var fs = new FileStream(encryptedPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    if (fs.Length < EncryptedBackupMagic.Length + BackupHmacBytes)
+                        throw new InvalidDataException("Not an encrypted Epic Switcher backup.");
+
+                    byte[] savedHmac = new byte[BackupHmacBytes];
+                    fs.Seek(-BackupHmacBytes, SeekOrigin.End);
+                    fs.Read(savedHmac, 0, BackupHmacBytes);
+                    fs.Seek(0, SeekOrigin.Begin);
+
+                    using (var reader = new BinaryReader(fs, Encoding.UTF8, true))
+                    {
+                        var magic = reader.ReadBytes(EncryptedBackupMagic.Length);
+                        if (!BytesEqual(magic, EncryptedBackupMagic)) throw new InvalidDataException("Not an encrypted Epic Switcher backup.");
+
+                        var mode = reader.ReadInt32();
+                        var iterations = reader.ReadInt32();
+                        var salt = reader.ReadBytes(reader.ReadInt32());
+                        var protectedKey = reader.ReadBytes(reader.ReadInt32());
+                        var iv = reader.ReadBytes(reader.ReadInt32());
+                        var cipherLen = reader.ReadInt32();
+
+                        long cipherStart = fs.Position;
+                        if (cipherLen < 0 || cipherStart + cipherLen > fs.Length - BackupHmacBytes)
+                            throw new InvalidDataException("Corrupted backup file cipher length.");
+
+                        if (mode == EncryptedBackupPasswordMode)
+                        {
+                            if (string.IsNullOrWhiteSpace(password)) throw new BackupPasswordRequiredException();
+                            keyMaterial = DeriveBackupKeyMaterial(password, salt, iterations);
+                        }
+                        else if (mode == EncryptedBackupCurrentUserMode)
+                        {
+                            keyMaterial = ProtectedData.Unprotect(protectedKey, null, DataProtectionScope.CurrentUser);
+                        }
+                        else
+                        {
+                            throw new InvalidDataException("Unsupported encrypted backup mode.");
+                        }
+
+                        using (var hmac = new HMACSHA256(keyMaterial.Skip(BackupKeyBytes).Take(BackupHmacBytes).ToArray()))
+                        {
+                            fs.Seek(0, SeekOrigin.Begin);
+                            long bodyBytesToHash = fs.Length - BackupHmacBytes;
+                            byte[] hashBuffer = new byte[81920];
+                            while (bodyBytesToHash > 0)
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                                int toRead = (int)Math.Min(bodyBytesToHash, (long)hashBuffer.Length);
+                                int r = fs.Read(hashBuffer, 0, toRead);
+                                if (r <= 0) break;
+                                hmac.TransformBlock(hashBuffer, 0, r, null, 0);
+                                bodyBytesToHash -= r;
+                            }
+                            hmac.TransformFinalBlock(new byte[0], 0, 0);
+                            if (!FixedTimeEquals(savedHmac, hmac.Hash)) throw new BackupPasswordInvalidException();
+                        }
+
+                        fs.Seek(cipherStart, SeekOrigin.Begin);
+                        using (var boundedStream = new BoundedStream(fs, cipherLen))
+                        using (var aes = Aes.Create())
+                        {
+                            aes.Key = keyMaterial.Take(BackupKeyBytes).ToArray();
+                            aes.IV = iv;
+                            aes.Mode = CipherMode.CBC;
+                            aes.Padding = PaddingMode.PKCS7;
+
+                            using (var cs = new CryptoStream(boundedStream, aes.CreateDecryptor(), CryptoStreamMode.Read))
+                            using (var outStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                            {
+                                byte[] buffer = new byte[81920];
+                                int read;
+                                while ((read = cs.Read(buffer, 0, buffer.Length)) > 0)
+                                {
+                                    cancellationToken.ThrowIfCancellationRequested();
+                                    outStream.Write(buffer, 0, read);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (BackupPasswordRequiredException) { throw; }
+            catch (BackupPasswordInvalidException) { throw; }
+            catch (CryptographicException) { throw new BackupPasswordInvalidException(); }
+            catch (EndOfStreamException) { throw new BackupPasswordInvalidException(); }
+            finally
+            {
+                if (keyMaterial != null) Array.Clear(keyMaterial, 0, keyMaterial.Length);
+            }
+        }
+
+        private static byte[] EncryptBackupBytes(byte[] plainBytes, string password, BackupProtectionMode protectionMode)
+        {
+            if (plainBytes == null) throw new ArgumentNullException("plainBytes");
+            var tmpPlain = Path.GetTempFileName();
+            var tmpEnc = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllBytes(tmpPlain, plainBytes);
+                EncryptBackupFile(tmpPlain, tmpEnc, password, protectionMode);
+                return File.ReadAllBytes(tmpEnc);
+            }
+            finally
+            {
+                try { File.Delete(tmpPlain); } catch { }
+                try { File.Delete(tmpEnc); } catch { }
+            }
+        }
+
+        private static byte[] DecryptBackupBytes(byte[] encryptedBytes, string password)
+        {
+            if (encryptedBytes == null) throw new ArgumentNullException("encryptedBytes");
+            var tmpEnc = Path.GetTempFileName();
+            var tmpPlain = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllBytes(tmpEnc, encryptedBytes);
+                DecryptBackupFile(tmpEnc, tmpPlain, password);
+                return File.ReadAllBytes(tmpPlain);
+            }
+            finally
+            {
+                try { File.Delete(tmpEnc); } catch { }
+                try { File.Delete(tmpPlain); } catch { }
+            }
+        }
+
+        private class BoundedStream : Stream
+        {
+            private readonly Stream _base;
+            private long _remaining;
+            public BoundedStream(Stream baseStream, long length) { _base = baseStream; _remaining = length; }
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => _remaining;
+            public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+            public override void Flush() { }
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                if (_remaining <= 0) return 0;
+                int toRead = (int)Math.Min(count, _remaining);
+                int read = _base.Read(buffer, offset, toRead);
+                _remaining -= read;
+                return read;
+            }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        }
+
+        private static byte[] DeriveBackupKeyMaterial(string password, byte[] salt, int iterations = BackupPasswordIterations)
+        {
+            using (var derive = new Rfc2898DeriveBytes(password ?? "", salt ?? new byte[0], Math.Max(10000, iterations), HashAlgorithmName.SHA256))
+            {
+                return derive.GetBytes(BackupKeyBytes + BackupHmacBytes);
+            }
+        }
+
+        private static byte[] BuildEncryptedBackupBody(int mode, byte[] salt, byte[] protectedKey, byte[] iv, byte[] cipherBytes, int iterations = BackupPasswordIterations)
+        {
+            using (var ms = new MemoryStream())
+            using (var writer = new BinaryWriter(ms))
+            {
+                writer.Write(EncryptedBackupMagic);
+                writer.Write(mode);
+                writer.Write(iterations);
+                WriteLengthPrefixed(writer, salt);
+                WriteLengthPrefixed(writer, protectedKey);
+                WriteLengthPrefixed(writer, iv);
+                WriteLengthPrefixed(writer, cipherBytes);
+                writer.Flush();
+                return ms.ToArray();
+            }
+        }
+
+        private static void WriteLengthPrefixed(BinaryWriter writer, byte[] bytes)
+        {
+            bytes = bytes ?? new byte[0];
+            writer.Write(bytes.Length);
+            writer.Write(bytes);
+        }
+
+        private static byte[] ComputeBackupHmac(byte[] hmacKey, byte[] body)
+        {
+            using (var hmac = new HMACSHA256(hmacKey))
+            {
+                return hmac.ComputeHash(body);
+            }
+        }
+
+        private static byte[] EncryptAesCbc(byte[] plainBytes, byte[] key, byte[] iv)
+        {
+            using (var aes = Aes.Create())
+            {
+                aes.Key = key;
+                aes.IV = iv;
+                aes.Mode = CipherMode.CBC;
+                aes.Padding = PaddingMode.PKCS7;
+                using (var encryptor = aes.CreateEncryptor())
+                {
+                    return encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
+                }
+            }
+        }
+
+        private static byte[] DecryptAesCbc(byte[] cipherBytes, byte[] key, byte[] iv)
+        {
+            using (var aes = Aes.Create())
+            {
+                aes.Key = key;
+                aes.IV = iv;
+                aes.Mode = CipherMode.CBC;
+                aes.Padding = PaddingMode.PKCS7;
+                using (var decryptor = aes.CreateDecryptor())
+                {
+                    return decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
+                }
+            }
+        }
+
+        private static bool BytesEqual(byte[] left, byte[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length) return false;
+            for (var i = 0; i < left.Length; i++) if (left[i] != right[i]) return false;
+            return true;
+        }
+
+        private static bool FixedTimeEquals(byte[] left, byte[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length) return false;
+            var diff = 0;
+            for (var i = 0; i < left.Length; i++) diff |= left[i] ^ right[i];
+            return diff == 0;
         }
 
         private static List<Account> CloneAccounts(List<Account> accounts)
@@ -1415,11 +2575,14 @@ namespace Epic_Games_Account_Switcher_Globals
                         UserName = c.UserName,
                         Blob = c.Blob == null ? null : c.Blob.ToArray(),
                         Persist = c.Persist,
-                        Type = c.Type
+                        Type = c.Type,
+                        AccountId = c.AccountId,
+                        CapturedAtUtc = c.CapturedAtUtc
                     }).ToList(),
                     RegistryData = account.RegistryData == null ? new Dictionary<string, string>() : new Dictionary<string, string>(account.RegistryData),
                     EncryptedPassword = account.EncryptedPassword,
-                    LastPlayed = account.LastPlayed
+                    LastPlayed = account.LastPlayed,
+                    UsageCount = account.UsageCount
                 };
                 clones.Add(clone);
             }

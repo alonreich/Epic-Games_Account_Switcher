@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -11,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 using Epic_Games_Account_Switcher_Globals;
 using Forms = System.Windows.Forms;
 using Drawing = System.Drawing;
@@ -29,60 +31,227 @@ namespace Epic_Games_Account_Switcher_Client
         private bool _isDragInProgress;
         private DateTime _lastPreviewMoveAt = DateTime.MinValue;
         private int _lastPreviewIndex = -1;
+        private ListBoxItem _dropPreviewContainer;
+        private DispatcherTimer _unsavedLoginTimer;
+        private bool _isUnsavedLoginScanRunning;
+        private Forms.NotifyIcon _notifyIcon;
+        private bool _isExplicitExit;
         public MainWindow()
         {
             InitializeComponent();
             ViewModel = new MainViewModel();
             DataContext = ViewModel;
             ViewModel.RequestCapture += ViewModel_RequestCapture;
+            ViewModel.OnAccountsChanged += UpdateTrayContextMenu;
             Loaded += MainWindow_Loaded;
             if (!ApplySavedWindowPlacement(AppSettings.Instance)) WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e) { ViewModel.LoadAccounts(); }
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await ViewModel.LoadAccountsAsync();
+                await ViewModel.PromptForUnsavedLoginIfNeeded();
+                UpdateTrayIconVisibility();
+                StartUnsavedLoginMonitor();
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("Main window startup load failed", ex);
+            }
+        }
+
+        private void StartUnsavedLoginMonitor()
+        {
+            if (_unsavedLoginTimer != null) return;
+            _unsavedLoginTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            _unsavedLoginTimer.Tick += async (s, args) =>
+            {
+                if (_isDragInProgress || _isUnsavedLoginScanRunning || ViewModel == null || ViewModel.IsBusy || AccountService.SessionOperationLock.CurrentCount == 0) return;
+                _isUnsavedLoginScanRunning = true;
+                try { await ViewModel.PromptForUnsavedLoginIfNeeded(); }
+                catch (Exception ex) { Globals.WriteToLog("Unsaved login monitor scan failed", ex); }
+                finally { _isUnsavedLoginScanRunning = false; }
+            };
+            _unsavedLoginTimer.Start();
+        }
         private async Task<bool> ViewModel_RequestCapture(MainViewModel.AccountMetadata metadata)
         {
-            var captureWin = new CaptureAccountWindow(metadata.Name, "", metadata.Email, metadata.ImagePath, "", metadata.Id, true, true) { Owner = this };
+            var captureWin = new CaptureAccountWindow(metadata.Name, "", metadata.Email, metadata.ImagePath, "", metadata.Id, true, false) { Owner = this };
             if (captureWin.ShowDialog() == true) { return await ExecuteCapture(captureWin); }
             return false;
         }
+        protected override void OnStateChanged(EventArgs e)
+        {
+            base.OnStateChanged(e);
+            if (WindowState == WindowState.Minimized && AppSettings.Instance.MinimizeToTray)
+            {
+                Hide();
+            }
+        }
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            if (AppSettings.Instance.MinimizeToTray && !_isExplicitExit)
+            {
+                e.Cancel = true;
+                Hide();
+                return;
+            }
+            if (_notifyIcon != null) { _notifyIcon.Visible = false; _notifyIcon.Dispose(); _notifyIcon = null; }
             try { ViewModel.Shutdown(); } catch { }
+            try { if (_unsavedLoginTimer != null) _unsavedLoginTimer.Stop(); } catch { }
             SaveWindowPlacement();
             AppSettings.SaveSettings();
             base.OnClosing(e);
+        }
+        public void UpdateTrayIconVisibility()
+        {
+            if (ViewModel == null) return;
+            var enableTray = AppSettings.Instance.MinimizeToTray;
+            if (enableTray)
+            {
+                if (_notifyIcon == null)
+                {
+                    _notifyIcon = new Forms.NotifyIcon
+                    {
+                        Text = "Epic Games Account Switcher",
+                        Visible = true
+                    };
+                    try
+                    {
+                        Drawing.Icon appIcon = null;
+                        try
+                        {
+                            var uri = new Uri("pack://application:,,,/Application_Icons/Epic-Games_Account_Switcher.ico", UriKind.RelativeOrAbsolute);
+                            var resInfo = Application.GetResourceStream(uri);
+                            if (resInfo != null && resInfo.Stream != null) appIcon = new Drawing.Icon(resInfo.Stream);
+                        }
+                        catch { }
+
+                        if (appIcon == null)
+                        {
+                            var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Application_Icons", "Epic-Games_Account_Switcher.ico");
+                            if (File.Exists(iconPath)) appIcon = new Drawing.Icon(iconPath);
+                        }
+
+                        if (appIcon == null)
+                        {
+                            var exePath = Process.GetCurrentProcess().MainModule?.FileName ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+                            if (File.Exists(exePath)) appIcon = Drawing.Icon.ExtractAssociatedIcon(exePath);
+                        }
+
+                        _notifyIcon.Icon = appIcon ?? Drawing.SystemIcons.Application;
+                    }
+                    catch { _notifyIcon.Icon = Drawing.SystemIcons.Application; }
+
+                    _notifyIcon.DoubleClick += (s, e) => RestoreFromTray();
+                    _notifyIcon.MouseClick += (s, e) => { if (e.Button == Forms.MouseButtons.Left) RestoreFromTray(); };
+                }
+                _notifyIcon.Visible = true;
+                UpdateTrayContextMenu();
+            }
+            else
+            {
+                if (_notifyIcon != null)
+                {
+                    _notifyIcon.Visible = false;
+                    _notifyIcon.Dispose();
+                    _notifyIcon = null;
+                }
+            }
+        }
+        public void UpdateTrayContextMenu()
+        {
+            if (_notifyIcon == null || ViewModel == null) return;
+            var menu = new Forms.ContextMenuStrip();
+            var header = new Forms.ToolStripMenuItem("--- Fast Switcher ---") { Enabled = false };
+            menu.Items.Add(header);
+            menu.Items.Add(new Forms.ToolStripSeparator());
+
+            foreach (var acc in ViewModel.Accounts)
+            {
+                var itemText = acc.Name;
+                if (acc.IsActive) itemText += " (Active)";
+                var item = new Forms.ToolStripMenuItem(itemText) { Enabled = !acc.IsActive };
+                item.Click += (s, e) =>
+                {
+                    if (ViewModel.IsBusy)
+                    {
+                        ViewModel.ShowToast("Cannot switch while an operation is running.");
+                        return;
+                    }
+                    if (ViewModel.SwitchCommand.CanExecute(acc))
+                    {
+                        ViewModel.SwitchCommand.Execute(acc);
+                    }
+                    UpdateTrayContextMenu();
+                };
+                menu.Items.Add(item);
+            }
+
+            if (ViewModel.Accounts.Count == 0)
+            {
+                menu.Items.Add(new Forms.ToolStripMenuItem("No accounts saved") { Enabled = false });
+            }
+
+            menu.Items.Add(new Forms.ToolStripSeparator());
+            var dashboardItem = new Forms.ToolStripMenuItem("Open Dashboard");
+            dashboardItem.Click += (s, e) => RestoreFromTray();
+            menu.Items.Add(dashboardItem);
+
+            var exitItem = new Forms.ToolStripMenuItem("Exit");
+            exitItem.Click += (s, e) =>
+            {
+                _isExplicitExit = true;
+                Close();
+            };
+            menu.Items.Add(exitItem);
+
+            var oldMenu = _notifyIcon.ContextMenuStrip;
+            _notifyIcon.ContextMenuStrip = menu;
+            if (oldMenu != null) oldMenu.Dispose();
+        }
+        private void RestoreFromTray()
+        {
+            Show();
+            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            Activate();
+            Focus();
         }
 
         private bool ApplySavedWindowPlacement(AppSettings settings)
         {
             if (settings == null || settings.WindowWidth <= 0 || settings.WindowHeight <= 0) return false;
-
-            var savedScreen = Forms.Screen.AllScreens.FirstOrDefault(s => string.Equals(s.DeviceName, settings.WindowMonitorDeviceName, StringComparison.OrdinalIgnoreCase));
-            var screen = savedScreen ?? Forms.Screen.FromRectangle(new Drawing.Rectangle(settings.WindowLeft, settings.WindowTop, settings.WindowWidth, settings.WindowHeight));
-            if (screen == null) return false;
-
-            var work = screen.WorkingArea;
-            var width = Math.Max(settings.WindowWidth, 700);
-            var height = Math.Max(settings.WindowHeight, 450);
-            if (work.Width > 0) width = Math.Min(width, work.Width);
-            if (work.Height > 0) height = Math.Min(height, work.Height);
-            var left = settings.WindowLeft;
-            var top = settings.WindowTop;
-
-            if (savedScreen != null && settings.WindowRelativeLeft >= 0 && settings.WindowRelativeTop >= 0)
+            try
             {
-                left = work.Left + settings.WindowRelativeLeft;
-                top = work.Top + settings.WindowRelativeTop;
+                var width = Math.Max(settings.WindowWidth, 700);
+                var height = Math.Max(settings.WindowHeight, 450);
+                var left = settings.WindowLeft;
+                var top = settings.WindowTop;
+                if (left == -1 || top == -1) return false;
+
+                var testRect = new Drawing.Rectangle((int)left, (int)top, 100, 100);
+                var targetScreen = Forms.Screen.AllScreens.FirstOrDefault(s => s.WorkingArea.IntersectsWith(testRect));
+                if (targetScreen == null)
+                {
+                    settings.WindowLeft = -1;
+                    settings.WindowTop = -1;
+                    AppSettings.SaveSettings();
+                    return false;
+                }
+
+                var work = targetScreen.WorkingArea;
+                if (work.Width > 0) width = Math.Min(width, work.Width);
+                if (work.Height > 0) height = Math.Min(height, work.Height);
+
+                Width = width;
+                Height = height;
+                Left = Clamp(left, work.Left, Math.Max(work.Left, work.Right - (int)width));
+                Top = Clamp(top, work.Top, Math.Max(work.Top, work.Bottom - (int)height));
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                return true;
             }
-
-            if (left == -1 || top == -1) return false;
-
-            Width = width;
-            Height = height;
-            Left = Clamp(left, work.Left, work.Right - width);
-            Top = Clamp(top, work.Top, work.Bottom - height);
-            WindowStartupLocation = WindowStartupLocation.Manual;
-            return true;
+            catch { return false; }
         }
 
         private void SaveWindowPlacement()
@@ -111,6 +280,30 @@ namespace Epic_Games_Account_Switcher_Client
         }
         private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
         private void Close_Click(object sender, RoutedEventArgs e) => Close();
+        private void ShowLogs_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var logPath = Globals.GetLogPath();
+                var logDir = Path.GetDirectoryName(logPath);
+                if (!string.IsNullOrWhiteSpace(logDir) && !Directory.Exists(logDir)) Directory.CreateDirectory(logDir);
+                if (!File.Exists(logPath)) File.WriteAllText(logPath, "");
+
+                try
+                {
+                    Process.Start(new ProcessStartInfo { FileName = logPath, UseShellExecute = true });
+                }
+                catch
+                {
+                    Process.Start(new ProcessStartInfo { FileName = "notepad.exe", Arguments = "\"" + logPath + "\"", UseShellExecute = false });
+                }
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("Failed to open log file from dashboard", ex);
+                new CustomMessageBox("Log File Unavailable", "The log file could not be opened:\n\n" + ex.Message, MessageBoxVisualStyle.Error).ShowDialog();
+            }
+        }
         private void AccountsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (_isDragInProgress) return;
@@ -148,6 +341,7 @@ namespace Epic_Games_Account_Switcher_Client
             finally
             {
                 if (dragSourceContainer != null) dragSourceContainer.Opacity = 1.0;
+                ClearDropPreview();
                 _draggedAccount = null;
                 _draggedContainer = null;
                 _lastPreviewIndex = -1;
@@ -164,24 +358,23 @@ namespace Epic_Games_Account_Switcher_Client
             var pointer = e.GetPosition(AccountsList);
             var targetIndex = GetClosestAccountIndex(pointer);
             MoveAccountPreview(dragged, targetIndex);
+            SetDropPreview(targetIndex);
             _lastPreviewMoveAt = now;
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
+        }
+        private void AccountsList_DragLeave(object sender, DragEventArgs e)
+        {
+            ClearDropPreview();
         }
         private void AccountsList_Drop(object sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(typeof(Account))) { e.Handled = true; return; }
             if (_didPreviewReorder)
             {
-                var currentOrder = ViewModel.Accounts.ToList();
-                bool orderChanged = false;
-                if (currentOrder.Count != _orderBeforeDrag.Count) orderChanged = true;
-                else
-                {
-                    for (int i = 0; i < currentOrder.Count; i++) { if (currentOrder[i].Id != _orderBeforeDrag[i].Id) { orderChanged = true; break; } }
-                }
-                if (orderChanged) { AccountService.SaveAccounts(currentOrder); ViewModel.ShowToast("Account order updated!"); }
+                ViewModel.CommitAccountOrderChange(_orderBeforeDrag);
             }
+            ClearDropPreview();
             e.Handled = true;
         }
         private void MoveAccountPreview(Account dragged, int toIndex)
@@ -196,6 +389,53 @@ namespace Epic_Games_Account_Switcher_Client
         {
             ViewModel.Accounts.Clear();
             foreach (var acc in _orderBeforeDrag) ViewModel.Accounts.Add(acc);
+        }
+        private void SetDropPreview(int targetIndex)
+        {
+            if (targetIndex < 0 || ViewModel == null || ViewModel.Accounts == null || targetIndex >= ViewModel.Accounts.Count)
+            {
+                ClearDropPreview();
+                return;
+            }
+
+            var account = ViewModel.Accounts[targetIndex];
+            var container = AccountsList.ItemContainerGenerator.ContainerFromItem(account) as ListBoxItem;
+            if (container == null || ReferenceEquals(container, _dropPreviewContainer)) return;
+
+            ClearDropPreview();
+            container.Tag = "DropTarget";
+            _dropPreviewContainer = container;
+        }
+        private void ClearDropPreview()
+        {
+            if (_dropPreviewContainer != null && string.Equals(_dropPreviewContainer.Tag as string, "DropTarget", StringComparison.Ordinal))
+            {
+                _dropPreviewContainer.ClearValue(FrameworkElement.TagProperty);
+            }
+            _dropPreviewContainer = null;
+        }
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control && ViewModel != null && ViewModel.UndoReorderCommand.CanExecute(null))
+            {
+                ViewModel.UndoReorderCommand.Execute(null);
+                e.Handled = true;
+            }
+        }
+        private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (e.Delta > 0)
+                {
+                    ViewModel?.ZoomInCommand?.Execute(null);
+                }
+                else if (e.Delta < 0)
+                {
+                    ViewModel?.ZoomOutCommand?.Execute(null);
+                }
+                e.Handled = true;
+            }
         }
         private int GetClosestAccountIndex(Point position)
         {
@@ -223,8 +463,7 @@ namespace Epic_Games_Account_Switcher_Client
         }
         private async Task<bool> ExecuteCapture(CaptureAccountWindow captureWin)
         {
-            ViewModel.IsBusy = true;
-            ViewModel.BusyStatus = "Capturing current login...";
+            var cancellationToken = ViewModel.BeginExternalBusyOperation("Capturing current login...");
             try
             {
                 var result = await AccountService.CaptureCurrentAccount(
@@ -241,12 +480,19 @@ namespace Epic_Games_Account_Switcher_Client
                             var r = new CustomMessageBox("Overwrite Account?", "Account '" + existingName + "' already exists for this Epic ID.\n\nDo you want to overwrite it with the current login data?", "Overwrite", "Cancel").ShowDialog();
                             return r == true;
                         })));
-                    }));
+                    }),
+                    false,
+                    cancellationToken);
                 if (result.Item1) { await ViewModel.LoadAccountsAsync(); ViewModel.ShowToast("Account captured successfully!"); return true; }
                 else if (result.Item2 != null) { new CustomMessageBox("Capture Failed", result.Item2, MessageBoxVisualStyle.Error).ShowDialog(); }
                 return false;
             }
-            finally { ViewModel.IsBusy = false; ViewModel.BusyStatus = ""; }
+            catch (OperationCanceledException)
+            {
+                ViewModel.ShowToast("Operation cancelled.");
+                return false;
+            }
+            finally { ViewModel.EndExternalBusyOperation(); }
         }
     }
     public class AnimatedWrapPanel : WrapPanel
@@ -301,20 +547,56 @@ namespace Epic_Games_Account_Switcher_Client
 
     public class ProfileImageConverter : IValueConverter
     {
+        private static BitmapSource _defaultAvatar;
+        private static BitmapSource GetDefaultAvatar()
+        {
+            if (_defaultAvatar != null) return _defaultAvatar;
+            try
+            {
+                int size = 128;
+                var dv = new DrawingVisual();
+                using (var dc = dv.RenderOpen())
+                {
+                    var gradient = new LinearGradientBrush(
+                        ((Color)ColorConverter.ConvertFromString("#1E293B")),
+                        ((Color)ColorConverter.ConvertFromString("#0F172A")),
+                        new Point(0, 0), new Point(1, 1));
+                    dc.DrawRoundedRectangle(gradient, new Pen(((Brush)new BrushConverter().ConvertFromString("#3B82F6")), 2), new Rect(0, 0, size, size), 64, 64);
+
+                    var iconBrush = ((Brush)new BrushConverter().ConvertFromString("#94A3B8"));
+                    dc.DrawEllipse(iconBrush, null, new Point(64, 46), 20, 20);
+                    
+                    var geom = new StreamGeometry();
+                    using (var ctx = geom.Open())
+                    {
+                        ctx.BeginFigure(new Point(24, 104), true, true);
+                        ctx.ArcTo(new Point(104, 104), new Size(40, 45), 0, false, SweepDirection.Clockwise, true, false);
+                    }
+                    dc.DrawGeometry(iconBrush, null, geom);
+                }
+                var bmp = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+                bmp.Render(dv);
+                bmp.Freeze();
+                _defaultAvatar = bmp;
+                return _defaultAvatar;
+            }
+            catch { return null; }
+        }
+
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
             var path = value as string;
-            if (string.IsNullOrWhiteSpace(path)) return null;
+            if (string.IsNullOrWhiteSpace(path)) return GetDefaultAvatar();
 
             try
             {
                 var fullPath = Path.GetFullPath(path);
-                if (!File.Exists(fullPath)) return null;
+                if (!File.Exists(fullPath)) return GetDefaultAvatar();
 
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                bitmap.CreateOptions = BitmapCreateOptions.None;
                 bitmap.UriSource = new Uri(fullPath, UriKind.Absolute);
                 bitmap.EndInit();
                 bitmap.Freeze();
@@ -322,7 +604,7 @@ namespace Epic_Games_Account_Switcher_Client
             }
             catch
             {
-                return null;
+                return GetDefaultAvatar();
             }
         }
 

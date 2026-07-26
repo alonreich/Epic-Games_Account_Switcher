@@ -3,6 +3,7 @@
 [Oo]bj/
 [Pp]ublish/
 [Cc]ompiled/
+[Pp]ayload/
 Payload.zip
 SingleFilePacker/Payload.zip
 *.exe

@@ -46,50 +46,6 @@ namespace Epic_Games_Account_Switcher_Globals
         public static extern bool GlobalUnlock(IntPtr hMem);
     }
 
-    public static class WindowsClipboard
-    {
-        public static void SetText(string text)
-        {
-            if (text == null) return;
-            OpenClipboard();
-            NativeMethods.EmptyClipboard();
-            IntPtr hGlobal = default;
-            try
-            {
-                var bytes = (text.Length + 1) * 2;
-                hGlobal = Marshal.AllocHGlobal(bytes);
-                if (hGlobal == default) throw new Win32Exception(Marshal.GetLastWin32Error());
-                var target = NativeMethods.GlobalLock(hGlobal);
-                if (target == default) throw new Win32Exception(Marshal.GetLastWin32Error());
-                try { Marshal.Copy(text.ToCharArray(), 0, target, text.Length); }
-                finally { NativeMethods.GlobalUnlock(target); }
-                if (NativeMethods.SetClipboardData(13, hGlobal) == default) throw new Win32Exception(Marshal.GetLastWin32Error());
-                hGlobal = default;
-            }
-            finally { if (hGlobal != default) Marshal.FreeHGlobal(hGlobal); NativeMethods.CloseClipboard(); }
-        }
-
-        public static void OpenClipboard()
-        {
-            var num = 10;
-            while (true)
-            {
-                if (NativeMethods.OpenClipboard(default)) break;
-                if (--num == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
-                Thread.Sleep(100);
-            }
-        }
-    }
-
-    public class EventForwarder
-    {
-        readonly IntPtr _target;
-        public EventForwarder(IntPtr target) { _target = target; }
-        public void MouseDownDrag() { NativeMethods.ReleaseCapture(); NativeMethods.SendMessage(_target, 0xA1, 0x2, 0); }
-        public void MouseResizeDrag(int wParam) { if (wParam == 0) return; NativeMethods.ReleaseCapture(); NativeMethods.SendMessage(_target, 0xA1, wParam, 0); }
-        public void WindowAction(int action) { NativeMethods.ReleaseCapture(); if (action != 0x0010) NativeMethods.SendMessage(_target, 0x112, action, 0); else NativeMethods.SendMessage(_target, 0x0010, 0, 0); }
-    }
-
     public static class NativeFuncs
     {
         [DllImport("user32.dll")]
@@ -97,18 +53,25 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public static bool BringToFront()
         {
-            var cur = Process.GetCurrentProcess();
-            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Epic-Games_Account_Switcher").ToLower();
-            var target = Process.GetProcessesByName("Epic-Games_Account_Switcher").FirstOrDefault(p => p.Id != cur.Id && !string.IsNullOrEmpty(p.MainModule?.FileName) && p.MainModule.FileName.ToLower().StartsWith(dir));
-            if (target == null || target.MainWindowHandle == IntPtr.Zero) return false;
-            var hwnd = target.MainWindowHandle;
-            ShowWindowAsync(hwnd, 5);
-            ShowWindowAsync(hwnd, 9);
-            NativeMethods.SetForegroundWindow(hwnd);
-            return true;
+            using (var cur = Process.GetCurrentProcess())
+            {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Epic-Games_Account_Switcher").ToLower();
+                var procs = Process.GetProcessesByName("Epic-Games_Account_Switcher");
+                try
+                {
+                    var target = procs.FirstOrDefault(p => p.Id != cur.Id && !string.IsNullOrEmpty(p.MainModule?.FileName) && p.MainModule.FileName.ToLower().StartsWith(dir));
+                    if (target == null || target.MainWindowHandle == IntPtr.Zero) return false;
+                    var hwnd = target.MainWindowHandle;
+                    ShowWindowAsync(hwnd, 5);
+                    ShowWindowAsync(hwnd, 9);
+                    NativeMethods.SetForegroundWindow(hwnd);
+                    return true;
+                }
+                finally
+                {
+                    foreach (var p in procs) try { p.Dispose(); } catch { }
+                }
+            }
         }
-
-        public static void HideWindow(IntPtr handle) { NativeMethods.SetWindowLong(handle, -20, (NativeMethods.GetWindowLong(handle, -20) | 0x00000080) & ~0x00040000); }
-        public static void ShowWindow(IntPtr handle) { NativeMethods.SetWindowLong(handle, -20, (NativeMethods.GetWindowLong(handle, -20) ^ 0x00000080) | 0x00040000); }
     }
 }
