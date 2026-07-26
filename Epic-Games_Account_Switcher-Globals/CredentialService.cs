@@ -31,6 +31,8 @@ namespace Epic_Games_Account_Switcher_Globals
             public byte[] Blob { get; set; }
             public uint Persist { get; set; }
             public uint Type { get; set; }
+            public string AccountId { get; set; }
+            public DateTime CapturedAtUtc { get; set; }
         }
 
         [DllImport("Advapi32.dll", EntryPoint = "CredWriteW", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -45,9 +47,10 @@ namespace Epic_Games_Account_Switcher_Globals
         [DllImport("Advapi32.dll", EntryPoint = "CredFree", SetLastError = true)]
         private static extern void CredFree(IntPtr buffer);
 
-        private static readonly string[] CredentialNeedles = { "eos", "epic", "com.epicgames", "epicgameslauncher", "fortnite" };
+        private static readonly string[] CredentialNeedles = { "com.epicgames.", "epicgameslauncher", "epiconlineservices", "eosuserhelper", "eosoverlay" };
+        private static readonly string[] CredentialPrefixes = { "com.epicgames.", "epicgameslauncher", "epic-online-services" };
 
-        public static List<SavedCredential> CaptureCredentials()
+        public static List<SavedCredential> CaptureCredentials(string accountId = null)
         {
             var results = new List<SavedCredential>();
             Globals.WriteToLog("[CRED] Starting credential capture...");
@@ -61,7 +64,9 @@ namespace Epic_Games_Account_Switcher_Globals
                         UserName = cred.UserName,
                         Persist = cred.Persist,
                         Type = cred.Type,
-                        Blob = new byte[cred.CredentialBlobSize]
+                        Blob = new byte[cred.CredentialBlobSize],
+                        AccountId = accountId,
+                        CapturedAtUtc = DateTime.UtcNow
                     };
                     if (cred.CredentialBlob != IntPtr.Zero && cred.CredentialBlobSize > 0) Marshal.Copy(cred.CredentialBlob, saved.Blob, 0, (int)cred.CredentialBlobSize);
                     if (!results.Any(r => string.Equals(r.TargetName, saved.TargetName, StringComparison.OrdinalIgnoreCase))) results.Add(saved);
@@ -76,25 +81,31 @@ namespace Epic_Games_Account_Switcher_Globals
             return results;
         }
 
-        public static bool DeleteCredentials()
+        public static bool DeleteCredentials(IEnumerable<SavedCredential> scope = null)
         {
             Globals.WriteToLog("[CRED] Deleting current credentials...");
             var success = true;
             var deletedCount = 0;
+
+            if (scope != null)
+            {
+                foreach (var saved in scope.Where(c => c != null && !string.IsNullOrWhiteSpace(c.TargetName))
+                    .GroupBy(c => (c.TargetName ?? "").ToLowerInvariant() + "|" + c.Type)
+                    .Select(g => g.First()))
+                {
+                    if (DeleteCredential(saved.TargetName, saved.Type)) deletedCount++;
+                    else success = false;
+                }
+                Globals.WriteToLog("[CRED] Deleted " + deletedCount + " scoped credentials.");
+                return success;
+            }
+
             ForEachEpicCredential(cred =>
             {
                 try
                 {
-                    if (CredDelete(cred.TargetName, cred.Type, 0)) deletedCount++;
-                    else
-                    {
-                        var err = Marshal.GetLastWin32Error();
-                        if (err != 1168)
-                        {
-                            success = false;
-                            Globals.WriteToLog("[CRED] Failed to delete credential. Error: " + err);
-                        }
-                    }
+                    if (DeleteCredential(cred.TargetName, cred.Type)) deletedCount++;
+                    else success = false;
                 }
                 catch (Exception ex)
                 {
@@ -105,6 +116,18 @@ namespace Epic_Games_Account_Switcher_Globals
             });
             Globals.WriteToLog("[CRED] Deleted " + deletedCount + " credentials.");
             return success;
+        }
+
+        private static bool DeleteCredential(string targetName, uint type)
+        {
+            if (string.IsNullOrWhiteSpace(targetName)) return true;
+            if (CredDelete(targetName, type, 0)) return true;
+
+            var err = Marshal.GetLastWin32Error();
+            if (err == 1168) return true;
+
+            Globals.WriteToLog("[CRED] Failed to delete credential " + targetName + ". Error: " + err);
+            return false;
         }
 
         public static bool RestoreCredentials(List<SavedCredential> savedList)
@@ -188,7 +211,8 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             if (string.IsNullOrWhiteSpace(targetName)) return false;
             var n = targetName.ToLowerInvariant();
-            return CredentialNeedles.Any(needle => n.Contains(needle));
+            return CredentialNeedles.Any(needle => n.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                   CredentialPrefixes.Any(prefix => n.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

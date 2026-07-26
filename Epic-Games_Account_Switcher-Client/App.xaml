@@ -8,9 +8,7 @@
         <local:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <local:InverseBooleanToEnabledConverter x:Key="InverseBooleanToEnabledConverter" />
         <SolidColorBrush x:Key="HeaderbarBackground" Color="#14151E" />
-        <SolidColorBrush x:Key="HeaderbarForeground" Color="White" />
         <SolidColorBrush x:Key="MainBackground" Color="#1F2335" />
-        <SolidColorBrush x:Key="MessageForeground" Color="White" />
         <SolidColorBrush x:Key="IconFill" Color="#7AA2F7" />
         <SolidColorBrush x:Key="BtnBackground" Color="#363952" />
         <SolidColorBrush x:Key="BtnBackgroundHover" Color="#414868" />
@@ -18,39 +16,55 @@
         <SolidColorBrush x:Key="BtnForeground" Color="White" />
         <SolidColorBrush x:Key="BtnBorder" Color="#414868" />
         <SolidColorBrush x:Key="BtnBorderHover" Color="#7AA2F7" />
-        <SolidColorBrush x:Key="BtnBorderActive" Color="#7AA2F7" />
         <SolidColorBrush x:Key="MinBackground" Color="Transparent" />
         <SolidColorBrush x:Key="MinBackgroundHover" Color="#2D2D30" />
         <SolidColorBrush x:Key="MinBackgroundActive" Color="#3E3E42" />
         <SolidColorBrush x:Key="CloseBackgroundHover" Color="#E81123" />
         <SolidColorBrush x:Key="CloseBackgroundActive" Color="#8B0A14" />
+        <SolidColorBrush x:Key="CardBackground" Color="#292E42" />
+        <SolidColorBrush x:Key="CardHoverBackground" Color="#3B4261" />
+        <SolidColorBrush x:Key="CardActiveBorder" Color="#CCCC00" />
+        <SolidColorBrush x:Key="ActiveIndicatorActive" Color="#BB9AF7" />
+        <SolidColorBrush x:Key="ActiveIndicatorInactive" Color="#4A4A4A" />
+        <SolidColorBrush x:Key="SubTextForeground" Color="#A9B1D6" />
+        <SolidColorBrush x:Key="AccentTextForeground" Color="#66B2FF" />
+        <SolidColorBrush x:Key="WarningForeground" Color="#F7768E" />
+        <SolidColorBrush x:Key="SuccessBackground" Color="#9ECE6A" />
+        <SolidColorBrush x:Key="OverlayBackground" Color="#AA16161E" />
+        <SolidColorBrush x:Key="DialogBottomBackground" Color="#16161E" />
+        <SolidColorBrush x:Key="InputTextHint" Color="#9AA5CE" />
 
-
-        
         <Style x:Key="BtnClose" TargetType="Button">
-			<Setter Property="OverridesDefaultStyle" Value="True" />
-			<Setter Property="Cursor" Value="Hand" />
-			<Setter Property="Foreground" Value="White" />
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="White" />
             <Setter Property="Background" Value="{DynamicResource MinBackground}" />
-			<Setter Property="Template">
-				<Setter.Value>
-					<ControlTemplate TargetType="Button">
-						<Border Name="border" BorderThickness="0" BorderBrush="White" Background="{TemplateBinding Background}">
-							<ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-						</Border>
-						<ControlTemplate.Triggers>
-							<Trigger Property="IsMouseOver" Value="True">
-								<Setter Property="Foreground" Value="White"></Setter>
-                                <Setter Property="Background" Value="{DynamicResource CloseBackgroundHover}"></Setter>
-							</Trigger>
-							<Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource CloseBackgroundActive}"></Setter>
-							</Trigger>
-						</ControlTemplate.Triggers>
-					</ControlTemplate>
-				</Setter.Value>
-			</Setter>
-		</Style>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Name="border" BorderThickness="1" BorderBrush="Transparent" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter Property="Background" Value="{DynamicResource CloseBackgroundHover}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource CloseBackgroundActive}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource WarningForeground}" />
+                                <Setter TargetName="border" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <Style x:Key="BtnMin" TargetType="Button">
             <Setter Property="OverridesDefaultStyle" Value="True" />
@@ -60,15 +74,22 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Name="border" BorderThickness="0" BorderBrush="White" Background="{TemplateBinding Background}">
+                        <Border Name="border" BorderThickness="1" BorderBrush="Transparent" Background="{TemplateBinding Background}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource MinBackgroundHover}"></Setter>
+                                <Setter Property="Background" Value="{DynamicResource MinBackgroundHover}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource MinBackgroundActive}"></Setter>
+                                <Setter Property="Background" Value="{DynamicResource MinBackgroundActive}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource IconFill}" />
+                                <Setter TargetName="border" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -98,41 +119,145 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <Style x:Key="WindowResizeGrab" TargetType="Canvas">
-			<Style.Triggers>
-				<Trigger Property="IsMouseOver" Value="True">
-					<Setter Property="Cursor" Value="Hand"/>
-				</Trigger>
-			</Style.Triggers>
-		</Style>
-
-        
         <Style x:Key="OkButton" TargetType="Button">
-	        <Setter Property="OverridesDefaultStyle" Value="True" />
-	        <Setter Property="Cursor" Value="Hand" />
-	        <Setter Property="Padding" Value="70px 8px"/>
-            <Setter Property="Background" Value="{DynamicResource BtnBackground}"/>
-            <Setter Property="Foreground" Value="{DynamicResource BtnForeground}"></Setter>
-	        <Setter Property="HorizontalAlignment" Value="Right"/>
-	        <Setter Property="Template">
-		        <Setter.Value>
-			        <ControlTemplate TargetType="Button">
-                        <Border Name="border" Padding="70px 8px" BorderThickness="1" BorderBrush="{DynamicResource BtnBorder}" Background="{TemplateBinding Background}">
-					        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Padding" Value="40,8"/>
+            <Setter Property="Background" Value="{DynamicResource IconFill}"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Name="border" Padding="{TemplateBinding Padding}" CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource BtnBorder}" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource BtnBackgroundHover}"></Setter>
-                                <Setter Property="BorderBrush" Value="{DynamicResource BtnBorderHover}"></Setter>
+                                <Setter Property="Opacity" Value="0.85" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource BtnBackgroundActive}"></Setter>
-                                <Setter Property="BorderBrush" Value="{DynamicResource BtnBorderActive}"></Setter>
+                                <Setter Property="Opacity" Value="0.75" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="White" />
+                                <Setter TargetName="border" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
-	        </Setter>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Padding" Value="40,8"/>
+            <Setter Property="Background" Value="{DynamicResource BtnBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource BtnForeground}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Name="border" Padding="{TemplateBinding Padding}" CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource BtnBorder}" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource BtnBackgroundHover}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource BtnBorderHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource BtnBackgroundActive}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource IconFill}"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CancelButton" TargetType="Button">
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Padding" Value="35,8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource WarningForeground}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Name="border" Padding="{TemplateBinding Padding}" CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource WarningForeground}" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#22F7768E"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#44F7768E"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="WatermarkTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource BtnBackgroundActive}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BtnBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="CaretBrush" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="border" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" CornerRadius="4">
+                            <Grid>
+                                <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                <TextBlock x:Name="WatermarkText" Text="{TemplateBinding Tag}" Foreground="{DynamicResource InputTextHint}" Padding="14,12" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" IsHitTestVisible="False" FontStyle="Italic" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter TargetName="WatermarkText" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource BtnBorderHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource IconFill}"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 	</Application.Resources>
 </Application>

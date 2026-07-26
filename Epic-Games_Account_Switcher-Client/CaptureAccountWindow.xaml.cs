@@ -8,35 +8,62 @@ using Epic_Games_Account_Switcher_Globals;
 
 namespace Epic_Games_Account_Switcher_Client
 {
-    public partial class CaptureAccountWindow : Window
+    public partial class CaptureAccountWindow : Window, System.ComponentModel.INotifyPropertyChanged, System.ComponentModel.IDataErrorInfo
     {
-        public string AccountName { get; set; }
-        public string AccountDescription { get; set; }
-        public string AccountEmail { get; set; }
+        private string _accountName;
+        public string AccountName
+        {
+            get => _accountName;
+            set { _accountName = value; OnPropertyChanged(nameof(AccountName)); }
+        }
+
+        private string _accountDescription;
+        public string AccountDescription
+        {
+            get => _accountDescription;
+            set { _accountDescription = value; OnPropertyChanged(nameof(AccountDescription)); }
+        }
+
+        private string _accountEmail;
+        public string AccountEmail
+        {
+            get => _accountEmail;
+            set { _accountEmail = value; OnPropertyChanged(nameof(AccountEmail)); }
+        }
+
         public string AccountPassword { get; set; }
         public string ProfileImagePath { get; set; }
         private string _targetAccountId;
+        private bool _enforceStrictRequiredFields;
+        public string EmailLabel => _enforceStrictRequiredFields ? "Connected Email *" : "Connected Email";
 
         public CaptureAccountWindow(string name, string desc, string email, string image, string pass, string targetId = null, bool enforceStrictRequiredFields = false, bool blankIdentityInputs = false)
         {
             InitializeComponent();
-            AccountName = name;
+            _targetAccountId = targetId;
+            _enforceStrictRequiredFields = enforceStrictRequiredFields;
+            AccountName = blankIdentityInputs ? "" : NormalizeDetectedField(name);
             AccountDescription = desc;
-            AccountEmail = email;
+            AccountEmail = blankIdentityInputs ? "" : NormalizeDetectedField(email);
             ProfileImagePath = image;
             AccountPassword = pass;
-            _targetAccountId = targetId;
 
-            AccountNameInput.Text = blankIdentityInputs ? "" : name;
-            AccountEmailInput.Text = blankIdentityInputs ? "" : email;
-            AccountDescriptionInput.Text = desc;
             AccountPasswordInput.Password = pass;
             SetProfilePreview(ProfileImagePath);
+            DataContext = this;
         }
+
+        private static string NormalizeDetectedField(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "";
+            var trimmed = value.Trim();
+            return string.Equals(trimmed, "N/A", StringComparison.OrdinalIgnoreCase) ? "" : trimmed;
+        }
+
         private void SelectImage_Click(object sender, RoutedEventArgs e)
         {
             var win = new SkinPickerWindow { Owner = this };
-            if (win.ShowDialog() == true) { ProfileImagePath = win.SelectedSkinPath; SetProfilePreview(ProfileImagePath); }
+            if (win.ShowDialog() == true) { ProfileImagePath = win.SelectedSkinPath; OnPropertyChanged(nameof(ProfileImagePath)); SetProfilePreview(ProfileImagePath); }
         }
 
         private void SetProfilePreview(string path)
@@ -50,7 +77,7 @@ namespace Epic_Games_Account_Switcher_Client
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                bitmap.CreateOptions = BitmapCreateOptions.None;
                 bitmap.UriSource = new Uri(fullPath, UriKind.Absolute);
                 bitmap.EndInit();
                 bitmap.Freeze();
@@ -59,31 +86,55 @@ namespace Epic_Games_Account_Switcher_Client
             catch { }
         }
 
+        public string Error => null;
+        public string this[string columnName]
+        {
+            get
+            {
+                if (columnName == nameof(AccountName))
+                {
+                    if (string.IsNullOrWhiteSpace(AccountName)) return "Account Name is required.";
+                    var other = AccountService.GetAccounts().Where(a => a.Id != _targetAccountId);
+                    if (other.Any(a => string.Equals(a.Name, AccountName, StringComparison.OrdinalIgnoreCase)))
+                        return "An account with this friendly name already exists.";
+                }
+                else if (columnName == nameof(AccountEmail))
+                {
+                    if (_enforceStrictRequiredFields && string.IsNullOrWhiteSpace(AccountEmail)) return "Connected Email is required.";
+                    if (!string.IsNullOrWhiteSpace(AccountEmail))
+                    {
+                        var other = AccountService.GetAccounts().Where(a => a.Id != _targetAccountId);
+                        if (other.Any(a => string.Equals(a.Email, AccountEmail, StringComparison.OrdinalIgnoreCase)))
+                            return "An account with this email address is already captured.";
+                    }
+                }
+                return null;
+            }
+        }
+
+        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+        protected virtual void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
+
         private void Capture_Click(object sender, RoutedEventArgs e)
         {
-            var newName = AccountNameInput.Text;
-            var newEmail = AccountEmailInput.Text;
+            AccountNameInput.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+            AccountEmailInput.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+            AccountDescriptionInput.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+            AccountName = (AccountName ?? "").Trim();
+            AccountEmail = (AccountEmail ?? "").Trim();
 
-            if (string.IsNullOrWhiteSpace(newName)) { new CustomMessageBox("Input Error", "Account Name is required.").ShowDialog(); return; }
-
-            var existingAccounts = AccountService.GetAccounts();
-            var otherAccounts = existingAccounts.Where(a => a.Id != _targetAccountId).ToList();
-
-            if (otherAccounts.Any(a => string.Equals(a.Name, newName, StringComparison.OrdinalIgnoreCase)))
+            if (!string.IsNullOrEmpty(this[nameof(AccountName)]))
             {
-                new CustomMessageBox("Duplicate Name", "An account with this friendly name already exists. Please choose a unique name.", MessageBoxVisualStyle.Error).ShowDialog();
+                new CustomMessageBox("Input Error", this[nameof(AccountName)], MessageBoxVisualStyle.Error).ShowDialog();
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(newEmail) && otherAccounts.Any(a => string.Equals(a.Email, newEmail, StringComparison.OrdinalIgnoreCase)))
+            if (!string.IsNullOrEmpty(this[nameof(AccountEmail)]))
             {
-                new CustomMessageBox("Duplicate Email", "An account with this email address is already captured. Please use a unique email.", MessageBoxVisualStyle.Error).ShowDialog();
+                new CustomMessageBox("Input Error", this[nameof(AccountEmail)], MessageBoxVisualStyle.Error).ShowDialog();
                 return;
             }
 
-            AccountName = newName;
-            AccountEmail = newEmail;
-            AccountDescription = AccountDescriptionInput.Text;
             AccountPassword = AccountPasswordInput.Password;
             DialogResult = true;
             Close();

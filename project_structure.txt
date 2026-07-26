@@ -4,10 +4,10 @@
 Epic Games Account Switcher is a high-performance, atomic session manager for the Epic Games Launcher. It achieves "Zero-UI" authentication by performing surgical injections of session tokens, web cache state, and registry identifiers, bypassing all login and 2FA prompts.
 
 ## 2) PROJECT STATUS (2026-04-27)
-- **Stability**: Build pipeline is 100% stabilized with intelligent pre-flight checks in `Build.cmd`.
-- **Architecture**: Atomic directory swapping implemented in `AccountService.cs` to prevent session corruption.
-- **Hygiene**: Dead code (including legacy CV-based AutoLogin) has been purged. Redundant path logic consolidated into class properties.
-- **Verification**: Session validity (OAuth expiration) is verified before restoration to guarantee success.
+- **Stability**: Build pipeline is 100% stabilized with intelligent pre-flight checks in `Build.cmd`. Shell installations and uninstalls leverage multi-layered directory probing to support OneDrive Known Folder Move (KFM) and GPO folder redirections across Desktop and Start Menu paths.
+- **Architecture**: Atomic directory swapping implemented in `AccountService.cs` to prevent session corruption. Backup cipher encryption and decryption utilize memory-efficient streaming (`CryptoStream`, `BoundedStream`) while maintaining full backward and forward archive compatibility.
+- **Hygiene**: Dead code (including legacy CV-based AutoLogin) has been purged. Redundant path logic consolidated into class properties. All DPAPI encryption operations, registry modifications, and live Epic log extraction routines implement robust rollback, retry loops, and shadow copy-on-read fallback mechanics without silent crashes or resource handle leaks.
+- **Verification**: Session validity (OAuth expiration) is verified before restoration to guarantee success. UI converters programmatically provide dark-mode avatar fallbacks for corrupted images and validate window display bounding against active monitor virtual working areas on boot.
 
 ## 3) AI AGENT MINIMAP (NAVIGATION & PURPOSE)
 | Path | Purpose / Role |
@@ -15,29 +15,31 @@ Epic Games Account Switcher is a high-performance, atomic session manager for th
 | `.\Build.cmd` | Main build entry point. Handles cleaning, publishing, and resource packing with 10s timeouts. |
 | `.\project_structure.txt` | This guide. Root reference for project goals and navigation. |
 | `Epic-Games_Account_Switcher-Client\` | **WPF UI Layer**. Orchestrates user interactions and visual state. |
-| `  - App.xaml.cs` | App lifecycle, smart upgrade/uninstall logic, and single-instance mutex. |
-| `  - MainViewModel.cs` | Brain of the UI. Manages background monitoring and command routing. |
-| `  - MainWindow.xaml` | Primary dashboard. Contains the account card grid and reordering logic. |
+| `  - App.xaml.cs` | App lifecycle, smart upgrade/uninstall logic, multi-layered Desktop/Start Menu shortcut probing, staged script command execution, and single-instance mutex. |
+| `  - MainViewModel.cs` | Brain of the UI. Manages background monitoring, command routing, and persisted proportional zoom scale state (`ZoomFactor`). |
+| `  - MainWindow.xaml` | Primary dashboard. Contains account card grid, programmatic fallback profile avatar rendering (`ProfileImageConverter`), reordering logic, layout scaling engine (`LayoutTransform`), centered bottom action bar zoom controls, and system tray minimize option toggle. |
+| `  - MainWindow.xaml.cs` | Window procedural logic. Implements active monitor off-screen window display recovery, `Ctrl + MouseWheel` proportional UI zoom interception, and multi-stage system tray icon resolution from embedded executable resources. |
 | `  - CustomMessageBox.xaml` | Mandated UI for all user notifications. Styles match the app theme. |
 | `  - CaptureAccountWindow.xaml` | Wizard for adding new accounts or editing existing profile metadata. |
 | `Epic-Games_Account_Switcher-Globals\` | **Core Logic Layer**. Platform-agnostic session engine. |
-| `  - AccountService.cs` | **Critical Engine**. Handles atomic directory moves and deep session clones. |
-| `  - AccountModel.cs` | Definition of the `Account` object, including token and registry storage. |
+| `  - AccountService.cs` | **Critical Engine**. Handles atomic directory moves, deep session clones, active 50ms process kill polling, synchronized metadata detection, copy-on-read live log parsing, registry identity switching with automated rollback, and low-RAM streaming backup encryption/decryption. |
+| `  - AccountModel.cs` | Definition of the `Account` object, including token, registry storage, and unhandled-exception-safe DPAPI cryptographic credential protection. |
 | `  - AppSettings.cs` | Singleton managing `appsettings.json` and critical registry key lists. |
-| `  - Globals.cs` | Robust I/O helpers (`ForceDeleteDirectory`) and asynchronous retry loops. |
-| `  - Windows.cs` | P/Invoke bridge for native Win32 interactions (focus, focus, clipboard). |
-| `  - Registry.cs` | Encapsulated logic for reading/writing complex registry value types. |
+| `  - Globals.cs` | Robust I/O helpers (`ForceDeleteDirectory`), asynchronous retry loops, atomic COM shortcut creation in temp staging, and exhaustive Desktop/Start Menu folder redirection discovery. |
+| `  - Windows.cs` | P/Invoke bridge for native Win32 interactions (window focus, clipboard). |
+| `  - Registry.cs` | Encapsulated logic for reading/writing complex registry value types under explicit Registry64 views. |
 | `  - CredentialService.cs` | Manages tokens stored in the Windows Credential Manager (Vault). |
-| `SingleFilePacker\` | Build-time tool for bundling the `Payload` folder into the final distribution EXE. |
-| `runas\` | Helper utility to request admin elevation during the install/uninstall flow. |
+| `SingleFilePacker\` | Build-time tool for bundling the `Payload` folder into the final distribution EXE with deterministic orphaned staging folder cleanup upon boot failures. |
+| `Epic-Games_Account_Switcher-Tests\` | MSTest coverage for backup encryption, legacy restore, path traversal rejection, auth validation, and atomic move safety. |
 | `Skin_Icons\` | Repository of default profile images available to the end user. |
 
 ## 4) CORE ARCHITECTURAL PRINCIPLES
-1. **Atomicity**: Session restoration MUST use `Directory.Move` on prepared temporary structures. Never copy files into an active launcher folder one by one.
-2. **Zero-UI Mandate**: Any prompt for email/password from the launcher is a logic failure. Verify tokens in `PersistentAuthStorage.json` before restoration.
-3. **Deterministic Lifecycle**: Epic processes must be identified by installation path and terminated definitively before any file I/O begins.
-4. **Path Management**: Always use the consolidated properties (`LocalAppData`, `EpicSavedPath`) in `AccountService.cs` to ensure path consistency.
-5. **No Halt Build**: The build script is designed for automated pipelines; use `timeout /t 10` instead of `pause`.
+1. **Atomicity & Rollback**: Session restoration MUST use `Directory.Move` on prepared temporary structures. Never copy files into an active launcher folder one by one. Shortcut generation MUST stage `.lnk` assets atomically in temporary directories before committing. Registry identity switching MUST execute complete rollback restoration from cached snapshots if any key modification fails.
+2. **Zero-UI Mandate**: Any prompt for email/password from the launcher is a logic failure. Verify session tokens across both JSON and binary authentication files (`PersistentAuthStorage.json`, `PersistentAuthStorage.bin`) and validate modern binary auth blobs against OAuth expiration timestamps before restoration.
+3. **Deterministic Lifecycle**: Epic processes must be identified by installation path and terminated definitively using active polling loops before any file I/O begins.
+4. **Path Management & Shell Probing**: Always use the consolidated properties (`LocalAppData`, `EpicSavedPath`) in `AccountService.cs` to ensure path consistency. Installer and uninstaller shortcut deployment MUST probe all standard namespaces, Registry User Shell Folders, and OneDrive Known Folder Move (KFM) redirected desktop paths via `Globals.GetProbedDesktopDirectories()` and `Globals.GetProbedStartMenuDirectories()`.
+5. **No Halt Build & Resource Cleanliness**: The build script is designed for automated pipelines; use `timeout /t 10` instead of `pause`. Single-file installer extraction and self-deletion batch scripts must enforce bounded retry limits and automatically erase incomplete staging workspaces upon failure.
+6. **Low-RAM Compatibility & Safe Diagnostics**: Account profile backup encryption/decryption MUST leverage streaming cipher pipelines (`CryptoStream`/`BoundedStream`) without altering legacy archive structure or breaking backward restoration compatibility. Extraction of active Epic log files and configuration INIs MUST employ copy-on-read shadow file fallbacks to prevent silent failure during OS file lock contention.
 
 ## 5) DATA MODEL (%LOCALAPPDATA%\EpicAccountSwitcher\ & %PROGRAMDATA%\Epic-Games_Account_Switcher\)
 - `EG\accounts.json`: Global account registry (%LOCALAPPDATA%).
@@ -45,4 +47,6 @@ Epic Games Account Switcher is a high-performance, atomic session manager for th
   - `Saved\`: Cloned authentication and config files.
   - `EOS_Data\`: Cloned Epic Online Services local state.
   - `Roaming_Data\`: Cloned AppData/Roaming state for the launcher.
+  - `ProgramData_Data\`: Cloned ProgramData launcher manifest state (%PROGRAMDATA%\Epic\EpicGamesLauncher\Data\Manifests).
 - `%PROGRAMDATA%\Epic-Games_Account_Switcher\Epic-Games_Account_Switcher.log`: Ongoing application log file.
+- User-created backups use password-encrypted or CurrentUser-protected `.egbackup` files processed via low-RAM streaming algorithms with verified HMAC-SHA256 headers; legacy unencrypted ZIP backups are restore-only for backward and forward compatibility.
