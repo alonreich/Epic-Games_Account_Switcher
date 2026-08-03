@@ -173,6 +173,12 @@ namespace Epic_Games_Account_Switcher_Client
             }
         }
 
+        public bool CompareGameSettingsSetting
+        {
+            get => AppSettings.Instance.CompareGameSettings;
+            set { AppSettings.Instance.CompareGameSettings = value; AppSettings.SaveSettings(); OnPropertyChanged(); }
+        }
+
         public double ZoomFactor
         {
             get => AppSettings.Instance.ZoomFactor;
@@ -321,6 +327,47 @@ namespace Epic_Games_Account_Switcher_Client
         {
             try { await LoadAccountsAsync(); }
             catch (Exception ex) { Globals.WriteToLog("Failed to load accounts", ex); }
+        }
+
+        public void CompareGameSettingsAndNotify()
+        {
+            if (!AppSettings.Instance.CompareGameSettings || Accounts.Count < 2) return;
+            
+            var allSettings = new Dictionary<string, Dictionary<string, string>>();
+            foreach (var acc in Accounts)
+            {
+                var settings = FortniteSettingsParser.ExtractSettings(acc.Id);
+                allSettings[acc.Name] = settings;
+            }
+
+            var keys = allSettings.SelectMany(x => x.Value.Keys).Distinct().ToList();
+            var diffMessage = new System.Text.StringBuilder();
+
+            foreach (var key in keys)
+            {
+                var values = new HashSet<string>();
+                foreach (var accSettings in allSettings.Values)
+                {
+                    if (accSettings.TryGetValue(key, out var val)) values.Add(val);
+                }
+                
+                if (values.Count > 1)
+                {
+                    diffMessage.AppendLine($"{key}:");
+                    foreach (var kvp in allSettings)
+                    {
+                        var val = kvp.Value.TryGetValue(key, out var v) ? v : "Not Set";
+                        diffMessage.AppendLine($"  - {kvp.Key}: {val}");
+                    }
+                    diffMessage.AppendLine();
+                }
+            }
+
+            if (diffMessage.Length > 0)
+            {
+                Application.Current.Dispatcher.Invoke(() => 
+                    new CustomMessageBox("Game Settings Differences", diffMessage.ToString().TrimEnd()).ShowDialog());
+            }
         }
 
         public async Task PromptForUnsavedLoginIfNeeded()
