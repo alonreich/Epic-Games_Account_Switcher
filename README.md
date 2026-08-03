@@ -4,7 +4,7 @@
   <p><strong>A lightning-fast, zero-friction desktop utility for atomic Epic Games account session switching.</strong></p>
 
   <p>
-    <a href="https://github.com/alonreich/Epic-Games_Account_Switcher/releases/download/v2026.08.03.2/Epic-Games_Account_Switcher.exe"><img alt="Download Latest" src="https://img.shields.io/badge/Download_v2026.08.03.2-2ea043?style=for-the-badge&logo=github"></a>
+    <a href="https://github.com/alonreich/Epic-Games_Account_Switcher/releases/download/v2026.08.04.1/Epic-Games_Account_Switcher.exe"><img alt="Download Latest" src="https://img.shields.io/badge/Download_v2026.08.04.1-2ea043?style=for-the-badge&logo=github"></a>
   </p>
   
   <p>
@@ -34,7 +34,7 @@ Switch accounts instantly from a stunning, responsive dashboard without ever re-
 
 ## 📥 Download & Install
 
-**[Download v2026.08.03.2 (Latest)](https://github.com/alonreich/Epic-Games_Account_Switcher/releases/download/v2026.08.03.2/Epic-Games_Account_Switcher.exe)**
+**[Download v2026.08.04.1 (Latest)](https://github.com/alonreich/Epic-Games_Account_Switcher/releases/download/v2026.08.04.1/Epic-Games_Account_Switcher.exe)**
 
 **Installation Requirements:**
 - Windows 10/11 (x64)
