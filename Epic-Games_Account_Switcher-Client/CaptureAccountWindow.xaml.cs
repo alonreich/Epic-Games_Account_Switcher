@@ -10,6 +10,7 @@ namespace Epic_Games_Account_Switcher_Client
 {
     public partial class CaptureAccountWindow : Window, System.ComponentModel.INotifyPropertyChanged, System.ComponentModel.IDataErrorInfo
     {
+        private bool _isClosing;
         private string _accountName;
         public string AccountName
         {
@@ -117,6 +118,7 @@ namespace Epic_Games_Account_Switcher_Client
 
         private void Capture_Click(object sender, RoutedEventArgs e)
         {
+            if (_isClosing) return;
             AccountNameInput.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
             AccountEmailInput.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
             AccountDescriptionInput.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
@@ -136,9 +138,16 @@ namespace Epic_Games_Account_Switcher_Client
             }
 
             AccountPassword = AccountPasswordInput.Password;
+            _isClosing = true;
             DialogResult = true;
             Close();
         }
-        private void Cancel_Click(object sender, RoutedEventArgs e) { DialogResult = false; Close(); }
+        private void Cancel_Click(object sender, RoutedEventArgs e) 
+        { 
+            if (_isClosing) return;
+            _isClosing = true;
+            DialogResult = false; 
+            Close(); 
+        }
     }
 }

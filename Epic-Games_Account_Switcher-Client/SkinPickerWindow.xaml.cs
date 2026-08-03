@@ -11,6 +11,7 @@ namespace Epic_Games_Account_Switcher_Client
 {
     public partial class SkinPickerWindow : Window
     {
+        private bool _isClosing;
         public string SelectedSkinPath { get; set; }
         public class SkinItem { public string Name { get; set; } public string FullPath { get; set; } }
         public SkinPickerWindow() { InitializeComponent(); LoadSkins(); }
@@ -56,13 +57,21 @@ namespace Epic_Games_Account_Switcher_Client
         }
         private bool SelectCurrentSkin()
         {
+            if (_isClosing) return false;
             var skin = SkinsList.SelectedItem as SkinItem;
             if (skin == null) return false;
             SelectedSkinPath = skin.FullPath;
+            _isClosing = true;
             DialogResult = true;
             Close();
             return true;
         }
-        private void Cancel_Click(object sender, RoutedEventArgs e) { DialogResult = false; Close(); }
+        private void Cancel_Click(object sender, RoutedEventArgs e) 
+        { 
+            if (_isClosing) return;
+            _isClosing = true;
+            DialogResult = false; 
+            Close(); 
+        }
     }
 }

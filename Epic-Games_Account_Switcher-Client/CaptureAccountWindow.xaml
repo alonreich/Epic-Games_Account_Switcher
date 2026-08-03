@@ -17,7 +17,7 @@
             <TextBlock Text="ACCOUNT WIZARD" Foreground="White" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,25"/>
 
             <Grid Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,30">
-                <Ellipse Width="150" Height="150" Stroke="{DynamicResource IconFill}" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality">
+                <Ellipse Width="150" Height="150" Stroke="{DynamicResource IconFill}" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality" Cursor="Hand" MouseLeftButtonDown="SelectImage_Click">
                     <Ellipse.Fill>
                         <ImageBrush x:Name="ProfileImageBrush" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Ellipse.Fill>
