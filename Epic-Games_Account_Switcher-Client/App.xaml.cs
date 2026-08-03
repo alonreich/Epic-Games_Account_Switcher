@@ -405,8 +405,15 @@ namespace Epic_Games_Account_Switcher_Client
                 bool preserve = false;
                 if (foundByFile || foundByData || foundByReg)
                 {
+                    try 
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(originalBackupPath));
+                        AccountService.BackupAccounts(originalBackupPath, _ => { });
+                    } 
+                    catch { }
+
                     var result = new CustomMessageBox("Existing Installation Detected", 
-                        "A previous installation of Epic Games Account Switcher has been detected on your system.\n\n" +
+                        "A previous installation of Epic Games Account Switcher has been detected on your system. A safety backup of your profiles has been saved to your Downloads folder automatically.\n\n" +
                         "To ensure a stable and clean environment, setup can perform a thorough cleanup of the existing version before proceeding.\n\n" +
                         "Would you like to preserve your existing account profiles and settings during this upgrade?", 
                         "Preserve & Upgrade", "Perform Clean Install").ShowDialog();
