@@ -5,6 +5,7 @@
     <Platforms>x64</Platforms>
     <LangVersion>7.3</LangVersion>
     <ApplicationIcon>..\Application_Icons\Epic-Games_Account_Switcher.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System.IO.Compression" />
