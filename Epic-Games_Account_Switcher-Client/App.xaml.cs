@@ -392,41 +392,42 @@ namespace Epic_Games_Account_Switcher_Client
             var targetExe86 = Path.Combine(targetDir86, "Epic-Games_Account_Switcher.exe");
             string oldDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Epic-Games_Account_Switcher");
 
+            bool foundByFile = File.Exists(targetExe) || File.Exists(targetExe86);
+            bool foundByData = File.Exists(Path.Combine(Globals.UserDataFolder, "EG", "accounts.json")) || File.Exists(Path.Combine(oldDataPath, "LoginCache", "Epic_Games", "accounts.json"));
+            bool foundByReg = false;
+            try { using (var key = Registry.LocalMachine.OpenSubKey(RegPath)) if (key != null) foundByReg = true; } catch { }
+            try { using (var key = Registry.CurrentUser.OpenSubKey(RegPath)) if (key != null) foundByReg = true; } catch { }
+
+            bool isUpgrade = preserveRequested;
+            string upgradeBackupPath = !string.IsNullOrWhiteSpace(upgradeBackupOverride) ? upgradeBackupOverride : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Epic_Setup_Backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".egbackup");
+
             if (!Globals.IsAdministrator)
             {
-                var originalUserData = Globals.UserDataFolder;
-                var originalBackupPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Epic_Setup_Backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".egbackup");
-                bool foundByFile = File.Exists(targetExe) || File.Exists(targetExe86);
-                bool foundByData = File.Exists(Path.Combine(Globals.UserDataFolder, "EG", "accounts.json")) || File.Exists(Path.Combine(oldDataPath, "LoginCache", "Epic_Games", "accounts.json"));
-                bool foundByReg = false;
-                try { using (var key = Registry.LocalMachine.OpenSubKey(RegPath)) if (key != null) foundByReg = true; } catch { }
-                try { using (var key = Registry.CurrentUser.OpenSubKey(RegPath)) if (key != null) foundByReg = true; } catch { }
-                
                 bool preserve = false;
                 if (foundByFile || foundByData || foundByReg)
                 {
-                    try 
-                    {
-                        Directory.CreateDirectory(Path.GetDirectoryName(originalBackupPath));
-                        AccountService.BackupAccounts(originalBackupPath, _ => { });
-                    } 
-                    catch { }
-
+                    try { Directory.CreateDirectory(Path.GetDirectoryName(upgradeBackupPath)); AccountService.BackupAccounts(upgradeBackupPath, _ => { }); } catch { }
                     var result = new CustomMessageBox("Existing Installation Detected", 
                         "A previous installation of Epic Games Account Switcher has been detected on your system. A safety backup of your profiles has been saved to your Downloads folder automatically.\n\n" +
                         "To ensure a stable and clean environment, setup can perform a thorough cleanup of the existing version before proceeding.\n\n" +
                         "Would you like to preserve your existing account profiles and settings during this upgrade?", 
                         "Preserve & Upgrade", "Perform Clean Install").ShowDialog();
-                    
-                    if (result == true) preserve = true;
-                    else if (result == false) preserve = false;
-                    else Environment.Exit(0);
+                    if (result == true) preserve = true; else if (result == false) preserve = false; else Environment.Exit(0);
                 }
-
-                string args = BuildInstallArguments(preserve, originalUserData, originalBackupPath, extractDir);
-                try { Process.Start(new ProcessStartInfo { FileName = CurrentProcessPath, Arguments = args, UseShellExecute = true, Verb = "runas" }); Environment.Exit(0); }
-                catch { Environment.Exit(1); }
+                string args = BuildInstallArguments(preserve, Globals.UserDataFolder, upgradeBackupPath, extractDir);
+                try { Process.Start(new ProcessStartInfo { FileName = CurrentProcessPath, Arguments = args, UseShellExecute = true, Verb = "runas" }); Environment.Exit(0); } catch { Environment.Exit(1); }
                 return;
+            }
+
+            if (!preserveRequested && (foundByFile || foundByData || foundByReg))
+            {
+                try { Directory.CreateDirectory(Path.GetDirectoryName(upgradeBackupPath)); AccountService.BackupAccounts(upgradeBackupPath, _ => { }); } catch { }
+                var result = new CustomMessageBox("Existing Installation Detected", 
+                        "A previous installation of Epic Games Account Switcher has been detected on your system. A safety backup of your profiles has been saved to your Downloads folder automatically.\n\n" +
+                        "To ensure a stable and clean environment, setup can perform a thorough cleanup of the existing version before proceeding.\n\n" +
+                        "Would you like to preserve your existing account profiles and settings during this upgrade?", 
+                        "Preserve & Upgrade", "Perform Clean Install").ShowDialog();
+                if (result == true) isUpgrade = true; else if (result == false) isUpgrade = false; else Environment.Exit(0);
             }
 
             if (!string.IsNullOrWhiteSpace(sourceUserDataPath)) Globals.UserDataFolderOverride = sourceUserDataPath;
@@ -438,11 +439,6 @@ namespace Epic_Games_Account_Switcher_Client
                 
                 if (!owned) { new CustomMessageBox("Installer Busy", "Another installation is already in progress.").ShowDialog(); Environment.Exit(0); return; }
                 if (IsMsiBusy()) { new CustomMessageBox("System Busy", "Windows Installer is busy or a reboot is pending. Please wait and try again.").ShowDialog(); Environment.Exit(0); return; }
-
-                bool isUpgrade = preserveRequested;
-                string upgradeBackupPath = !string.IsNullOrWhiteSpace(upgradeBackupOverride)
-                    ? upgradeBackupOverride
-                    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Epic_Setup_Backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".egbackup");
                 _progress = new ProgressWindow("Epic Games Account Switcher - Setup");
                 string setupLog = Path.Combine(Path.GetTempPath(), "Epic_Setup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".log");
                 File.WriteAllText(setupLog, "--- Setup Initialized at " + DateTime.Now + " ---\n");

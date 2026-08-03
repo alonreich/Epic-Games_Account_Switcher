@@ -368,6 +368,10 @@ namespace Epic_Games_Account_Switcher_Client
                 Application.Current.Dispatcher.Invoke(() => 
                     new CustomMessageBox("Game Settings Differences", diffMessage.ToString().TrimEnd()).ShowDialog());
             }
+            else
+            {
+                ShowToast("Game settings compared: All profiles match!");
+            }
         }
 
         public async Task PromptForUnsavedLoginIfNeeded()
