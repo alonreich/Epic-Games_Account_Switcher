@@ -51,6 +51,7 @@ namespace Epic_Games_Account_Switcher_Client
             try
             {
                 await ViewModel.LoadAccountsAsync();
+                ViewModel.CompareGameSettingsAndNotify();
                 await ViewModel.PromptForUnsavedLoginIfNeeded();
                 UpdateTrayIconVisibility();
                 StartUnsavedLoginMonitor();

@@ -246,6 +246,13 @@
                                           Margin="0,0,0,8"
                                           AutomationProperties.Name="Allow Minimize to SysTray"
                                           ToolTip="When enabled, closing or minimizing the window will hide it to the Windows notification area (system tray) for background fast-switching."/>
+                                <CheckBox Content="Compare Game Settings on Boot"
+                                          IsChecked="{Binding CompareGameSettingsSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Foreground="{DynamicResource SubTextForeground}"
+                                          Cursor="Hand"
+                                          Margin="0,0,0,8"
+                                          AutomationProperties.Name="Compare Game Settings"
+                                          ToolTip="When the app boots, compares Fortnite settings (like sensitivities) across all profiles and warns you of differences."/>
                                 <CheckBox IsChecked="{Binding OpenEpicLauncherOnStartupSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           Cursor="Hand"
                                           Foreground="{DynamicResource SubTextForeground}"
