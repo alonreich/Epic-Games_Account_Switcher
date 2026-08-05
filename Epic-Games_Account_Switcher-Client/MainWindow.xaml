@@ -219,6 +219,7 @@
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <Button Content="SIGN IN DIRECTLY (FAST)" Style="{StaticResource SecondaryButton}" Padding="25,10" Command="{Binding FastLoginCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanToEnabledConverter}}" FontSize="14" ToolTip="Log in directly via an embedded browser to quickly add a new profile without launching Epic." AutomationProperties.Name="Sign in directly" Margin="0,0,12,0"/>
                         <Button Content="+ CAPTURE CURRENT EPIC GAMES ACCOUNT" Style="{StaticResource OkButton}" Padding="25,10" Command="{Binding AddAccountCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBooleanToEnabledConverter}}" FontSize="14" ToolTip="Instantly record and preserve your active Epic Games Launcher login state into a reusable profile card." AutomationProperties.Name="Capture current Epic Games account"/>
                         <Expander ExpandDirection="Down" Margin="12,0,0,0" Foreground="{DynamicResource SubTextForeground}" HorizontalAlignment="Right" ToolTip="Show account automation options." AutomationProperties.Name="Account automation options">
                             <Expander.Header>
@@ -246,13 +247,7 @@
                                           Margin="0,0,0,8"
                                           AutomationProperties.Name="Allow Minimize to SysTray"
                                           ToolTip="When enabled, closing or minimizing the window will hide it to the Windows notification area (system tray) for background fast-switching."/>
-                                <CheckBox Content="Compare Game Settings on Boot"
-                                          IsChecked="{Binding CompareGameSettingsSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          Foreground="{DynamicResource SubTextForeground}"
-                                          Cursor="Hand"
-                                          Margin="0,0,0,8"
-                                          AutomationProperties.Name="Compare Game Settings"
-                                          ToolTip="When the app boots, compares Fortnite settings (like sensitivities) across all profiles and warns you of differences."/>
+
                                 <CheckBox IsChecked="{Binding OpenEpicLauncherOnStartupSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           Cursor="Hand"
                                           Foreground="{DynamicResource SubTextForeground}"
@@ -329,6 +324,7 @@
             <TextBlock Text="{Binding EmptyStateTitle}" Foreground="White" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" TextAlignment="Center"/>
             <TextBlock Text="{Binding EmptyStateSubtitle}" Foreground="{DynamicResource SubTextForeground}" FontSize="14" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="620" Margin="20,8,20,18"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="SIGN IN DIRECTLY (FAST)" Command="{Binding FastLoginCommand}" Padding="22,10" FontSize="13" ToolTip="Log in directly via an embedded browser to quickly add a new profile." Margin="0,0,12,0" Style="{StaticResource SecondaryButton}" AutomationProperties.Name="Sign in directly from empty state"/>
                 <Button Content="SAVE DETECTED LOGIN" Command="{Binding CaptureUnsavedLoginCommand}" Padding="22,10" FontSize="13" ToolTip="Create your first tracked account card from the live Epic login." AutomationProperties.Name="Save detected login from empty state">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource OkButton}">
