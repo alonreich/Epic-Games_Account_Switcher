@@ -40,6 +40,7 @@
                          Tag="e.g., Main Account / Alt 1"
                          Text="{Binding AccountName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"
                          Margin="0,0,0,18"
+                         MouseDoubleClick="TextBox_MouseDoubleClick"
                          ToolTip="Required. Unique display name for this account card.">
                     <Validation.ErrorTemplate>
                         <ControlTemplate>
@@ -57,6 +58,7 @@
                          Tag="e.g., user@domain.com"
                          Text="{Binding AccountEmail, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"
                          Margin="0,0,0,18"
+                         MouseDoubleClick="TextBox_MouseDoubleClick"
                          ToolTip="Required. Connected Epic Games email address.">
                     <Validation.ErrorTemplate>
                         <ControlTemplate>
@@ -69,7 +71,7 @@
                 </TextBox>
 
                 <TextBlock Text="Fallback Password (Optional, DPAPI Encrypted)" Foreground="{DynamicResource SubTextForeground}" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
-                <PasswordBox x:Name="AccountPasswordInput" Background="{DynamicResource BtnBackgroundActive}" Foreground="White" BorderBrush="{DynamicResource BtnBorder}" Padding="12" Margin="0,0,0,18" VerticalContentAlignment="Center" FontSize="14" CaretBrush="White" ToolTip="Optional fallback password encrypted for this Windows user and stored with the profile data; encrypted value is included in backups." AutomationProperties.Name="Fallback password"/>
+                <PasswordBox x:Name="AccountPasswordInput" Background="{DynamicResource BtnBackgroundActive}" Foreground="White" BorderBrush="{DynamicResource BtnBorder}" Padding="12" Margin="0,0,0,18" VerticalContentAlignment="Center" FontSize="14" CaretBrush="White" ToolTip="Optional fallback password encrypted for this Windows user and stored with the profile data; encrypted value is included in backups." AutomationProperties.Name="Fallback password" MouseDoubleClick="TextBox_MouseDoubleClick"/>
 
                 <TextBlock Text="Description" Foreground="{DynamicResource SubTextForeground}" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
                 <TextBox x:Name="AccountDescriptionInput"
@@ -77,6 +79,7 @@
                          Tag="Add optional notes about ranks, games, or login details..."
                          Text="{Binding AccountDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Height="100" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                         MouseDoubleClick="TextBox_MouseDoubleClick"
                           ToolTip="Optional notes or character details."/>
             </StackPanel>
 

@@ -7,8 +7,12 @@ using System.Windows.Input;
 namespace Epic_Games_Account_Switcher_Client
 {
     public enum MessageBoxVisualStyle { Neutral, Success, Error }
+    public enum CustomDialogResult { None, Primary, Secondary, Cancel }
+
     public partial class CustomMessageBox : Window
     {
+        public CustomDialogResult Result { get; private set; } = CustomDialogResult.None;
+
         public CustomMessageBox(string title, string message, MessageBoxVisualStyle style = MessageBoxVisualStyle.Neutral) : this(title, message, "OK", null, null, style) { }
         public CustomMessageBox(string title, string message, string primaryBtnText, string secondaryBtnText = null, string cancelBtnText = null, MessageBoxVisualStyle style = MessageBoxVisualStyle.Neutral)
         {
@@ -46,18 +50,22 @@ namespace Epic_Games_Account_Switcher_Client
                 else
                 {
                     WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    Topmost = true;
+                    ShowInTaskbar = true;
                 }
             }
             catch
             {
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                Topmost = true;
+                ShowInTaskbar = true;
             }
         }
         private void DragWindow(object sender, MouseButtonEventArgs e) { if (e.LeftButton == MouseButtonState.Pressed) DragMove(); }
         private void BtnMinimize(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
-        private void BtnExit(object sender, RoutedEventArgs e) => Close();
-        private void ButtonOk_OnClick(object sender, RoutedEventArgs e) { DialogResult = true; Close(); }
-        private void ButtonNo_OnClick(object sender, RoutedEventArgs e) { DialogResult = false; Close(); }
-        private void ButtonCancel_OnClick(object sender, RoutedEventArgs e) { DialogResult = null; Close(); }
+        private void BtnExit(object sender, RoutedEventArgs e) { Result = CustomDialogResult.Cancel; Close(); }
+        private void ButtonOk_OnClick(object sender, RoutedEventArgs e) { Result = CustomDialogResult.Primary; DialogResult = true; Close(); }
+        private void ButtonNo_OnClick(object sender, RoutedEventArgs e) { Result = CustomDialogResult.Secondary; DialogResult = false; Close(); }
+        private void ButtonCancel_OnClick(object sender, RoutedEventArgs e) { Result = CustomDialogResult.Cancel; Close(); }
     }
 }

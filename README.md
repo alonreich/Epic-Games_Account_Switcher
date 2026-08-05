@@ -4,7 +4,7 @@
   <p><strong>A lightning-fast, zero-friction desktop utility for atomic Epic Games account session switching.</strong></p>
 
   <p>
-    <a href="https://github.com/alonreich/Epic-Games_Account_Switcher/releases/download/v2026.08.04.1/Epic-Games_Account_Switcher.exe"><img alt="Download Latest" src="https://img.shields.io/badge/Download_v2026.08.04.1-2ea043?style=for-the-badge&logo=github"></a>
+    <a href="https://github.com/alonreich/Epic-Games_Account_Switcher/releases/download/v2026.08.05.1/Epic-Games_Account_Switcher.exe"><img alt="Download Latest" src="https://img.shields.io/badge/Download_v2026.08.05.1-2ea043?style=for-the-badge&logo=github"></a>
   </p>
   
   <p>
@@ -26,7 +26,7 @@ Switch accounts instantly from a stunning, responsive dashboard without ever re-
 ## 🔥 Key Features
 
 - **Instant Atomic Switching**: One-click profile hopping via a highly polished WPF dashboard.
-- **Smart Game Settings Comparison**: *[NEW]* Automatically analyzes binary Fortnite `.sav` configurations across profiles on boot, actively alerting you to sensitivity and volume differences.
+- **Direct Fast Login**: *[NEW]* Rapidly add new accounts by signing in directly through our secure embedded UI without opening the Epic Launcher.
 - **Intelligent Usage Tracking**: Analyzes and visualizes your account usage patterns with dynamic activity heat, switch counts, and last-played timestamps.
 - **Zero-Friction Capture**: Seamlessly intercepts active unrecorded Epic sessions in real-time, suggesting 1-tap profile creation.
 - **Disaster Recovery**: Employs streaming-cipher encrypted `.egbackup` exports to safely port your isolated sessions across hardware.
@@ -34,7 +34,7 @@ Switch accounts instantly from a stunning, responsive dashboard without ever re-
 
 ## 📥 Download & Install
 
-**[Download v2026.08.04.1 (Latest)](https://github.com/alonreich/Epic-Games_Account_Switcher/releases/download/v2026.08.04.1/Epic-Games_Account_Switcher.exe)**
+**[Download v2026.08.05.1 (Latest)](https://github.com/alonreich/Epic-Games_Account_Switcher/releases/download/v2026.08.05.1/Epic-Games_Account_Switcher.exe)**
 
 **Installation Requirements:**
 - Windows 10/11 (x64)

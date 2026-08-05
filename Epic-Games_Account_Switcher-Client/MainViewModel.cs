@@ -173,11 +173,7 @@ namespace Epic_Games_Account_Switcher_Client
             }
         }
 
-        public bool CompareGameSettingsSetting
-        {
-            get => AppSettings.Instance.CompareGameSettings;
-            set { AppSettings.Instance.CompareGameSettings = value; AppSettings.SaveSettings(); OnPropertyChanged(); }
-        }
+
 
         public double ZoomFactor
         {
@@ -199,6 +195,7 @@ namespace Epic_Games_Account_Switcher_Client
 
         public ICommand SwitchCommand { get; }
         public ICommand AddAccountCommand { get; }
+        public ICommand FastLoginCommand { get; }
         public ICommand EditCommand { get; }
         public ICommand DeleteCommand { get; }
         public ICommand SaveCurrentProfileCommand { get; }
@@ -223,6 +220,7 @@ namespace Epic_Games_Account_Switcher_Client
             if (Accounts != null) Accounts.CollectionChanged += _accountsChangedHandler;
             SwitchCommand = new AsyncRelayCommand<Account>(SwitchToAccount, acc => acc != null && !IsBusy);
             AddAccountCommand = new AsyncRelayCommand(StartCapture, () => !IsBusy);
+            FastLoginCommand = new RelayCommand(StartFastLogin, () => !IsBusy);
             EditCommand = new RelayCommand<Account>(EditAccount, acc => acc != null && !IsBusy);
             DeleteCommand = new RelayCommand<Account>(DeleteAccount, acc => acc != null && !IsBusy);
             SaveCurrentProfileCommand = new AsyncRelayCommand<Account>(RecaptureAccount, acc => acc != null && !IsBusy);
@@ -329,50 +327,6 @@ namespace Epic_Games_Account_Switcher_Client
             catch (Exception ex) { Globals.WriteToLog("Failed to load accounts", ex); }
         }
 
-        public void CompareGameSettingsAndNotify()
-        {
-            if (!AppSettings.Instance.CompareGameSettings || Accounts.Count < 2) return;
-            
-            var allSettings = new Dictionary<string, Dictionary<string, string>>();
-            foreach (var acc in Accounts)
-            {
-                var settings = FortniteSettingsParser.ExtractSettings(acc.Id);
-                allSettings[acc.Name] = settings;
-            }
-
-            var keys = allSettings.SelectMany(x => x.Value.Keys).Distinct().ToList();
-            var diffMessage = new System.Text.StringBuilder();
-
-            foreach (var key in keys)
-            {
-                var values = new HashSet<string>();
-                foreach (var accSettings in allSettings.Values)
-                {
-                    if (accSettings.TryGetValue(key, out var val)) values.Add(val);
-                }
-                
-                if (values.Count > 1)
-                {
-                    diffMessage.AppendLine($"{key}:");
-                    foreach (var kvp in allSettings)
-                    {
-                        var val = kvp.Value.TryGetValue(key, out var v) ? v : "Not Set";
-                        diffMessage.AppendLine($"  - {kvp.Key}: {val}");
-                    }
-                    diffMessage.AppendLine();
-                }
-            }
-
-            if (diffMessage.Length > 0)
-            {
-                Application.Current.Dispatcher.Invoke(() => 
-                    new CustomMessageBox("Game Settings Differences", diffMessage.ToString().TrimEnd()).ShowDialog());
-            }
-            else
-            {
-                ShowToast("Game settings compared: All profiles match!");
-            }
-        }
 
         public async Task PromptForUnsavedLoginIfNeeded()
         {
@@ -528,6 +482,19 @@ namespace Epic_Games_Account_Switcher_Client
             }
         }
 
+        private void StartFastLogin()
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var loginWin = new EmbeddedLoginWindow { Owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow };
+                if (loginWin.ShowDialog() == true)
+                {
+                    _ = LoadAccountsAsync();
+                    ShowToast("Account captured successfully!");
+                }
+            });
+        }
+
         private async Task StartCapture()
         {
             if (IsBusy) return;
@@ -545,7 +512,15 @@ namespace Epic_Games_Account_Switcher_Client
                 if (detected == null || string.IsNullOrWhiteSpace(detected.Item1))
                 {
                     EndBusyOperation();
-                    new CustomMessageBox("No Active Login", "No Epic Games account is currently detected. Open Epic Games Launcher, sign in, then capture again.").ShowDialog();
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        var loginWin = new EmbeddedLoginWindow { Owner = Application.Current.MainWindow };
+                        if (loginWin.ShowDialog() == true)
+                        {
+                            LoadAccounts();
+                            ShowToast("Account captured successfully!");
+                        }
+                    });
                     return;
                 }
 

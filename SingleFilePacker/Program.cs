@@ -37,11 +37,38 @@ namespace SingleFilePacker
                 var assembly = Assembly.GetExecutingAssembly();
                 var resourceName = assembly.GetManifestResourceNames().FirstOrDefault(r => r.EndsWith("payload.zip"));
                 if (string.IsNullOrEmpty(resourceName)) { MessageBox.Show("No payload found in this executable.", "Boot Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+                
+                Form splash = new Form { 
+                    Text = "Epic Games Account Switcher", 
+                    StartPosition = FormStartPosition.CenterScreen, 
+                    Size = new System.Drawing.Size(400, 150),
+                    FormBorderStyle = FormBorderStyle.FixedDialog,
+                    ControlBox = false,
+                    TopMost = true,
+                    ShowInTaskbar = true
+                };
+                Label lbl = new Label { 
+                    Text = "Preparing application environment...\nPlease wait while files are extracted.", 
+                    Dock = DockStyle.Fill, 
+                    TextAlign = System.Drawing.ContentAlignment.MiddleCenter, 
+                    Font = new System.Drawing.Font("Segoe UI", 11)
+                };
+                splash.Controls.Add(lbl);
+                splash.Show();
+                splash.Refresh();
+
                 temp = Path.Combine(Path.GetTempPath(), "EpicSwitcherInstaller_" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(temp);
                 using (var stream = assembly.GetManifestResourceStream(resourceName))
                 using (var fileStream = File.Create(Path.Combine(temp, "payload.zip"))) stream.CopyTo(fileStream);
                 ExtractZipSafely(Path.Combine(temp, "payload.zip"), temp);
+                
+                if (splash != null)
+                {
+                    splash.Close();
+                    splash.Dispose();
+                }
+
                 var exe = Path.Combine(temp, "Epic-Games_Account_Switcher.exe");
                 if (!File.Exists(exe))
                 {

@@ -61,6 +61,18 @@ namespace Epic_Games_Account_Switcher_Client
             return string.Equals(trimmed, "N/A", StringComparison.OrdinalIgnoreCase) ? "" : trimmed;
         }
 
+        private void TextBox_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is System.Windows.Controls.TextBox tb)
+            {
+                tb.SelectAll();
+            }
+            else if (sender is System.Windows.Controls.PasswordBox pb)
+            {
+                pb.SelectAll();
+            }
+        }
+
         private void SelectImage_Click(object sender, RoutedEventArgs e)
         {
             var win = new SkinPickerWindow { Owner = this };

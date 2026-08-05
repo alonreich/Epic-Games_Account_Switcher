@@ -839,15 +839,19 @@ namespace Epic_Games_Account_Switcher_Globals
             }
 
             var remaining = GetEpicProcesses(epicPaths);
+            bool safeToProceed = false;
             try
             {
-                Globals.WriteToLog("[KILL] Timed out closing Epic. ElapsedMs=" + sw.ElapsedMilliseconds + "; Remaining=" + ProcessSummary(remaining) + "; BlockedRoots=" + string.Join(" | ", GetBlockedStateRoots()));
+                bool mainLauncherAlive = remaining.Any(p => p.ProcessName.Equals("EpicGamesLauncher", StringComparison.OrdinalIgnoreCase));
+                bool rootsWritable = VerifyWritableStateRoots();
+                safeToProceed = !mainLauncherAlive && rootsWritable;
+                Globals.WriteToLog("[KILL] Timed out closing Epic. ElapsedMs=" + sw.ElapsedMilliseconds + "; Remaining=" + ProcessSummary(remaining) + "; BlockedRoots=" + string.Join(" | ", GetBlockedStateRoots()) + "; SafeToProceed=" + safeToProceed);
             }
             finally
             {
                 foreach (var p in remaining) try { p.Dispose(); } catch { }
             }
-            return false;
+            return safeToProceed;
         }
 
         private static List<string> GetEpicInstallPaths()
@@ -1382,6 +1386,86 @@ namespace Epic_Games_Account_Switcher_Globals
             if (account == null) return;
             account.LastPlayed = DateTime.Now;
             if (incrementUsage) account.UsageCount = Math.Max(0, account.UsageCount) + 1;
+        }
+
+        public static async Task<Tuple<bool, string>> CaptureFromExchangeCodeAsync(string exchangeCode, Action<string> progress, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            await SessionOperationLock.WaitAsync(cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                progress?.Invoke("Closing Epic Games...");
+                if (!await EnsureEpicIsClosed(60000, cancellationToken))
+                    return new Tuple<bool, string>(false, "Could not close Epic Games Launcher.");
+
+                // Purge existing auth state to ensure clean capture
+                try
+                {
+                    foreach (var authFile in AuthFiles)
+                    {
+                        var path = Path.Combine(EpicSavedPath, authFile);
+                        if (File.Exists(path)) File.Delete(path);
+                    }
+                    foreach (var authFile in AuthBinaryFiles)
+                    {
+                        var path = Path.Combine(EpicSavedPath, authFile);
+                        if (File.Exists(path)) File.Delete(path);
+                    }
+                    var dataPath = Path.Combine(EpicSavedPath, "Data");
+                    if (Directory.Exists(dataPath))
+                    {
+                        foreach (var dat in Directory.GetFiles(dataPath, "OC_*.dat"))
+                            File.Delete(dat);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Globals.WriteToLog("[EXCHANGE] Failed to purge existing auth state", ex);
+                }
+
+                progress?.Invoke("Processing login...");
+                var exe = ResolveEpicLauncherExecutable();
+                if (string.IsNullOrEmpty(exe))
+                    return new Tuple<bool, string>(false, "Epic Games Launcher executable not found.");
+
+                var args = $"-exchangecode={exchangeCode} -nosplash -silent -minimized";
+                Process.Start(new ProcessStartInfo { FileName = exe, Arguments = args, UseShellExecute = true });
+
+                var deadline = DateTime.UtcNow.AddSeconds(45);
+                Tuple<string, string, string> detected = null;
+                while (DateTime.UtcNow < deadline)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    _lastDetected = new Tuple<string, string, string>(null, "N/A", "N/A"); // Force re-detection
+                    detected = await GetDetectedMetadataAsync();
+                    if (!string.IsNullOrWhiteSpace(detected.Item1))
+                        break;
+                    await Task.Delay(2000, cancellationToken);
+                }
+
+                if (detected == null || string.IsNullOrWhiteSpace(detected.Item1))
+                    return new Tuple<bool, string>(false, "Timed out waiting for Epic Games to consume the exchange code.");
+
+                // We can't hold the lock when calling CaptureCurrentAccount because it also waits on it.
+                // We'll release the lock early in the finally block.
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("[EXCHANGE] Fatal error during exchange capture", ex);
+                return new Tuple<bool, string>(false, "An unexpected error occurred: " + ex.Message);
+            }
+            finally
+            {
+                SessionOperationLock.Release();
+            }
+
+            // Now capture the account normally (CaptureCurrentAccount acquires the lock again)
+            var captureResult = await CaptureCurrentAccount(null, null, null, null, null, progress, null, true, cancellationToken, null);
+            
+            // Try to close Epic again so it doesn't linger
+            try { await EnsureEpicIsClosed(15000, cancellationToken); } catch { }
+            
+            return captureResult;
         }
 
         public static void PrepareLauncherForInitialSync(int maxWaitMs = 8000)
@@ -2028,7 +2112,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var f = Path.Combine(BaseDataPath, a.Id);
-                    if (Directory.Exists(f)) Globals.CopyFilesRecursive(f, Path.Combine(tmp, a.Id), true);
+                    if (Directory.Exists(f)) Globals.CopyFilesRecursive(f, Path.Combine(tmp, a.Id), true, new System.Collections.Generic.List<string> { "WebCaches" });
                 }
                 CopySkinDirectoryToBackup(Path.Combine(Globals.UserDataFolder, "Skin_Icons"), tmp);
                 CopySkinDirectoryToBackup(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons"), tmp);
