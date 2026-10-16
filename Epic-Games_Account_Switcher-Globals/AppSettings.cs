@@ -42,6 +42,13 @@ namespace Epic_Games_Account_Switcher_Globals
         public int ModernAuthBlobMaxAgeDays { get; set; } = 30;
         public bool MinimizeToTray { get; set; } = false;
 
+        public bool AutoCheckForUpdates { get; set; } = true;
+        public DateTime LastUpdateCheckUtc { get; set; } = DateTime.MinValue;
+        public string SkippedUpdateVersion { get; set; } = "";
+        public DateTime UpdateRemindAfterUtc { get; set; } = DateTime.MinValue;
+
+        public bool ExperimentalLauncherFrame { get; set; } = false;
+
         public List<string> DismissedUnsavedLoginIds { get; set; } = new List<string>();
 
         public int WindowWidth { get; set; } = 1250;

@@ -1,0 +1,8 @@
+# NEVER commit private key material. Only the PUBLIC certificate (.cer), thumbprint.txt, scripts and README belong in Git.
+private/
+*.pfx
+*.p12
+*.pvk
+*.key
+*.pem
+*.snk

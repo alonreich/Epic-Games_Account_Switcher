@@ -2280,6 +2280,35 @@ namespace Epic_Games_Account_Switcher_Globals
             }
         }
 
+        /// <summary>
+        /// Proves a backup is usable: the file exists, the current user can decrypt it, and it contains accounts.json.
+        /// Returns the number of account profiles inside. Throws with a readable reason when the backup is not usable.
+        /// </summary>
+        public static int VerifyBackupFile(string path, string password = null)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) throw new FileNotFoundException("Backup file was not created: " + path);
+            if (new FileInfo(path).Length == 0) throw new InvalidDataException("Backup file is empty: " + path);
+            string decryptedZip = null;
+            try
+            {
+                var zipPath = PrepareBackupForRestore(path, password, out decryptedZip, CancellationToken.None);
+                using (var archive = ZipFile.OpenRead(zipPath))
+                {
+                    var entry = archive.Entries.FirstOrDefault(e => string.Equals(e.FullName, "accounts.json", StringComparison.OrdinalIgnoreCase));
+                    if (entry == null) throw new InvalidDataException("Backup does not contain accounts.json.");
+                    using (var reader = new StreamReader(entry.Open()))
+                    {
+                        var arr = Newtonsoft.Json.Linq.JArray.Parse(reader.ReadToEnd());
+                        return arr.Count;
+                    }
+                }
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(decryptedZip) && File.Exists(decryptedZip)) try { File.Delete(decryptedZip); } catch { }
+            }
+        }
+
         public static bool IsEncryptedBackup(string path)
         {
             try
