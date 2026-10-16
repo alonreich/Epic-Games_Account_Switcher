@@ -179,6 +179,43 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <DataTemplate x:Key="CompactCardTemplate">
+            <Button Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"
+                    Cursor="Hand" Margin="10,6" Focusable="True" ToolTip="{Binding Email}"
+                    AutomationProperties.Name="{Binding Name, StringFormat=Switch to {0}}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Card" Background="{DynamicResource CardBackground}" CornerRadius="10" Padding="10,8" BorderThickness="1" BorderBrush="{DynamicResource BtnBorder}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="52" Height="52" Stroke="{Binding AccentColor}" StrokeThickness="2" VerticalAlignment="Center">
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding ProfileImagePath, Converter={StaticResource ProfileImageConverter}}" Stretch="UniformToFill"/>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" Foreground="White" FontSize="13" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Description}" Foreground="{DynamicResource AccentTextForeground}" FontSize="10" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding LastPlayedDisplay}" Foreground="{DynamicResource SubTextForeground}" FontSize="9"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource CardActiveBorder}"/>
+                                <Setter TargetName="Card" Property="BorderThickness" Value="2"/>
+                            </DataTrigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource CardHoverBackground}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -190,7 +227,10 @@
 
         <Border Grid.Row="0" Background="{DynamicResource BtnBackgroundActive}">
             <Grid>
-                <TextBlock Text="EPIC GAMES ACCOUNT SWITCHER" VerticalAlignment="Center" Margin="15,0" Foreground="{DynamicResource SubTextForeground}" FontSize="12" FontWeight="Bold"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
+                    <TextBlock Text="EPIC GAMES ACCOUNT SWITCHER" Foreground="{DynamicResource SubTextForeground}" FontSize="12" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding AppVersionLabel}" Foreground="{DynamicResource SubTextForeground}" FontSize="11" Margin="10,0,0,0" Opacity="0.7" ToolTip="Installed version"/>
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Content="&#xE921;" FontFamily="Segoe MDL2 Assets" Width="40" Click="Minimize_Click" Style="{StaticResource BtnMin}" ToolTip="Minimize" AutomationProperties.Name="Minimize window"/>
                     <Button Content="" FontFamily="Segoe MDL2 Assets" Width="40" Click="Close_Click" Style="{StaticResource BtnClose}" ToolTip="Close" AutomationProperties.Name="Close window"/>
@@ -198,7 +238,37 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Grid.RowSpan="2">
+        <Grid x:Name="FrameContent" Grid.Row="1" Grid.RowSpan="2" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="210"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="210"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="34"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="62"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="{Binding UsageTrackerSummary}" Foreground="{DynamicResource SubTextForeground}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="20,0"/>
+            <ScrollViewer Grid.Row="1" Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding FrameLeftAccounts}" ItemTemplate="{StaticResource CompactCardTemplate}" Margin="0,4"/>
+            </ScrollViewer>
+            <Border Grid.Row="1" Grid.Column="1" BorderBrush="{DynamicResource IconFill}" BorderThickness="2" CornerRadius="4" Margin="-3" Opacity="0.55" IsHitTestVisible="False">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="22" Opacity="0.6" ShadowDepth="0" Color="#7AA2F7"/>
+                </Border.Effect>
+            </Border>
+            <ScrollViewer Grid.Row="1" Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding FrameRightAccounts}" ItemTemplate="{StaticResource CompactCardTemplate}" Margin="0,4"/>
+            </ScrollViewer>
+            <StackPanel Grid.Row="2" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Button Content="SIGN IN DIRECTLY (FAST)" Style="{StaticResource SecondaryButton}" Padding="18,7" FontSize="11" Command="{Binding FastLoginCommand}" Margin="0,0,10,0" AutomationProperties.Name="Sign in directly"/>
+                <Button Content="+ CAPTURE CURRENT ACCOUNT" Style="{StaticResource OkButton}" Padding="18,7" FontSize="11" Command="{Binding AddAccountCommand}" Margin="0,0,10,0" AutomationProperties.Name="Capture current Epic Games account"/>
+                <Button Content="EXIT FRAME MODE" Style="{StaticResource SecondaryButton}" Padding="18,7" FontSize="11" Command="{Binding DisableLauncherFrameCommand}" ToolTip="Turn off the experimental launcher frame." AutomationProperties.Name="Exit frame mode"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid x:Name="NormalContent" Grid.Row="1" Grid.RowSpan="2">
             <Grid.LayoutTransform>
                 <ScaleTransform ScaleX="{Binding ZoomFactor}" ScaleY="{Binding ZoomFactor}"/>
             </Grid.LayoutTransform>
@@ -255,6 +325,25 @@
                                           ToolTip="Launches Epic Games Launcher on app startup to improve current-login detection, but may update Epic online activity for the locally signed-in account.">
                                     <TextBlock Text="Open Epic-Games Launcher when app opens (Better current login account detection)" TextWrapping="Wrap" MaxWidth="360"/>
                                 </CheckBox>
+
+                                <CheckBox IsChecked="{Binding ExperimentalLauncherFrameSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Cursor="Hand"
+                                          Foreground="{DynamicResource SubTextForeground}"
+                                          Margin="0,8,0,0"
+                                          AutomationProperties.Name="Experimental launcher frame"
+                                          ToolTip="EXPERIMENTAL: when the Epic Games Launcher window is open, this window wraps around it like a frame and shows smaller profile cards around the edges.">
+                                    <TextBlock Text="Wrap around the Epic Games Launcher when it is open (Experimental)" TextWrapping="Wrap" MaxWidth="360"/>
+                                </CheckBox>
+
+                                <Separator Margin="0,12,0,10" Background="{DynamicResource BtnBorder}"/>
+                                <CheckBox Content="Check for updates automatically (once a day)"
+                                          IsChecked="{Binding AutoCheckForUpdatesSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Foreground="{DynamicResource SubTextForeground}"
+                                          Cursor="Hand"
+                                          Margin="0,0,0,8"
+                                          AutomationProperties.Name="Check for updates automatically"
+                                          ToolTip="Quietly checks GitHub for a newer version at most once a day. Nothing is downloaded or installed without your click."/>
+                                <Button Content="CHECK FOR UPDATES NOW" Command="{Binding CheckForUpdatesCommand}" Style="{StaticResource SecondaryButton}" Padding="16,6" FontSize="11" HorizontalAlignment="Left" ToolTip="Check GitHub for a newer version right now." AutomationProperties.Name="Check for updates now"/>
                             </StackPanel>
                         </Expander>
                     </StackPanel>
@@ -351,6 +440,40 @@
                 </Button>
             </StackPanel>
             </StackPanel>
+
+            <Border Grid.Row="1" Panel.ZIndex="6" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="30,0,30,68" Padding="18,14" CornerRadius="12" MaxWidth="820"
+                    Background="{DynamicResource BtnBackgroundActive}" BorderBrush="{DynamicResource SuccessBackground}" BorderThickness="2"
+                    Visibility="{Binding IsUpdateBannerVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                    AutomationProperties.Name="Update available">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="24" Opacity="0.45" ShadowDepth="0" Color="#9ECE6A"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="26" Foreground="{DynamicResource SuccessBackground}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="UPDATE AVAILABLE" Foreground="{DynamicResource SuccessBackground}" FontSize="10" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding UpdateBannerTitle}" Foreground="White" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding UpdateBannerNotes}" Foreground="{DynamicResource SubTextForeground}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <ProgressBar Height="4" Margin="0,8,0,0" Minimum="0" Maximum="100" Value="{Binding UpdateDownloadProgress}" Foreground="{DynamicResource SuccessBackground}" Background="Transparent" BorderThickness="0"
+                                     Visibility="{Binding IsUpdateDownloading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                        <StackPanel Orientation="Horizontal" Visibility="{Binding IsUpdateIdle, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <Button Content="UPDATE NOW" Command="{Binding InstallUpdateCommand}" Style="{StaticResource OkButton}" Padding="16,7" FontSize="11" ToolTip="Download and verify the update. You confirm before anything is installed." AutomationProperties.Name="Update now"/>
+                            <Button Content="LATER" Command="{Binding RemindLaterCommand}" Style="{StaticResource SecondaryButton}" Padding="12,7" FontSize="11" Margin="8,0,0,0" ToolTip="Hide until tomorrow." AutomationProperties.Name="Remind me later"/>
+                            <Button Content="SKIP VERSION" Command="{Binding SkipUpdateCommand}" Style="{StaticResource SecondaryButton}" Padding="12,7" FontSize="11" Margin="8,0,0,0" ToolTip="Don't remind me about this version again." AutomationProperties.Name="Skip this version"/>
+                            <Button Content="WHAT'S NEW" Command="{Binding ViewReleaseNotesCommand}" Style="{StaticResource SecondaryButton}" Padding="12,7" FontSize="11" Margin="8,0,0,0" ToolTip="Open the full release notes." AutomationProperties.Name="View release notes"/>
+                        </StackPanel>
+                        <Button Content="CANCEL DOWNLOAD" Command="{Binding CancelUpdateDownloadCommand}" Style="{StaticResource SecondaryButton}" Padding="12,7" FontSize="11"
+                                Visibility="{Binding IsUpdateDownloading, Converter={StaticResource BooleanToVisibilityConverter}}" AutomationProperties.Name="Cancel update download"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
 
             <Grid Grid.Row="1" VerticalAlignment="Bottom" Margin="30,0,30,20">
                 <Grid.ColumnDefinitions>

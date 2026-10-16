@@ -1,52 +1,89 @@
 # EPIC GAMES ACCOUNT SWITCHER - ARCHITECTURAL GUIDE & PROJECT STRUCTURE
+# (Mandatory onboarding file for humans and AI agents. Read fully before changing anything.)
 
 ## 1) PROJECT OVERVIEW
-Epic Games Account Switcher is a high-performance, atomic session manager for the Epic Games Launcher. It achieves "Zero-UI" authentication by performing surgical injections of session tokens, web cache state, and registry identifiers, bypassing all login and 2FA prompts.
+Epic Games Account Switcher is a Windows (.NET Framework 4.8, WPF, x64) session manager for the Epic Games Launcher.
+It switches accounts without login prompts by atomically swapping session tokens, web cache state and registry identifiers.
+Distribution: one signed single-file installer EXE published on GitHub Releases; the app updates itself from there.
 
-## 2) PROJECT STATUS (2026-04-27)
-- **Stability**: Build pipeline is 100% stabilized with intelligent pre-flight checks in `Build.cmd`. Shell installations and uninstalls leverage multi-layered directory probing to support OneDrive Known Folder Move (KFM) and GPO folder redirections across Desktop and Start Menu paths.
-- **Architecture**: Atomic directory swapping implemented in `AccountService.cs` to prevent session corruption. Backup cipher encryption and decryption utilize memory-efficient streaming (`CryptoStream`, `BoundedStream`) while maintaining full backward and forward archive compatibility.
-- **Hygiene**: Dead code (including legacy CV-based AutoLogin) has been purged. Redundant path logic consolidated into class properties. All DPAPI encryption operations, registry modifications, and live Epic log extraction routines implement robust rollback, retry loops, and shadow copy-on-read fallback mechanics without silent crashes or resource handle leaks.
-- **Verification**: Session validity (OAuth expiration) is verified before restoration to guarantee success. UI converters programmatically provide dark-mode avatar fallbacks for corrupted images and validate window display bounding against active monitor virtual working areas on boot.
+## 2) PROJECT STATUS (2026-10-16, version 3.0.0)
+- Versioning: SemVer, single source of truth = Directory.Build.props (VersionPrefix). Legacy calendar versions (2026.x) compare as older.
+- Release pipeline: Build.cmd (tests, signing, payload hash, SHA-256) + Release.cmd (notes promotion, annotated tag, gh release).
+- Installer: two-phase (user phase not elevated / machine phase elevated from an admin-only folder), staged + atomic swap with rollback,
+  downgrade guard, graceful shutdown handshake, verified safety backups, uninstall keeps accounts by default.
+- Updates: in-app GitHub Releases updater (daily quiet check, Update/Later/Skip banner, SHA-256 + pinned signature verification).
+- Experimental: "launcher frame" mode (opt-in) wraps the window around the Epic Games Launcher.
+- Known limits: self-signed certificate does not remove SmartScreen/"Unknown publisher" for other users (see ssl-certificate\README.md).
+  No delta updates (installer is ~2 MB; a verified download is reused instead of downloaded again).
 
 ## 3) AI AGENT MINIMAP (NAVIGATION & PURPOSE)
 | Path | Purpose / Role |
 | :--- | :--- |
-| `.\Build.cmd` | Main build entry point. Handles cleaning, publishing, and resource packing with 10s timeouts. |
-| `.\project_structure.txt` | This guide. Root reference for project goals and navigation. |
-| `Epic-Games_Account_Switcher-Client\` | **WPF UI Layer**. Orchestrates user interactions and visual state. |
-| `  - App.xaml.cs` | App lifecycle, smart upgrade/uninstall logic, multi-layered Desktop/Start Menu shortcut probing, staged script command execution, and single-instance mutex. |
-| `  - MainViewModel.cs` | Brain of the UI. Manages background monitoring, command routing, and persisted proportional zoom scale state (`ZoomFactor`). |
-| `  - MainWindow.xaml` | Primary dashboard. Contains account card grid, programmatic fallback profile avatar rendering (`ProfileImageConverter`), reordering logic, layout scaling engine (`LayoutTransform`), centered bottom action bar zoom controls, and system tray minimize option toggle. |
-| `  - MainWindow.xaml.cs` | Window procedural logic. Implements active monitor off-screen window display recovery, `Ctrl + MouseWheel` proportional UI zoom interception, and multi-stage system tray icon resolution from embedded executable resources. |
-| `  - CustomMessageBox.xaml` | Mandated UI for all user notifications. Styles match the app theme. |
-| `  - CaptureAccountWindow.xaml` | Wizard for adding new accounts or editing existing profile metadata. |
-| `Epic-Games_Account_Switcher-Globals\` | **Core Logic Layer**. Platform-agnostic session engine. |
-| `  - AccountService.cs` | **Critical Engine**. Handles atomic directory moves, deep session clones, active 50ms process kill polling, synchronized metadata detection, copy-on-read live log parsing, registry identity switching with automated rollback, and low-RAM streaming backup encryption/decryption. |
-| `  - AccountModel.cs` | Definition of the `Account` object, including token, registry storage, and unhandled-exception-safe DPAPI cryptographic credential protection. |
-| `  - AppSettings.cs` | Singleton managing `appsettings.json` and critical registry key lists. |
-| `  - Globals.cs` | Robust I/O helpers (`ForceDeleteDirectory`), asynchronous retry loops, atomic COM shortcut creation in temp staging, and exhaustive Desktop/Start Menu folder redirection discovery. |
-| `  - Windows.cs` | P/Invoke bridge for native Win32 interactions (window focus, clipboard). |
-| `  - Registry.cs` | Encapsulated logic for reading/writing complex registry value types under explicit Registry64 views. |
-| `  - CredentialService.cs` | Manages tokens stored in the Windows Credential Manager (Vault). |
-| `SingleFilePacker\` | Build-time tool for bundling the `Payload` folder into the final distribution EXE with deterministic orphaned staging folder cleanup upon boot failures. |
-| `Epic-Games_Account_Switcher-Tests\` | MSTest coverage for backup encryption, legacy restore, path traversal rejection, auth validation, and atomic move safety. |
-| `Skin_Icons\` | Repository of default profile images available to the end user. |
+| `.\project_structure.txt` | This guide. Root reference for goals, rules and navigation. Keep it current (rule 6.4). |
+| `.\docs\index.md` | Index of all documentation. |
+| `.\docs\changes.md` | INTERNAL technical change log. Every change adds an [Unreleased] entry + plain-English "Public:" line. |
+| `.\docs\CHANGELOG.md` | PUBLIC "What's new" history (generated at release, never truncated). |
+| `.\docs\RELEASING.md` | Versioning, build, signing, release and update pipeline in detail. |
+| `.\Directory.Build.props` | SINGLE version source (VersionPrefix) + signing thumbprint pin for all projects. |
+| `.\Build.cmd` | Release build: pre-flight -> clean -> dotnet test -> publish (no pdb) -> sign -> pack (+payload SHA-256) -> installer -> sign -> .sha256. `--dev` skips tests/clean. No `pause` (10s timeout). |
+| `.\dev_build.cmd` | Wrapper for `Build.cmd --dev` (local installer build, never touches Git). |
+| `.\dev.cmd` | Debug run/watch with isolated data (`--dev --user-data %TMP%\...`). Use this to test; never test against real profiles. |
+| `.\Release.cmd` | `Release.cmd X.Y.Z`: clean-tree/main checks, version bump, notes check, Build.cmd, notes promotion, commit, annotated tag, push, `gh release create`. |
+| `.\developer_tools\Set-Version.ps1` | Bumps VersionPrefix (must increase). |
+| `.\developer_tools\Release-Notes.ps1` | Validates/promotes docs\changes.md -> docs\CHANGELOG.md + GitHub release body. Enforces jargon-free Public lines and history growth. |
+| `.\developer_tools\SetConsoleFont.ps1` | Console cosmetics used at the end of Build.cmd. |
+| `.\developer_tools\*.py` | Maintenance helpers (code extraction / comment removal). |
+| `.\ssl-certificate\` | Free self-signed code signing: Create-CodeSigningCert.ps1 (one-time), Sign-File.ps1 (used by Build.cmd), public .cer + thumbprint.txt. `private\` is git-ignored. |
+| `Epic-Games_Account_Switcher-Client\` | **WPF UI Layer** (assembly `Epic-Games_Account_Switcher.exe`). |
+| `  - App.xaml.cs` | App lifecycle, single-instance mutex, graceful-shutdown listener, INSTALLER (user phase + elevated machine phase) and UNINSTALLER. |
+| `  - MainViewModel.cs` | UI brain: accounts, commands, monitoring, zoom. `partial`: |
+| `  - MainViewModel.Updates.cs` | Update banner/commands (check, Update now, Later, Skip, What's new). |
+| `  - MainViewModel.LauncherFrame.cs` | Experimental launcher-frame setting + left/right card lists. |
+| `  - LauncherFrameController.cs` | Tracks the Epic launcher window (read-only Win32) and wraps the main window around it. |
+| `  - MainWindow.xaml(.cs)` | Dashboard: card grid, frame layout, update banner, options (incl. auto-update + frame toggles), tray, zoom, off-screen recovery. |
+| `  - CaptureAccountWindow.xaml(.cs)` | Wizard for adding/editing profiles. |
+| `  - EmbeddedLoginWindow.xaml(.cs)` | WebView2 direct Epic login (exchange code capture). |
+| `  - PasswordPromptWindow.xaml(.cs)` | Backup password prompt. |
+| `  - ProgressWindow.xaml(.cs)` | Setup/uninstall progress UI. |
+| `  - SkinPickerWindow.xaml(.cs)` | Avatar picker. |
+| `  - CustomMessageBox.xaml(.cs)` | Mandated UI for all user notifications (Primary/Secondary/Cancel). |
+| `Epic-Games_Account_Switcher-Globals\` | **Core Logic Layer**. |
+| `  - AccountService.cs` | Critical engine: atomic directory moves, session clones, process kill polling, registry identity switching with rollback, streaming encrypted backups, `VerifyBackupFile`. `SessionOperationLock` serializes session work. |
+| `  - AppVersion.cs` | Version read-back + SemVer/legacy comparison. |
+| `  - UpdateService.cs` | GitHub Releases check, download, SHA-256 + Authenticode/thumbprint verification, installer launch (`--installing --update`). |
+| `  - AppSettings.cs` | `appsettings.json` singleton (incl. update + experimental settings). |
+| `  - Globals.cs` | I/O helpers, logging, install paths (`InstallDirectory`), shortcut creation, shell-folder probing. |
+| `  - AccountModel.cs`, `CredentialService.cs`, `Registry.cs`, `Windows.cs` | Account model + DPAPI, Credential Manager, registry helpers, Win32 interop. |
+| `SingleFilePacker\` | Installer bootstrapper (asInvoker): payload SHA-256 check, extraction (user %TEMP% or admin-only Program Files folder when elevated), waits for setup, cleans up. |
+| `Epic-Games_Account_Switcher-Tests\` | MSTest: backup encryption, restore safety, path traversal, auth validation, version comparison. Run by Build.cmd. |
+| `Skin_Icons\`, `Application_Icons\` | Default avatars and app icons. |
+| `Payload\`, `compiled\` | Build outputs (git-ignored). |
 
 ## 4) CORE ARCHITECTURAL PRINCIPLES
-1. **Atomicity & Rollback**: Session restoration MUST use `Directory.Move` on prepared temporary structures. Never copy files into an active launcher folder one by one. Shortcut generation MUST stage `.lnk` assets atomically in temporary directories before committing. Registry identity switching MUST execute complete rollback restoration from cached snapshots if any key modification fails.
-2. **Zero-UI Mandate**: Any prompt for email/password from the launcher is a logic failure. Verify session tokens across both JSON and binary authentication files (`PersistentAuthStorage.json`, `PersistentAuthStorage.bin`) and validate modern binary auth blobs against OAuth expiration timestamps before restoration.
-3. **Deterministic Lifecycle**: Epic processes must be identified by installation path and terminated definitively using active polling loops before any file I/O begins.
-4. **Path Management & Shell Probing**: Always use the consolidated properties (`LocalAppData`, `EpicSavedPath`) in `AccountService.cs` to ensure path consistency. Installer and uninstaller shortcut deployment MUST probe all standard namespaces, Registry User Shell Folders, and OneDrive Known Folder Move (KFM) redirected desktop paths via `Globals.GetProbedDesktopDirectories()` and `Globals.GetProbedStartMenuDirectories()`.
-5. **No Halt Build & Resource Cleanliness**: The build script is designed for automated pipelines; use `timeout /t 10` instead of `pause`. Single-file installer extraction and self-deletion batch scripts must enforce bounded retry limits and automatically erase incomplete staging workspaces upon failure.
-6. **Low-RAM Compatibility & Safe Diagnostics**: Account profile backup encryption/decryption MUST leverage streaming cipher pipelines (`CryptoStream`/`BoundedStream`) without altering legacy archive structure or breaking backward restoration compatibility. Extraction of active Epic log files and configuration INIs MUST employ copy-on-read shadow file fallbacks to prevent silent failure during OS file lock contention.
+1. **Atomicity & Rollback**: Session restoration uses `Directory.Move` on prepared temp structures. Program-file updates use staged folder + rename swap + rollback. Registry switching rolls back from snapshots.
+2. **Zero-UI Mandate**: Any launcher login prompt is a logic failure. Validate tokens (JSON + binary auth) and OAuth expiry before restoring.
+3. **Deterministic Lifecycle**: Epic processes are identified by install path and terminated with active polling before file I/O.
+4. **Path Management**: Use consolidated properties (`LocalAppData`, `EpicSavedPath`, `Globals.InstallDirectory`). Shortcuts are created for all users by the elevated phase; old per-user shortcuts are removed in the user phase.
+5. **Privilege Separation (installer)**: Elevated code runs ONLY from admin-only locations (Program Files). Never write scripts/executables to %TEMP% for elevated use. User data (backups, accounts, HKCU) is handled only in the non-elevated user phase and only after the machine phase succeeded.
+6. **Never lose user data**: Never say a backup exists without `AccountService.VerifyBackupFile`. Never delete accounts without explicit user choice; uninstall keeps accounts by default.
+7. **No surprise restarts**: The app never installs/restarts without explicit user confirmation. Setup asks the running app to exit gracefully (finishing any switch) before force-stopping it.
+8. **Low-RAM & Safe Diagnostics**: Streaming crypto for backups; copy-on-read for locked Epic logs/INIs.
 
-## 5) DATA MODEL (%LOCALAPPDATA%\EpicAccountSwitcher\ & %PROGRAMDATA%\Epic-Games_Account_Switcher\)
-- `EG\accounts.json`: Global account registry (%LOCALAPPDATA%).
-- `EG\<Id>\` (%LOCALAPPDATA%):
-  - `Saved\`: Cloned authentication and config files.
-  - `EOS_Data\`: Cloned Epic Online Services local state.
-  - `Roaming_Data\`: Cloned AppData/Roaming state for the launcher.
-  - `ProgramData_Data\`: Cloned ProgramData launcher manifest state (%PROGRAMDATA%\Epic\EpicGamesLauncher\Data\Manifests).
-- `%PROGRAMDATA%\Epic-Games_Account_Switcher\Epic-Games_Account_Switcher.log`: Ongoing application log file.
-- User-created backups use password-encrypted or CurrentUser-protected `.egbackup` files processed via low-RAM streaming algorithms with verified HMAC-SHA256 headers; legacy unencrypted ZIP backups are restore-only for backward and forward compatibility.
+## 5) DATA MODEL
+- `%LOCALAPPDATA%\EpicAccountSwitcher\EG\accounts.json` and `EG\<Id>\{Saved,EOS_Data,Roaming_Data,ProgramData_Data}`: profiles.
+- `%LOCALAPPDATA%\EpicAccountSwitcher\appsettings.json`: settings (incl. AutoCheckForUpdates, SkippedUpdateVersion, ExperimentalLauncherFrame).
+- `%LOCALAPPDATA%\EpicAccountSwitcher\Updates\<version>\`: verified update downloads (old ones cleaned at startup).
+- `%PROGRAMDATA%\Epic-Games_Account_Switcher\Epic-Games_Account_Switcher.log`: app log.
+- `%ProgramFiles%\Epic-Games_Account_Switcher\`: install folder. HKLM `...\Uninstall\Epic-Games_Account_Switcher`: Windows uninstall entry.
+- `Downloads\Epic_Setup_Backup_*.egbackup` / `Epic_Uninstall_Backup_*.egbackup`: automatic verified safety backups (newest 3 kept).
+- `.egbackup`: password- or CurrentUser-protected streaming-encrypted archives with HMAC-SHA256; legacy ZIPs are restore-only.
+
+## 6) AGENT WORKFLOW (MANDATORY FOR EVERY TASK)
+1. Read this file, then the files you will touch. For release/installer work also read docs\RELEASING.md.
+2. Test with `dev.cmd run` (isolated data). Build with `dev_build.cmd`; run tests with `dotnet test Epic-Games_Account_Switcher-Tests`.
+3. In the SAME change, add an entry to docs\changes.md under `## [Unreleased]` (category + technical line + plain-English `Public:` line;
+   rules at the top of that file). Never edit released sections or docs\CHANGELOG.md by hand.
+4. Keep this file current: new/removed/renamed files go into section 3, new rules into section 4.
+5. Never change the version by hand (Release.cmd owns it). Never rename release assets (updater contract, see docs\RELEASING.md).
+6. Never commit secrets: ssl-certificate\private\, *.pfx, passwords. Never commit Payload\ or compiled\.
+7. All user-facing messages go through CustomMessageBox; never block the UI thread with network or disk work.

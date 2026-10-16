@@ -22,7 +22,11 @@ namespace Epic_Games_Account_Switcher_Globals
     public partial class Globals
     {
         public static bool VerboseMode;
-        public static readonly string Version = "2026.04.01.1310";
+        public static readonly string Version = AppVersion.Current;
+        public const string InstallFolderName = "Epic-Games_Account_Switcher";
+        public static string InstallDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), InstallFolderName);
+        public static string LegacyInstallDirectoryX86 => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), InstallFolderName);
+        public static string InstalledExePath => Path.Combine(InstallDirectory, "Epic-Games_Account_Switcher.exe");
         public static readonly string LogSessionId = Guid.NewGuid().ToString("N").Substring(0, 12);
         public static string AppDataFolder => AppDomain.CurrentDomain.BaseDirectory;
         public static string UserDataFolderOverride { get; set; }
@@ -255,11 +259,16 @@ namespace Epic_Games_Account_Switcher_Globals
             var sp = Path.Combine(UserDataFolder, "appsettings.json");
             if (!File.Exists(sp)) { var src = Path.Combine(AppDataFolder, "appsettings.json"); if (File.Exists(src)) CopyFile(src, sp, false); }
         }
+        /// <summary>True only when running from the real install folder (not from setup/uninstall staging folders under Program Files).</summary>
         public static bool InstalledToProgramFiles()
         {
-            var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            var pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
-            return AppDataFolder.StartsWith(pf, StringComparison.OrdinalIgnoreCase) || AppDataFolder.StartsWith(pfx86, StringComparison.OrdinalIgnoreCase);
+            try
+            {
+                var dir = Path.GetFullPath(AppDataFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                return string.Equals(dir, Path.GetFullPath(InstallDirectory).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(dir, Path.GetFullPath(LegacyInstallDirectoryX86).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
         }
         public static bool IsProcessRunning(string n)
         {

@@ -6,7 +6,6 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>..\Application_Icons\Epic-Games_Account_Switcher.ico</ApplicationIcon>
-    <Version>2026.04.01.1310</Version>
     <Authors>Epic-Games_Account_Switcher Team</Authors>
     <Product>Epic-Games_Account_Switcher</Product>
     <AssemblyName>Epic-Games_Account_Switcher</AssemblyName>

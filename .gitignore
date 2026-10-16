@@ -4,8 +4,10 @@
 [Pp]ublish/
 [Cc]ompiled/
 [Pp]ayload/
+TestResults/
 Payload.zip
 SingleFilePacker/Payload.zip
+SingleFilePacker/payload.sha256
 *.exe
 *.zip
 *.pdb
@@ -13,3 +15,10 @@ SingleFilePacker/Payload.zip
 *.suo
 *.user
 *.log
+
+# Code-signing secrets: NEVER commit (public .cer and thumbprint.txt are fine)
+ssl-certificate/private/
+*.pfx
+*.p12
+*.pvk
+*.snk

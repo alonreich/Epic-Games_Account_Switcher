@@ -13,7 +13,7 @@ using System.Windows;
 
 namespace Epic_Games_Account_Switcher_Client
 {
-    public class MainViewModel : INotifyPropertyChanged
+    public partial class MainViewModel : INotifyPropertyChanged
     {
         public class AccountMetadata
         {

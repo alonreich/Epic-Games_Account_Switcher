@@ -36,6 +36,7 @@ namespace Epic_Games_Account_Switcher_Client
         private bool _isUnsavedLoginScanRunning;
         private Forms.NotifyIcon _notifyIcon;
         private bool _isExplicitExit;
+        private LauncherFrameController _launcherFrame;
         public MainWindow()
         {
             InitializeComponent();
@@ -43,6 +44,8 @@ namespace Epic_Games_Account_Switcher_Client
             DataContext = ViewModel;
             ViewModel.RequestCapture += ViewModel_RequestCapture;
             ViewModel.OnAccountsChanged += UpdateTrayContextMenu;
+            ViewModel.OnAccountsChanged += () => ViewModel.RefreshFrameAccounts();
+            Activated += (s, e) => _launcherFrame?.OnActivated();
             Loaded += MainWindow_Loaded;
             if (!ApplySavedWindowPlacement(AppSettings.Instance)) WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
@@ -54,6 +57,8 @@ namespace Epic_Games_Account_Switcher_Client
                 await ViewModel.PromptForUnsavedLoginIfNeeded();
                 UpdateTrayIconVisibility();
                 StartUnsavedLoginMonitor();
+                _ = ViewModel.CheckForUpdatesOnStartupAsync();
+                ApplyLauncherFrameSetting(AppSettings.Instance.ExperimentalLauncherFrame);
             }
             catch (Exception ex)
             {
@@ -89,6 +94,29 @@ namespace Epic_Games_Account_Switcher_Client
                 Hide();
             }
         }
+        /// <summary>Turns the experimental launcher frame on or off.</summary>
+        public void ApplyLauncherFrameSetting(bool enabled)
+        {
+            if (_launcherFrame == null) _launcherFrame = new LauncherFrameController(this);
+            _launcherFrame.SetEnabled(enabled);
+        }
+
+        /// <summary>Called by LauncherFrameController: swaps between the normal card grid and the compact frame layout.</summary>
+        public void SetFrameLayout(bool frame)
+        {
+            ViewModel?.RefreshFrameAccounts();
+            FrameContent.Visibility = frame ? Visibility.Visible : Visibility.Collapsed;
+            NormalContent.Visibility = frame ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        /// <summary>Closes the app for real (bypasses minimize-to-tray). Used by the tray Exit item, setup's graceful-close request and the updater.</summary>
+        public void ExitApplication()
+        {
+            _isExplicitExit = true;
+            Close();
+            try { Application.Current.Shutdown(); } catch { }
+        }
+
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             if (AppSettings.Instance.MinimizeToTray && !_isExplicitExit)
@@ -98,6 +126,7 @@ namespace Epic_Games_Account_Switcher_Client
                 return;
             }
             if (_notifyIcon != null) { _notifyIcon.Visible = false; _notifyIcon.Dispose(); _notifyIcon = null; }
+            try { _launcherFrame?.Dispose(); _launcherFrame = null; } catch { }
             try { ViewModel.Shutdown(); } catch { }
             try { if (_unsavedLoginTimer != null) _unsavedLoginTimer.Stop(); } catch { }
             SaveWindowPlacement();

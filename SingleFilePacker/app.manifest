@@ -4,8 +4,18 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+        <!--
+          asInvoker on purpose: setup first runs as the signed-in user (correct profile, Downloads, user data) and only the
+          machine phase is elevated, by relaunching THIS exe with "runas". When elevated, the payload is extracted into an
+          admin-only folder under Program Files, never into the user-writable %TEMP%.
+        -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
       </requestedPrivileges>
     </security>
   </trustInfo>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
 </assembly>

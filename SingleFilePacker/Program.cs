@@ -1,93 +1,185 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Diagnostics;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace SingleFilePacker
 {
-    class Program
+    /// <summary>
+    /// Single-file installer bootstrapper.
+    /// --pack            (build time) zips .\Payload into payload.zip and writes its SHA-256 to payload.sha256.
+    /// (default)         verifies the embedded payload hash, extracts it, runs the app's setup and waits, then deletes the extraction folder.
+    ///   - Not elevated: extracts to %TEMP%\EpicSwitcherInstaller_* (user phase never runs with admin rights).
+    ///   - Elevated:     extracts to %ProgramFiles%\Epic-Games_Account_Switcher_Setup_* (admin-only ACL inherited from Program Files),
+    ///                   so no non-admin process can swap the files that run elevated.
+    /// </summary>
+    internal static class Program
     {
+        private const string UserTempPrefix = "EpicSwitcherInstaller_";
+        private const string ElevatedPrefix = "Epic-Games_Account_Switcher_Setup_";
+        private const string AppExeName = "Epic-Games_Account_Switcher.exe";
+
         [STAThread]
-        static void Main(string[] args)
+        private static int Main(string[] args)
         {
-            if (args.Contains("--pack")) { Pack(); return; }
-            ExtractAndRun(args);
+            if (args.Contains("--pack")) return Pack();
+            return ExtractAndRun(args ?? new string[0]);
         }
-        static void Pack()
+
+        private static int Pack()
         {
             Console.WriteLine("Packing Payload...");
             var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
             while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "Payload"))) dir = dir.Parent;
-            if (dir == null) { Console.WriteLine("Payload directory not found."); Environment.Exit(1); }
+            if (dir == null) { Console.WriteLine("Payload directory not found."); return 1; }
             var payload = Path.Combine(dir.FullName, "Payload");
+            if (!File.Exists(Path.Combine(payload, AppExeName))) { Console.WriteLine("Payload is missing " + AppExeName + "."); return 1; }
             var zipPath = Path.Combine(dir.FullName, "SingleFilePacker", "payload.zip");
+            var hashPath = Path.Combine(dir.FullName, "SingleFilePacker", "payload.sha256");
             if (File.Exists(zipPath)) File.Delete(zipPath);
+            if (File.Exists(hashPath)) File.Delete(hashPath);
             ZipFile.CreateFromDirectory(payload, zipPath, CompressionLevel.Optimal, false);
-            Console.WriteLine("Payload packed to: " + zipPath);
+            string hash;
+            using (var sha = SHA256.Create())
+            using (var fs = File.OpenRead(zipPath)) hash = ToHex(sha.ComputeHash(fs));
+            File.WriteAllText(hashPath, hash, Encoding.ASCII);
+            Console.WriteLine("Payload packed to: " + zipPath + " (SHA-256 " + hash + ")");
+            return 0;
         }
-        static void ExtractAndRun(string[] args)
+
+        private static bool IsAdministrator()
         {
-            string temp = null;
+            try { return new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator); }
+            catch { return false; }
+        }
+
+        private static int ExtractAndRun(string[] args)
+        {
+            string root = null;
+            Form splash = null;
             try
             {
-                PurgeOldExtractionFolders();
+                var admin = IsAdministrator();
+                PurgeOldExtractionFolders(admin);
+
                 var assembly = Assembly.GetExecutingAssembly();
-                var resourceName = assembly.GetManifestResourceNames().FirstOrDefault(r => r.EndsWith("payload.zip"));
-                if (string.IsNullOrEmpty(resourceName)) { MessageBox.Show("No payload found in this executable.", "Boot Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
-                
-                Form splash = new Form { 
-                    Text = "Epic Games Account Switcher", 
-                    StartPosition = FormStartPosition.CenterScreen, 
+                var zipResource = assembly.GetManifestResourceNames().FirstOrDefault(r => r.EndsWith("payload.zip", StringComparison.OrdinalIgnoreCase));
+                var hashResource = assembly.GetManifestResourceNames().FirstOrDefault(r => r.EndsWith("payload.sha256", StringComparison.OrdinalIgnoreCase));
+                if (zipResource == null || hashResource == null)
+                {
+                    MessageBox.Show("This installer is incomplete. Please download it again.", "Setup Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return 1;
+                }
+
+                splash = ShowSplash();
+
+                root = admin
+                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), ElevatedPrefix + Guid.NewGuid().ToString("N"))
+                    : Path.Combine(Path.GetTempPath(), UserTempPrefix + Guid.NewGuid().ToString("N"));
+                if (Directory.Exists(root)) throw new IOException("Extraction folder unexpectedly exists: " + root);
+                Directory.CreateDirectory(root);
+
+                string expected;
+                using (var hs = assembly.GetManifestResourceStream(hashResource))
+                using (var reader = new StreamReader(hs)) expected = reader.ReadToEnd().Trim();
+
+                var zipPath = Path.Combine(root, "payload.zip");
+                string actual;
+                using (var stream = assembly.GetManifestResourceStream(zipResource))
+                using (var sha = SHA256.Create())
+                using (var crypto = new CryptoStream(stream, sha, CryptoStreamMode.Read))
+                using (var fileStream = File.Create(zipPath))
+                {
+                    crypto.CopyTo(fileStream);
+                    crypto.Flush();
+                    actual = ToHex(sha.Hash);
+                }
+                if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("The installer is damaged (payload checksum mismatch). Please download it again.");
+
+                ExtractZipSafely(zipPath, root);
+                try { File.Delete(zipPath); } catch { }
+                CloseSplash(ref splash);
+
+                var exe = Path.Combine(root, AppExeName);
+                if (!File.Exists(exe)) throw new FileNotFoundException("The installer payload is missing the application.");
+
+                var forwarded = args.Where(a => !string.Equals(a, "--extract-dir", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (!forwarded.Any(a => a.Equals("--installing", StringComparison.OrdinalIgnoreCase) || a.Equals("--uninstall", StringComparison.OrdinalIgnoreCase)))
+                    forwarded.Insert(0, "--installing");
+                forwarded.Add("--extract-dir"); forwarded.Add(root);
+                forwarded.Add("--bootstrapper"); forwarded.Add(Assembly.GetExecutingAssembly().Location);
+
+                using (var child = Process.Start(new ProcessStartInfo { FileName = exe, Arguments = string.Join(" ", forwarded.Select(Quote)), WorkingDirectory = root, UseShellExecute = false }))
+                {
+                    child.WaitForExit();
+                    return child.ExitCode;
+                }
+            }
+            catch (Exception ex)
+            {
+                CloseSplash(ref splash);
+                MessageBox.Show("Setup could not start:\n\n" + ex.Message, "Setup Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 1;
+            }
+            finally
+            {
+                if (root != null) DeleteWithRetry(root);
+            }
+        }
+
+        private static Form ShowSplash()
+        {
+            try
+            {
+                var splash = new Form
+                {
+                    Text = "Epic Games Account Switcher",
+                    StartPosition = FormStartPosition.CenterScreen,
                     Size = new System.Drawing.Size(400, 150),
                     FormBorderStyle = FormBorderStyle.FixedDialog,
                     ControlBox = false,
                     TopMost = true,
                     ShowInTaskbar = true
                 };
-                Label lbl = new Label { 
-                    Text = "Preparing application environment...\nPlease wait while files are extracted.", 
-                    Dock = DockStyle.Fill, 
-                    TextAlign = System.Drawing.ContentAlignment.MiddleCenter, 
+                splash.Controls.Add(new Label
+                {
+                    Text = "Preparing setup...\nVerifying and extracting files.",
+                    Dock = DockStyle.Fill,
+                    TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
                     Font = new System.Drawing.Font("Segoe UI", 11)
-                };
-                splash.Controls.Add(lbl);
+                });
                 splash.Show();
                 splash.Refresh();
-
-                temp = Path.Combine(Path.GetTempPath(), "EpicSwitcherInstaller_" + Guid.NewGuid().ToString("N"));
-                Directory.CreateDirectory(temp);
-                using (var stream = assembly.GetManifestResourceStream(resourceName))
-                using (var fileStream = File.Create(Path.Combine(temp, "payload.zip"))) stream.CopyTo(fileStream);
-                ExtractZipSafely(Path.Combine(temp, "payload.zip"), temp);
-                
-                if (splash != null)
-                {
-                    splash.Close();
-                    splash.Dispose();
-                }
-
-                var exe = Path.Combine(temp, "Epic-Games_Account_Switcher.exe");
-                if (!File.Exists(exe))
-                {
-                    if (Directory.Exists(temp)) try { Directory.Delete(temp, true); } catch { }
-                    MessageBox.Show("Installer executable missing from payload.", "Extraction Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-                string cmdArgs = args != null && args.Length > 0 ? string.Join(" ", args.Select(a => "\"" + (a.EndsWith("\\") ? a + "\\" : a) + "\"")) : "";
-                cmdArgs = (cmdArgs + " --extract-dir \"" + (temp.EndsWith("\\") ? temp + "\\" : temp) + "\"").Trim();
-                Process.Start(new ProcessStartInfo { FileName = exe, Arguments = cmdArgs, WorkingDirectory = temp, UseShellExecute = true });
+                return splash;
             }
-            catch (Exception ex)
-            {
-                if (temp != null && Directory.Exists(temp)) try { Directory.Delete(temp, true); } catch { }
-                MessageBox.Show("Fatal Boot Error: " + ex.Message + "\n\nStack: " + ex.StackTrace, "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            catch { return null; }
         }
 
-        static void ExtractZipSafely(string zipPath, string extractionRoot)
+        private static void CloseSplash(ref Form splash)
+        {
+            if (splash == null) return;
+            try { splash.Close(); splash.Dispose(); } catch { }
+            splash = null;
+        }
+
+        private static string Quote(string a)
+        {
+            if (a == null) return "\"\"";
+            if (a.EndsWith("\\")) a += "\\";
+            return "\"" + a.Replace("\"", "\\\"") + "\"";
+        }
+
+        private static string ToHex(byte[] bytes) => BitConverter.ToString(bytes).Replace("-", "");
+
+        private static void ExtractZipSafely(string zipPath, string extractionRoot)
         {
             var root = Path.GetFullPath(extractionRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
             using (var archive = ZipFile.OpenRead(zipPath))
@@ -105,17 +197,25 @@ namespace SingleFilePacker
             }
         }
 
-        static void PurgeOldExtractionFolders()
+        private static void DeleteWithRetry(string dir)
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); return; }
+                catch { Thread.Sleep(500); }
+            }
+        }
+
+        private static void PurgeOldExtractionFolders(bool admin)
         {
             try
             {
-                foreach (var dir in Directory.GetDirectories(Path.GetTempPath(), "EpicSwitcherInstaller_*", SearchOption.TopDirectoryOnly))
+                foreach (var dir in Directory.GetDirectories(Path.GetTempPath(), UserTempPrefix + "*", SearchOption.TopDirectoryOnly))
+                    try { if (Directory.GetLastWriteTimeUtc(dir) < DateTime.UtcNow.AddHours(-12)) Directory.Delete(dir, true); } catch { }
+                if (admin)
                 {
-                    try
-                    {
-                        if (Directory.GetCreationTimeUtc(dir) < DateTime.UtcNow.AddHours(-12)) Directory.Delete(dir, true);
-                    }
-                    catch { }
+                    foreach (var dir in Directory.GetDirectories(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), ElevatedPrefix + "*", SearchOption.TopDirectoryOnly))
+                        try { if (Directory.GetLastWriteTimeUtc(dir) < DateTime.UtcNow.AddHours(-1)) Directory.Delete(dir, true); } catch { }
                 }
             }
             catch { }

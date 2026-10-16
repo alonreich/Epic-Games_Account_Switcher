@@ -1,0 +1,31 @@
+<Project>
+  <!--
+    SINGLE SOURCE OF TRUTH FOR THE PRODUCT VERSION (Semantic Versioning: MAJOR.MINOR.PATCH).
+    - Every project in this repository (Client, Globals, Tests, SingleFilePacker) inherits this version.
+    - Globals.Version reads it back at runtime from the assembly, so never hard-code a version in C#.
+    - Release.cmd bumps VersionPrefix, builds, tags vX.Y.Z and publishes. Do not edit the version anywhere else.
+    - Optional pre-release: set VersionSuffix (e.g. beta.1) to produce 3.1.0-beta.1.
+  -->
+  <PropertyGroup>
+    <VersionPrefix>3.0.0</VersionPrefix>
+    <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
+    <FileVersion>$(VersionPrefix).0</FileVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Company>Epic-Games_Account_Switcher Team</Company>
+    <Product>Epic-Games_Account_Switcher</Product>
+  </PropertyGroup>
+
+  <!--
+    Code-signing certificate pin. When ssl-certificate\thumbprint.txt exists (public value, safe to commit),
+    its thumbprint is embedded so the in-app updater only accepts installers signed by this exact certificate.
+  -->
+  <PropertyGroup Condition="'$(SigningThumbprint)' == '' And Exists('$(MSBuildThisFileDirectory)ssl-certificate\thumbprint.txt')">
+    <SigningThumbprint>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)ssl-certificate\thumbprint.txt').Trim())</SigningThumbprint>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(SigningThumbprint)' != ''">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>SigningThumbprint</_Parameter1>
+      <_Parameter2>$(SigningThumbprint)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>
