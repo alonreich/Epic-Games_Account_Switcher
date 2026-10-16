@@ -14,6 +14,7 @@ AGENT / DEVELOPER RULES (mandatory, see project_structure.txt section 6)
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-16
 ### Security
 - Installer no longer runs elevated code from the user-writable %TEMP%: `SingleFilePacker` is now `asInvoker`, verifies a SHA-256 of its embedded payload, extracts to `%ProgramFiles%\Epic-Games_Account_Switcher_Setup_*` when elevated, and removes it itself after the child exits. All `.bat` files in %TEMP% were replaced by an inline, tamper-proof `cmd /c` command restricted to our own folders (`App.xaml.cs`, `SingleFilePacker/Program.cs`, `app.manifest`).
   - Public: Setup is hardened so other programs on your PC can no longer interfere with it while it runs with administrator rights.

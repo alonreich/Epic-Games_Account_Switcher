@@ -5,6 +5,30 @@ Download the latest version from the [Releases page](https://github.com/alonreic
 
 <!-- releases:start -->
 
+## v3.0.0 - October 16, 2026
+
+### Security
+- Setup is hardened so other programs on your PC can no longer interfere with it while it runs with administrator rights.
+- The app and installer are now digitally signed, and updates are only accepted when the signature matches.
+- Each download now comes with a checksum so you can confirm the file is genuine.
+
+### New
+- The app now tells you when a new version is out and can update itself in one click, only when you choose to.
+- Try the new experimental frame mode that wraps the switcher around the Epic Games Launcher with your accounts on both sides.
+- Setup now waits for an account switch in progress to finish before closing the app.
+- The app now shows its version number in the title bar.
+
+### Improved
+- Version numbers now follow the standard format, starting with 3.0.0.
+- Updates are now all-or-nothing: if anything goes wrong, your previous version keeps working.
+- Setup now warns you before replacing a newer version with an older one.
+- Setup now double-checks its safety backup and will never delete your accounts if the backup failed without asking you first.
+- Uninstalling no longer deletes your saved accounts unless you ask for it, and a backup is made first.
+- Installing from a standard Windows account now keeps your accounts in your own profile.
+
+### Fixed
+- Fixed setup sometimes refusing to run with a "System Busy" message.
+
 ## v2026.08.05.1 - August 5, 2026
 
 ### New
