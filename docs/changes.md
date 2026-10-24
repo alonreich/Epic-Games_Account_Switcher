@@ -13,6 +13,8 @@ AGENT / DEVELOPER RULES (mandatory, see project_structure.txt section 6)
 -->
 
 ## [Unreleased]
+
+## [3.1.0] - 2026-10-24
 ### Changed
 - UI/UX audit fixes (ISSUE_01-35 except 32): restore asks before replacing accounts; close is guarded while busy; `MessageBoxVisualStyle.Danger` (safe default button); friendly error text; card "⋯" menu + shared `AccountCardContextMenu`; banners/toolbar get their own rows; Settings popup replaces the Options expander; longer, hover-pausable toast with live-region announcements; inline validation with cached duplicate checks; account writes queued off the UI thread; dark implicit styles (CheckBox, MenuItem, ScrollBar, ToolTip, PasswordBox) and new tokens; tray notices; installer window no longer steals focus; reduced-motion support; zoom capped at 175% (`App.xaml`, `MainWindow.xaml(.cs)`, `MainViewModel*.cs`, all dialogs, `AppSettings` TrayHintShown/LastBackupFolder, `AccountModel` labels, `UpdateService`).
   - Public: Clearer, safer and more accessible app: confirmations before replacing accounts, plain-language messages, easier settings and account menus.

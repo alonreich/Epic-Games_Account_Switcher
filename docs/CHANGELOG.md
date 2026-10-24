@@ -5,6 +5,24 @@ Download the latest version from the [Releases page](https://github.com/alonreic
 
 <!-- releases:start -->
 
+## v3.1.0 - October 24, 2026
+
+### Improved
+- Clearer, safer and more accessible app: confirmations before replacing accounts, plain-language messages, easier settings and account menus.
+
+### Fixed
+- If your saved account list gets damaged, the app now tells you, keeps a copy, and offers to restore a backup instead of starting empty.
+- Cancelling "replace saved account" no longer closes Epic Games Launcher or shows an error, and save errors are easier to understand.
+- Opening the app again while it runs in the notification area now brings its window back.
+- Dialogs can be moved and always fit on the screen, also on small or high-scaling displays.
+- Signing in to add an account no longer leaves sign-in data behind on your PC.
+- If saving an account fails, what you typed is kept, and edits are only reported as saved when they really are.
+- Adding an account when nobody is signed in to Epic now explains your options first.
+- You now see a confirmation after switching accounts.
+- The experimental frame mode now shows settings, update and save-account options.
+- Account cards are tidier, and "last used" times stay current and follow your regional format.
+- Frame mode now follows Epic Games Launcher instantly, moves together with it as one window, and opens and closes with a smooth fade.
+
 ## v3.0.0 - October 16, 2026
 
 ### Security
