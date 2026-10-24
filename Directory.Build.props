@@ -7,7 +7,7 @@
     - Optional pre-release: set VersionSuffix (e.g. beta.1) to produce 3.1.0-beta.1.
   -->
   <PropertyGroup>
-    <VersionPrefix>3.0.0</VersionPrefix>
+    <VersionPrefix>3.1.0</VersionPrefix>
     <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
     <FileVersion>$(VersionPrefix).0</FileVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
