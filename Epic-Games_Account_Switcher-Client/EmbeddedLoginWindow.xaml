@@ -2,25 +2,31 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="Add Account - Epic Games Account Switcher" Height="700" Width="550"
-        WindowStartupLocation="CenterOwner" Background="#121212" Foreground="White">
+        Title="Sign In to Add an Account - Epic Games Account Switcher" Height="700" Width="550" MinHeight="500" MinWidth="420"
+        WindowStartupLocation="CenterOwner" Background="{DynamicResource MainBackground}" Foreground="{DynamicResource PrimaryTextForeground}">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        
-        <Border Grid.Row="0" Background="#1E1E1E" Padding="10">
-            <TextBlock Text="Please sign in to your Epic Games account. All CAPTCHAs and 2FA are natively supported."
-                       Foreground="#DDDDDD" FontSize="14" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+
+        <Border Grid.Row="0" Background="{DynamicResource HeaderbarBackground}" Padding="12,10">
+            <TextBlock Text="Sign in to the Epic Games account you want to add. Security checks and two-factor codes work as usual. Close this window to cancel."
+                       Foreground="{DynamicResource SubTextForeground}" FontSize="13" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"/>
         </Border>
 
-        <wv2:WebView2 x:Name="LoginWebView" Grid.Row="1" />
-        
-        <Border x:Name="LoadingOverlay" Grid.Row="1" Background="#E6000000" Visibility="Collapsed">
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                <TextBlock x:Name="LoadingText" Text="Extracting session... Please wait." FontSize="18" Foreground="White" Margin="0,0,0,20"/>
-                <ProgressBar IsIndeterminate="True" Width="200" Height="4" BorderThickness="0" Background="#333" Foreground="#7AA2F7" />
+        <wv2:WebView2 x:Name="LoginWebView" Grid.Row="1" Visibility="Hidden"/>
+
+        <!-- The browser control always draws on top of WPF content, so it is hidden while this panel is shown. -->
+        <Border x:Name="LoadingOverlay" Grid.Row="1" Background="{DynamicResource MainBackground}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420" Margin="20">
+                <TextBlock x:Name="LoadingText" Text="Opening the Epic Games sign-in page…" FontSize="16" Foreground="{DynamicResource PrimaryTextForeground}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,20"
+                           AutomationProperties.LiveSetting="Polite"/>
+                <ProgressBar x:Name="LoadingProgress" IsIndeterminate="True" Width="200" Height="4" BorderThickness="0" Background="{DynamicResource BtnBackground}" Foreground="{DynamicResource IconFill}"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,24,0,0">
+                    <Button x:Name="RetryButton" Content="TRY AGAIN" Click="Retry_Click" Style="{StaticResource OkButton}" Padding="18,8" Margin="0,0,12,0" Visibility="Collapsed"/>
+                    <Button Content="CANCEL" Click="Cancel_Click" Style="{StaticResource CancelButton}" Padding="18,8" IsCancel="True" ToolTip="Close without adding an account (Esc)"/>
+                </StackPanel>
             </StackPanel>
         </Border>
     </Grid>

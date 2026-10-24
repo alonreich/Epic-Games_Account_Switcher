@@ -1,7 +1,7 @@
 <Window x:Class="Epic_Games_Account_Switcher_Client.SkinPickerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Choose Skin" MinHeight="450" MinWidth="600"
+        Title="Choose Avatar" MinHeight="450" MinWidth="600"
         SizeToContent="WidthAndHeight"
         Background="{DynamicResource MainBackground}" WindowStyle="None" AllowsTransparency="True"
         ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
@@ -44,7 +44,7 @@
                                 <Setter TargetName="IconBorder" Property="Opacity" Value="0.85"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="IconBorder" Property="BorderBrush" Value="White"/>
+                                <Setter TargetName="IconBorder" Property="BorderBrush" Value="{DynamicResource FocusRingBrush}"/>
                                 <Setter TargetName="IconBorder" Property="BorderThickness" Value="3"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
@@ -56,7 +56,7 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Border BorderBrush="{DynamicResource IconFill}" BorderThickness="1" CornerRadius="12" Background="{DynamicResource MainBackground}">
+    <Border BorderBrush="{DynamicResource IconFill}" BorderThickness="1" CornerRadius="12" Background="{DynamicResource MainBackground}" MouseLeftButtonDown="Dialog_DragMove">
         <Grid Margin="20">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -65,14 +65,16 @@
             </Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0" Margin="0,0,0,20">
-                <TextBlock Text="SELECT PREDEFINED SKIN" Foreground="White" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock Text="Click an icon to select, or double-click to immediately apply it to your account profile." Foreground="{DynamicResource SubTextForeground}" FontSize="13" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                <TextBlock Text="CHOOSE AN AVATAR" Foreground="{DynamicResource PrimaryTextForeground}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="Click an avatar to select it, or double-click to use it right away." Foreground="{DynamicResource SubTextForeground}" FontSize="13" HorizontalAlignment="Center" Margin="0,6,0,0"/>
             </StackPanel>
 
-            <ListBox x:Name="SkinsList" Grid.Row="1" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="SkinsList_MouseDoubleClick">
+            <!-- Fixed width so the avatars wrap into rows (4 per row) and scroll, instead of one row wider than the screen. -->
+            <ListBox x:Name="SkinsList" Grid.Row="1" Width="640" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto" MouseDoubleClick="SkinsList_MouseDoubleClick" SelectionChanged="SkinsList_SelectionChanged" AutomationProperties.Name="Avatars">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
                         <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Focusable" Value="False"/>
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
@@ -89,7 +91,7 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Button Style="{StaticResource SkinTileButtonStyle}" Click="SkinTile_Click" MouseDoubleClick="SkinTile_MouseDoubleClick" ToolTip="{Binding Name}" AutomationProperties.Name="{Binding Name, StringFormat=Select skin {0}}">
+                        <Button Style="{StaticResource SkinTileButtonStyle}" Click="SkinTile_Click" MouseDoubleClick="SkinTile_MouseDoubleClick" ToolTip="{Binding Name}" AutomationProperties.Name="{Binding Name, StringFormat=Avatar {0}}">
                             <Grid Width="120" Height="120">
                                 <Ellipse Width="110" Height="110">
                                     <Ellipse.Fill>
@@ -103,8 +105,8 @@
             </ListBox>
 
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
-                <Button Content="CANCEL" Click="Cancel_Click" Width="100" Height="35" Margin="0,0,20,0" Style="{StaticResource CancelButton}" IsCancel="True" ToolTip="Discard selection and close" AutomationProperties.Name="Cancel skin selection"/>
-                <Button Content="SELECT SKIN" Click="Select_Click" Width="150" Height="35" Style="{StaticResource OkButton}" IsDefault="True" ToolTip="Apply selected avatar to account card" AutomationProperties.Name="Apply selected skin"/>
+                <Button Content="CANCEL" Click="Cancel_Click" Width="100" Height="35" Margin="0,0,20,0" Style="{StaticResource CancelButton}" Padding="10,8" IsCancel="True" ToolTip="Keep the current avatar (Esc)"/>
+                <Button x:Name="SelectButton" Content="USE AVATAR" Click="Select_Click" MinWidth="150" Height="35" Padding="20,8" Style="{StaticResource OkButton}" IsDefault="True" IsEnabled="False" ToolTip="Use the selected avatar (Enter)"/>
             </StackPanel>
         </Grid>
     </Border>

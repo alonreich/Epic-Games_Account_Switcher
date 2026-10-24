@@ -160,7 +160,7 @@ namespace Epic_Games_Account_Switcher_Client
             AppSettings.Instance.SkippedUpdateVersion = _availableUpdate.Version;
             AppSettings.SaveSettings();
             IsUpdateBannerVisible = false;
-            ShowToast("Version " + _availableUpdate.Version + " skipped. You can still update from Options.");
+            ShowToast("Version " + _availableUpdate.Version + " skipped. You can still update from Settings.");
         }
 
         private void OpenReleaseNotes()
@@ -191,7 +191,11 @@ namespace Epic_Games_Account_Switcher_Client
             catch (Exception ex)
             {
                 Globals.WriteToLog("[UPDATE] Download/verify failed", ex);
-                new CustomMessageBox("Update Not Installed", ex.Message + "\n\nYour current version keeps working. You can try again later or download the update from the release page.", MessageBoxVisualStyle.Error).ShowDialog();
+                // UpdateService throws these with messages written for users; anything else is shown generically.
+                var reason = ex is System.IO.IOException || ex is System.Security.Cryptography.CryptographicException || ex is InvalidOperationException || ex is System.IO.InvalidDataException
+                    ? ex.Message
+                    : "The update could not be downloaded. Check your internet connection.";
+                new CustomMessageBox("Update Not Installed", reason + "\n\nYour current version keeps working. Try again later, or click WHAT'S NEW to download the update from the release page.", MessageBoxVisualStyle.Error).ShowDialog();
                 return;
             }
             finally
@@ -224,7 +228,7 @@ namespace Epic_Games_Account_Switcher_Client
             catch (Exception ex)
             {
                 Globals.WriteToLog("[UPDATE] Could not start installer", ex);
-                new CustomMessageBox("Update Not Installed", "The installer could not be started: " + ex.Message, MessageBoxVisualStyle.Error).ShowDialog();
+                new CustomMessageBox("Update Not Installed", "The downloaded installer could not be started. Your current version keeps working.\n\nTry UPDATE NOW again, or download the update from the release page (WHAT'S NEW).", MessageBoxVisualStyle.Error).ShowDialog();
             }
         }
     }

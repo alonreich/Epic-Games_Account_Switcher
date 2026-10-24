@@ -14,7 +14,52 @@ namespace Epic_Games_Account_Switcher_Client
         private bool _isClosing;
         public string SelectedSkinPath { get; set; }
         public class SkinItem { public string Name { get; set; } public string FullPath { get; set; } }
-        public SkinPickerWindow() { InitializeComponent(); LoadSkins(); }
+        public SkinPickerWindow(string currentPath = null)
+        {
+            InitializeComponent();
+            DialogWindowHelper.FitToScreen(this);
+            LoadSkins();
+            PreselectCurrent(currentPath);
+            Loaded += (s, e) => FocusSelectedTile();
+        }
+
+        private void PreselectCurrent(string currentPath)
+        {
+            if (string.IsNullOrWhiteSpace(currentPath)) return;
+            var fileName = Path.GetFileName(currentPath);
+            var match = (SkinsList.ItemsSource as IEnumerable<SkinItem>)?.FirstOrDefault(s =>
+                string.Equals(s.FullPath, currentPath, StringComparison.OrdinalIgnoreCase) || string.Equals(Path.GetFileName(s.FullPath), fileName, StringComparison.OrdinalIgnoreCase));
+            if (match == null) return;
+            SkinsList.SelectedItem = match;
+            SkinsList.ScrollIntoView(match);
+        }
+
+        private void FocusSelectedTile()
+        {
+            var item = SkinsList.SelectedItem ?? SkinsList.Items.Cast<object>().FirstOrDefault();
+            if (item == null) { SkinsList.Focus(); return; }
+            SkinsList.UpdateLayout();
+            var container = SkinsList.ItemContainerGenerator.ContainerFromItem(item) as ListBoxItem;
+            var tile = container == null ? null : FindChild<Button>(container);
+            if (tile != null) tile.Focus(); else SkinsList.Focus();
+        }
+
+        private static T FindChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                if (child is T typed) return typed;
+                var nested = FindChild<T>(child);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
+        private void SkinsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            SelectButton.IsEnabled = SkinsList.SelectedItem != null;
+        }
         private void LoadSkins()
         {
             var skins = new List<SkinItem>();
@@ -32,6 +77,7 @@ namespace Epic_Games_Account_Switcher_Client
             }
             SkinsList.ItemsSource = skins;
         }
+        private void Dialog_DragMove(object sender, MouseButtonEventArgs e) => DialogWindowHelper.DragMove(this, e);
         private void SkinsList_MouseDoubleClick(object sender, MouseButtonEventArgs e) { SelectCurrentSkin(); }
         private void SkinTile_Click(object sender, RoutedEventArgs e)
         {

@@ -41,6 +41,8 @@ namespace Epic_Games_Account_Switcher_Globals
         public bool OpenEpicLauncherOnStartup { get; set; } = false;
         public int ModernAuthBlobMaxAgeDays { get; set; } = 30;
         public bool MinimizeToTray { get; set; } = false;
+        public bool TrayHintShown { get; set; } = false;
+        public string LastBackupFolder { get; set; } = "";
 
         public bool AutoCheckForUpdates { get; set; } = true;
         public DateTime LastUpdateCheckUtc { get; set; } = DateTime.MinValue;
