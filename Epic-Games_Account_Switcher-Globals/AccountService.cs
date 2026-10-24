@@ -153,13 +153,57 @@ namespace Epic_Games_Account_Switcher_Globals
                     var accs = JsonConvert.DeserializeObject<List<Account>>(File.ReadAllText(AccountsJsonPath)) ?? new List<Account>();
                     foreach (var a in accs) NormalizeAccount(a);
                     MarkActiveAccount(accs, GetCurrentAccountId());
+                    _accountsFileUnreadableAndUnsaved = false;
                     return accs;
                 }
                 catch (Exception ex)
                 {
                     Globals.WriteToLog("[ACC] Failed to load accounts.json", ex);
+                    PreserveUnreadableAccountsFile();
                     return new List<Account>();
                 }
+            }
+        }
+
+        // Set while accounts.json exists but can't be read and no safety copy of it could be made: saving would destroy it.
+        private static bool _accountsFileUnreadableAndUnsaved;
+        private static string _preservedAccountsStamp;
+        private static string _pendingAccountsLoadProblem;
+
+        /// <summary>
+        /// Returns (once) the path of the safety copy made of an unreadable account list, "" when no copy could be made,
+        /// or null when the list was read normally. The UI tells the user so an empty list is never mistaken for "no accounts".
+        /// </summary>
+        public static string TakeAccountsLoadProblem()
+        {
+            lock (AccountsFileLock)
+            {
+                var problem = _pendingAccountsLoadProblem;
+                _pendingAccountsLoadProblem = null;
+                return problem;
+            }
+        }
+
+        /// <summary>Copies an unreadable accounts.json aside (once per file version) so the next save can't destroy it.</summary>
+        private static void PreserveUnreadableAccountsFile()
+        {
+            try
+            {
+                var info = new FileInfo(AccountsJsonPath);
+                var stamp = info.Length + "_" + info.LastWriteTimeUtc.Ticks;
+                if (stamp == _preservedAccountsStamp && !_accountsFileUnreadableAndUnsaved) return;
+                var copy = AccountsJsonPath + ".unreadable_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                File.Copy(AccountsJsonPath, copy, false);
+                _preservedAccountsStamp = stamp;
+                _accountsFileUnreadableAndUnsaved = false;
+                _pendingAccountsLoadProblem = copy;
+                Globals.WriteToLog("[ACC] Unreadable accounts.json preserved as " + copy);
+            }
+            catch (Exception ex)
+            {
+                _accountsFileUnreadableAndUnsaved = true;
+                _pendingAccountsLoadProblem = "";
+                Globals.WriteToLog("[ACC] Could not preserve unreadable accounts.json; saving is blocked until it can be read", ex);
             }
         }
 
@@ -167,6 +211,8 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             lock (AccountsFileLock)
             {
+                if (_accountsFileUnreadableAndUnsaved && File.Exists(AccountsJsonPath))
+                    throw new IOException("The saved account list could not be read, so it was not overwritten.");
                 Directory.CreateDirectory(BaseDataPath);
                 foreach (var a in accounts) NormalizeAccount(a);
                 var tmp = AccountsJsonPath + ".tmp_" + Guid.NewGuid().ToString("N");
@@ -1291,18 +1337,26 @@ namespace Epic_Games_Account_Switcher_Globals
                 cancellationToken.ThrowIfCancellationRequested();
                 _lastDetected = new Tuple<string, string, string>(null, "N/A", "N/A");
                 var det = await GetDetectedMetadataAsync();
-                if (string.IsNullOrWhiteSpace(det.Item1)) return new Tuple<bool, string>(false, "No Epic Games account is currently logged in.");
+                if (string.IsNullOrWhiteSpace(det.Item1)) return new Tuple<bool, string>(false, "No account is signed in to Epic Games Launcher. Sign in there first, then try again.");
                 if (!string.IsNullOrWhiteSpace(expectedAccountId) && !string.Equals(det.Item1, expectedAccountId, StringComparison.OrdinalIgnoreCase))
-                    return new Tuple<bool, string>(false, "The current Epic login does not match the selected profile. Expected " + Globals.SafeLogId(expectedAccountId) + " but detected " + Globals.SafeLogId(det.Item1) + ".");
-                progress?.Invoke("Closing Epic Games...");
-                if (!await EnsureEpicIsClosed(60000, cancellationToken)) return new Tuple<bool, string>(false, "Could not close all Epic Games processes. Please close the Launcher manually and try again.");
-                var liveValidation = ValidateSession(EpicSavedPath, det.Item1);
-                if (!liveValidation.IsValid) return new Tuple<bool, string>(false, "Current session is invalid: " + liveValidation.Message);
+                {
+                    Globals.WriteToLog("[CAPTURE] Signed-in account does not match. Expected " + Globals.SafeLogId(expectedAccountId) + " but detected " + Globals.SafeLogId(det.Item1) + ".");
+                    return new Tuple<bool, string>(false, "A different account is signed in to Epic Games Launcher. Sign in to the account you want to save, then try again.");
+                }
+                // Ask before anything is closed or changed, so Cancel leaves Epic Games Launcher running. (Item2 null = cancelled, no error.)
                 var accounts = GetAccounts();
                 var existing = accounts.FirstOrDefault(a => a.Id == det.Item1);
                 if (existing != null && !forceOverwrite)
                 {
-                    if (confirmOverwrite == null || !await confirmOverwrite(existing.Name)) return new Tuple<bool, string>(false, "Capture cancelled by user.");
+                    if (confirmOverwrite == null || !await confirmOverwrite(existing.Name)) return new Tuple<bool, string>(false, null);
+                }
+                progress?.Invoke("Closing Epic Games...");
+                if (!await EnsureEpicIsClosed(60000, cancellationToken)) return new Tuple<bool, string>(false, "Epic Games Launcher could not be closed. Close it yourself (also from the notification area), then try again.");
+                var liveValidation = ValidateSession(EpicSavedPath, det.Item1);
+                if (!liveValidation.IsValid)
+                {
+                    Globals.WriteToLog("[CAPTURE] Live session invalid: " + liveValidation.Message);
+                    return new Tuple<bool, string>(false, "Epic Games Launcher's sign-in looks incomplete or expired. Open Epic Games Launcher, sign in again (tick \"Remember me\"), then try again.");
                 }
                 var acc = existing ?? new Account(det.Item1, nameOverride ?? (det.Item2 == "N/A" ? "Epic Account" : det.Item2));
                 if (!string.IsNullOrWhiteSpace(nameOverride)) acc.Name = nameOverride.Trim();
@@ -1320,7 +1374,12 @@ namespace Epic_Games_Account_Switcher_Globals
                 tmp = target + "_n" + GetShortId();
                 await CaptureSessionToFolder(EpicSavedPath, tmp, cancellationToken);
                 var capturedValidation = ValidateSession(tmp, acc.Id);
-                if (!capturedValidation.IsValid) { await SafeDeleteDirectoryAsync(tmp, 10, cancellationToken); return new Tuple<bool, string>(false, "Failed to verify captured session: " + capturedValidation.Message); }
+                if (!capturedValidation.IsValid)
+                {
+                    Globals.WriteToLog("[CAPTURE] Captured session failed verification: " + capturedValidation.Message);
+                    await SafeDeleteDirectoryAsync(tmp, 10, cancellationToken);
+                    return new Tuple<bool, string>(false, "The sign-in could not be copied completely. Open Epic Games Launcher, make sure you are signed in, then try again.");
+                }
                 acc.RegistryData = CaptureRegistryData();
                 acc.Credentials = CredentialService.CaptureCredentials(acc.Id);
                 acc.RememberMeDataByPath = GetRememberMeDataByPath();
@@ -1337,7 +1396,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 if (!string.IsNullOrWhiteSpace(tmp) && Directory.Exists(tmp)) await SafeDeleteDirectoryAsync(tmp);
                 throw;
             }
-            catch (Exception ex) { Globals.WriteToLog("[CAPTURE] Fatal error", ex); return new Tuple<bool, string>(false, "An unexpected error occurred: " + ex.Message); }
+            catch (Exception ex) { Globals.WriteToLog("[CAPTURE] Fatal error", ex); return new Tuple<bool, string>(false, "Something unexpected stopped the account from being saved. Try again. If it keeps happening, use SHOW LOGS for details."); }
             finally { SessionOperationLock.Release(); }
         }
 
@@ -1396,7 +1455,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 cancellationToken.ThrowIfCancellationRequested();
                 progress?.Invoke("Closing Epic Games...");
                 if (!await EnsureEpicIsClosed(60000, cancellationToken))
-                    return new Tuple<bool, string>(false, "Could not close Epic Games Launcher.");
+                    return new Tuple<bool, string>(false, "Epic Games Launcher could not be closed. Close it yourself (also from the notification area), then try again.");
 
                 // Purge existing auth state to ensure clean capture
                 try
@@ -1426,7 +1485,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 progress?.Invoke("Processing login...");
                 var exe = ResolveEpicLauncherExecutable();
                 if (string.IsNullOrEmpty(exe))
-                    return new Tuple<bool, string>(false, "Epic Games Launcher executable not found.");
+                    return new Tuple<bool, string>(false, "Epic Games Launcher was not found on this PC. Install it, then try again.");
 
                 var args = $"-exchangecode={exchangeCode} -nosplash -silent -minimized";
                 Process.Start(new ProcessStartInfo { FileName = exe, Arguments = args, UseShellExecute = true });
@@ -1444,7 +1503,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 }
 
                 if (detected == null || string.IsNullOrWhiteSpace(detected.Item1))
-                    return new Tuple<bool, string>(false, "Timed out waiting for Epic Games to consume the exchange code.");
+                    return new Tuple<bool, string>(false, "Epic Games Launcher did not finish signing in within 45 seconds. Check your internet connection, then try again.");
 
                 // We can't hold the lock when calling CaptureCurrentAccount because it also waits on it.
                 // We'll release the lock early in the finally block.
@@ -1452,7 +1511,7 @@ namespace Epic_Games_Account_Switcher_Globals
             catch (Exception ex)
             {
                 Globals.WriteToLog("[EXCHANGE] Fatal error during exchange capture", ex);
-                return new Tuple<bool, string>(false, "An unexpected error occurred: " + ex.Message);
+                return new Tuple<bool, string>(false, "Something unexpected stopped the account from being saved. Try again. If it keeps happening, use SHOW LOGS for details.");
             }
             finally
             {
@@ -2245,6 +2304,8 @@ namespace Epic_Games_Account_Switcher_Globals
                     if (File.Exists(sRestored)) { File.Copy(sRestored, Path.Combine(Globals.UserDataFolder, "appsettings.json"), true); AppSettings.LoadSettings(); }
 
                     RestoreBackupSkins(tmp);
+                    // The user chose to replace the account list with the backup, so an unreadable old list may be overwritten.
+                    lock (AccountsFileLock) _accountsFileUnreadableAndUnsaved = false;
                     SaveAccounts(accs);
                     Globals.WriteToLog("[RESTORE] Account restore completed. Count=" + accs.Count + "; RollbackAvailable=" + rollbackAvailable);
                 }

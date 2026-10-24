@@ -13,6 +13,36 @@ AGENT / DEVELOPER RULES (mandatory, see project_structure.txt section 6)
 -->
 
 ## [Unreleased]
+### Changed
+- UI/UX audit fixes (ISSUE_01-35 except 32): restore asks before replacing accounts; close is guarded while busy; `MessageBoxVisualStyle.Danger` (safe default button); friendly error text; card "⋯" menu + shared `AccountCardContextMenu`; banners/toolbar get their own rows; Settings popup replaces the Options expander; longer, hover-pausable toast with live-region announcements; inline validation with cached duplicate checks; account writes queued off the UI thread; dark implicit styles (CheckBox, MenuItem, ScrollBar, ToolTip, PasswordBox) and new tokens; tray notices; installer window no longer steals focus; reduced-motion support; zoom capped at 175% (`App.xaml`, `MainWindow.xaml(.cs)`, `MainViewModel*.cs`, all dialogs, `AppSettings` TrayHintShown/LastBackupFolder, `AccountModel` labels, `UpdateService`).
+  - Public: Clearer, safer and more accessible app: confirmations before replacing accounts, plain-language messages, easier settings and account menus.
+
+### Fixed
+- Unreadable `accounts.json` no longer looks like "no accounts": `AccountService.GetAccounts` keeps a `accounts.json.unreadable_<time>` copy (or blocks `SaveAccounts` if no copy can be made), `TakeAccountsLoadProblem` + `MainViewModel.ShowAccountsLoadProblem` explain it and offer Restore.
+  - Public: If your saved account list gets damaged, the app now tells you, keeps a copy, and offers to restore a backup instead of starting empty.
+- `CaptureCurrentAccount` asks "Replace saved account?" before closing Epic Games Launcher; Cancel returns no error. Capture/exchange failures use plain-language messages (technical detail logged only).
+  - Public: Cancelling "replace saved account" no longer closes Epic Games Launcher or shows an error, and save errors are easier to understand.
+- Launching the app while it is hidden in the notification area now shows the running window (`App` show-request event `Local\EpicGamesAccountSwitcher.ShowRequest`, `MainWindow.ShowFromOtherInstance`).
+  - Public: Opening the app again while it runs in the notification area now brings its window back.
+- Add/Edit Account, Choose Avatar and Backup Password dialogs can be dragged, are capped to the screen and scroll (`DialogWindowHelper`); the avatar grid wraps at 4 per row.
+  - Public: Dialogs can be moved and always fit on the screen, also on small or high-scaling displays.
+- The sign-in window's temporary browser profile (Epic cookies) is erased on close and swept at startup (`EmbeddedLoginWindow.CleanupLeftoverProfiles`).
+  - Public: Signing in to add an account no longer leaves sign-in data behind on your PC.
+- A failed capture reopens the form with the entered details ("Try Again"); Edit confirms only after the file write succeeds and reverts on failure.
+  - Public: If saving an account fails, what you typed is kept, and edits are only reported as saved when they really are.
+- ADD SIGNED-IN ACCOUNT without a detected login asks "Sign In Here / Open Epic Games Launcher / Cancel" instead of silently opening the web sign-in.
+  - Public: Adding an account when nobody is signed in to Epic now explains your options first.
+- A successful switch shows "Switched to X" for a moment before the window minimizes.
+  - Public: You now see a confirmation after switching accounts.
+- Frame mode gets SETTINGS, "Save signed-in account" and "Update available" buttons; Ctrl+wheel zoom only affects the normal layout.
+  - Public: The experimental frame mode now shows settings, update and save-account options.
+- Cards show one status badge and one "Last used" line (usage bar and counts moved to the tooltip); relative times refresh every minute and use the Windows regional date/time format; skip-version toast says Settings.
+  - Public: Account cards are tidier, and "last used" times stay current and follow your regional format.
+- Launcher frame (`LauncherFrameController.cs`): follows the launcher through `SetWinEventHook` (global EVENT_OBJECT_SHOW + launcher-process move/minimize/hide/destroy events) with the 250 ms timer only as fallback; enter delay 1 s -> 300 ms; positions/stacks the frame with one `SetWindowPos` in device pixels and restores the saved pixel rect on exit; dragging/resizing the frame moves/resizes the launcher (`WM_MOVING`/`WM_SIZING`, async `SetWindowPos`); fade + side-card slide transitions (`MainWindow.FadeWindow`/`PlayFrameEnter`), skipped when Windows animations are off.
+  - Public: Frame mode now follows Epic Games Launcher instantly, moves together with it as one window, and opens and closes with a smooth fade.
+
+### Internal
+- Docs audit: `project_structure.txt` gains runtime prerequisites (WebView2), `.sln`/`README.md` rows, dev.cmd side effects, App named events, Settings popup wording, new data-model paths, section 7 command line; installer status line compressed. `docs/RELEASING.md`: SETTINGS path, dev.cmd modes and side effects.
 
 ## [3.0.0] - 2026-10-16
 ### Security

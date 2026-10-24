@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Epic Games Account Switcher"
-        MinHeight="200" MinWidth="550"
+        MinHeight="200" MinWidth="550" MaxWidth="720"
         SizeToContent="WidthAndHeight"
         Background="{DynamicResource MainBackground}"
         Topmost="True" WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" ShowInTaskbar="True">
@@ -16,12 +16,11 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="65"/>
             </Grid.RowDefinitions>
-            <Border Name="HeaderBg" MouseDown="DragWindow" Grid.Row="0" Style="{StaticResource Headerbar}" Cursor="Hand">
+            <Border Name="HeaderBg" MouseDown="DragWindow" Grid.Row="0" Style="{StaticResource Headerbar}">
                 <Grid>
                     <Label Name="HeaderInstruction" Content="ALERT" HorizontalAlignment="Center" Style="{StaticResource HeaderbarLabel}" FontSize="12"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button x:Name="BtnMin" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Click="BtnMinimize" Style="{StaticResource BtnMin}" ToolTip="Minimize" AutomationProperties.Name="Minimize alert"/>
-                        <Button x:Name="BtnClose" Content="" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Click="BtnExit" Style="{StaticResource BtnClose}" ToolTip="Close" AutomationProperties.Name="Close alert"/>
+                        <Button x:Name="BtnClose" Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Click="BtnExit" Style="{StaticResource BtnClose}" ToolTip="Close" AutomationProperties.Name="Close message" IsTabStop="False"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -30,16 +29,14 @@
                     <ColumnDefinition Width="80"/>
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Viewbox Width="50" Height="50" HorizontalAlignment="Center" VerticalAlignment="Top">
-                    <Path Name="CrossIcon" Style="{StaticResource CrossIcon}" Data="F1 M352,512z M0,0z M242.72,256L342.79,155.93C355.07,143.65,355.07,123.74,342.79,111.45L320.55,89.21C308.27,76.93,288.36,76.93,276.07,89.21L176,189.28 75.93,89.21C63.65,76.93,43.74,76.93,31.45,89.21L9.21,111.45C-3.07,123.73,-3.07,143.64,9.21,155.93L109.28,256 9.21,356.07C-3.07,368.35,-3.07,388.26,9.21,400.55L31.45,422.79C43.73,435.07,63.65,435.07,75.93,422.79L176,322.72 276.07,422.79C288.35,435.07,308.27,435.07,320.55,422.79L342.79,400.55C355.07,388.27,355.07,368.36,342.79,356.07L242.72,256z"/>
-                </Viewbox>
+                <TextBlock Name="IconGlyph" Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="40" Foreground="{DynamicResource IconFill}" HorizontalAlignment="Center" VerticalAlignment="Top"/>
                 <TextBlock Name="Message" Grid.Column="1" Style="{StaticResource ErrorMessageBox}" Margin="10,0,0,0"/>
             </Grid>
             <Border Grid.Row="2" Background="{DynamicResource DialogBottomBackground}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="0,1,0,0">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0">
-                    <Button Name="ButtonOk" Content="OK" Style="{StaticResource OkButton}" Click="ButtonOk_OnClick" MinWidth="120" Height="35" Margin="10,0,0,0" IsDefault="True"/>
-                    <Button Name="ButtonNo" Content="NO" Style="{StaticResource SecondaryButton}" Click="ButtonNo_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0"/>
-                    <Button Name="ButtonCancel" Content="CANCEL" Style="{StaticResource CancelButton}" Click="ButtonCancel_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0"/>
+                    <Button Name="ButtonOk" Content="OK" Style="{StaticResource OkButton}" Click="ButtonOk_OnClick" MinWidth="120" Height="35" Margin="10,0,0,0" Padding="20,8" IsDefault="True"/>
+                    <Button Name="ButtonNo" Content="NO" Style="{StaticResource SecondaryButton}" Click="ButtonNo_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0" Padding="20,8"/>
+                    <Button Name="ButtonCancel" Content="CANCEL" Style="{StaticResource CancelButton}" Click="ButtonCancel_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0" Padding="20,8"/>
                 </StackPanel>
             </Border>
         </Grid>

@@ -109,11 +109,20 @@ namespace Epic_Games_Account_Switcher_Globals
                 var span = now - LastPlayed;
                 if (span.TotalMinutes < 1) return "Just now";
                 if (span.TotalHours < 1) return ((int)span.TotalMinutes).ToString() + " min ago";
-                if (LastPlayed.Date == now.Date) return "Today at " + LastPlayed.ToString("HH:mm");
-                if (LastPlayed.Date == now.Date.AddDays(-1)) return "Yesterday at " + LastPlayed.ToString("HH:mm");
+                // "t" / "d" follow the user's Windows regional format.
+                if (LastPlayed.Date == now.Date) return "Today at " + LastPlayed.ToString("t");
+                if (LastPlayed.Date == now.Date.AddDays(-1)) return "Yesterday at " + LastPlayed.ToString("t");
                 if (span.TotalDays < 7) return ((int)span.TotalDays).ToString() + " days ago";
-                return LastPlayed.ToString("dd/MM/yyyy");
+                return LastPlayed.ToString("d");
             }
+        }
+
+        /// <summary>Re-evaluates the time-relative labels ("5 min ago", RECENT) so they don't go stale while the app stays open.</summary>
+        public void RefreshTimeLabels()
+        {
+            OnPropertyChanged(nameof(LastPlayedDisplay));
+            OnPropertyChanged(nameof(RecencyLabel));
+            OnPropertyChanged(nameof(IsRecentlyUsed));
         }
 
         [Newtonsoft.Json.JsonIgnore]
@@ -122,9 +131,9 @@ namespace Epic_Games_Account_Switcher_Globals
             get
             {
                 if (IsActive) return "ACTIVE NOW";
-                if (!HasUsageHistory) return "READY";
+                if (!HasUsageHistory) return "NEW";
                 if (IsRecentlyUsed) return "RECENT";
-                return "RESTING";
+                return "";
             }
         }
 
@@ -133,9 +142,9 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             get
             {
-                if (UsageCount <= 0) return "No tracked switches";
-                if (UsageCount == 1) return "1 tracked switch";
-                return UsageCount.ToString() + " tracked switches";
+                if (UsageCount <= 0) return "Not switched to yet";
+                if (UsageCount == 1) return "Switched to once";
+                return "Switched to " + UsageCount.ToString() + " times";
             }
         }
 

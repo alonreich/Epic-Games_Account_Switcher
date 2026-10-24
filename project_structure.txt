@@ -3,14 +3,14 @@
 
 ## 1) PROJECT OVERVIEW
 Epic Games Account Switcher is a Windows (.NET Framework 4.8, WPF, x64) session manager for the Epic Games Launcher.
+Runtime prerequisites: .NET Framework 4.8; Microsoft Edge WebView2 Runtime (only for the in-app "Sign in to add" window).
 It switches accounts without login prompts by atomically swapping session tokens, web cache state and registry identifiers.
 Distribution: one signed single-file installer EXE published on GitHub Releases; the app updates itself from there.
 
 ## 2) PROJECT STATUS (2026-10-16, version 3.0.0)
 - Versioning: SemVer, single source of truth = Directory.Build.props (VersionPrefix). Legacy calendar versions (2026.x) compare as older.
 - Release pipeline: Build.cmd (tests, signing, payload hash, SHA-256) + Release.cmd (notes promotion, annotated tag, gh release).
-- Installer: two-phase (user phase not elevated / machine phase elevated from an admin-only folder), staged + atomic swap with rollback,
-  downgrade guard, graceful shutdown handshake, verified safety backups, uninstall keeps accounts by default.
+- Installer: two-phase, staged swap + rollback (details: docs\RELEASING.md section 5; rules: section 4 items 5-7).
 - Updates: in-app GitHub Releases updater (daily quiet check, Update/Later/Skip banner, SHA-256 + pinned signature verification).
 - Experimental: "launcher frame" mode (opt-in) wraps the window around the Epic Games Launcher.
 - Known limits: self-signed certificate does not remove SmartScreen/"Unknown publisher" for other users (see ssl-certificate\README.md).
@@ -20,6 +20,8 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 | Path | Purpose / Role |
 | :--- | :--- |
 | `.\project_structure.txt` | This guide. Root reference for goals, rules and navigation. Keep it current (rule 6.4). |
+| `.\Epic-Games_Account_Switcher.sln` | Solution: Client, Globals, Tests, SingleFilePacker. |
+| `.\README.md` | User docs: download, install, verify, update. |
 | `.\docs\index.md` | Index of all documentation. |
 | `.\docs\changes.md` | INTERNAL technical change log. Every change adds an [Unreleased] entry + plain-English "Public:" line. |
 | `.\docs\CHANGELOG.md` | PUBLIC "What's new" history (generated at release, never truncated). |
@@ -27,7 +29,7 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 | `.\Directory.Build.props` | SINGLE version source (VersionPrefix) + signing thumbprint pin for all projects. |
 | `.\Build.cmd` | Release build: pre-flight -> clean -> dotnet test -> publish (no pdb) -> sign -> pack (+payload SHA-256) -> installer -> sign -> .sha256. `--dev` skips tests/clean. No `pause` (10s timeout). |
 | `.\dev_build.cmd` | Wrapper for `Build.cmd --dev` (local installer build, never touches Git). |
-| `.\dev.cmd` | Debug run/watch with isolated data (`--dev --user-data %TMP%\...`). Use this to test; never test against real profiles. |
+| `.\dev.cmd` | `dev.cmd` (watch) / `dev.cmd run` (single): Debug launch with isolated data (`--dev --user-data %TMP%\...`). Each launch wipes dev data + logs, force-stops dev instances from this repo, deletes Client/Globals bin+obj. Also `build`, `restore`, `clean`. Use this to test; never test against real profiles. |
 | `.\Release.cmd` | `Release.cmd X.Y.Z`: clean-tree/main checks, version bump, notes check, Build.cmd, notes promotion, commit, annotated tag, push, `gh release create`. |
 | `.\developer_tools\Set-Version.ps1` | Bumps VersionPrefix (must increase). |
 | `.\developer_tools\Release-Notes.ps1` | Validates/promotes docs\changes.md -> docs\CHANGELOG.md + GitHub release body. Enforces jargon-free Public lines and history growth. |
@@ -35,12 +37,12 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 | `.\developer_tools\*.py` | Maintenance helpers (code extraction / comment removal). |
 | `.\ssl-certificate\` | Free self-signed code signing: Create-CodeSigningCert.ps1 (one-time), Sign-File.ps1 (used by Build.cmd), public .cer + thumbprint.txt. `private\` is git-ignored. |
 | `Epic-Games_Account_Switcher-Client\` | **WPF UI Layer** (assembly `Epic-Games_Account_Switcher.exe`). |
-| `  - App.xaml.cs` | App lifecycle, single-instance mutex, graceful-shutdown listener, INSTALLER (user phase + elevated machine phase) and UNINSTALLER. |
+| `  - App.xaml.cs` | App lifecycle, single-instance mutex, named events `Local\EpicGamesAccountSwitcher.ShutdownRequest` (graceful exit) and `.ShowRequest` (second launch shows the window), INSTALLER (user phase + elevated machine phase) and UNINSTALLER. |
 | `  - MainViewModel.cs` | UI brain: accounts, commands, monitoring, zoom. `partial`: |
 | `  - MainViewModel.Updates.cs` | Update banner/commands (check, Update now, Later, Skip, What's new). |
 | `  - MainViewModel.LauncherFrame.cs` | Experimental launcher-frame setting + left/right card lists. |
-| `  - LauncherFrameController.cs` | Tracks the Epic launcher window (read-only Win32) and wraps the main window around it. |
-| `  - MainWindow.xaml(.cs)` | Dashboard: card grid, frame layout, update banner, options (incl. auto-update + frame toggles), tray, zoom, off-screen recovery. |
+| `  - LauncherFrameController.cs` | Wraps the main window around the Epic launcher: WinEvent hooks (timer fallback), one-call SetWindowPos placement, frame drag/resize moves the launcher, fade/slide transitions (off when Windows animations are off). |
+| `  - MainWindow.xaml(.cs)` | Dashboard: card grid (+ ⋯ card menu), frame layout, update/unsaved banners, Settings popup (general, launcher, updates, exit), tray, zoom, off-screen recovery. |
 | `  - CaptureAccountWindow.xaml(.cs)` | Wizard for adding/editing profiles. |
 | `  - EmbeddedLoginWindow.xaml(.cs)` | WebView2 direct Epic login (exchange code capture). |
 | `  - PasswordPromptWindow.xaml(.cs)` | Backup password prompt. |
@@ -73,7 +75,9 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 - `%LOCALAPPDATA%\EpicAccountSwitcher\EG\accounts.json` and `EG\<Id>\{Saved,EOS_Data,Roaming_Data,ProgramData_Data}`: profiles.
 - `%LOCALAPPDATA%\EpicAccountSwitcher\appsettings.json`: settings (incl. AutoCheckForUpdates, SkippedUpdateVersion, ExperimentalLauncherFrame).
 - `%LOCALAPPDATA%\EpicAccountSwitcher\Updates\<version>\`: verified update downloads (old ones cleaned at startup).
-- `%PROGRAMDATA%\Epic-Games_Account_Switcher\Epic-Games_Account_Switcher.log`: app log.
+- `EG\accounts.json.unreadable_<time>`: safety copy made when accounts.json can't be parsed (never auto-deleted).
+- `%TEMP%\EpicSwitcherWebView2_<guid>\`: temporary sign-in browser profile; erased on close + startup sweep (older than 10 min).
+- `%PROGRAMDATA%\Epic-Games_Account_Switcher\Epic-Games_Account_Switcher.log`: app log (folder overridable with `--log-dir`).
 - `%ProgramFiles%\Epic-Games_Account_Switcher\`: install folder. HKLM `...\Uninstall\Epic-Games_Account_Switcher`: Windows uninstall entry.
 - `Downloads\Epic_Setup_Backup_*.egbackup` / `Epic_Uninstall_Backup_*.egbackup`: automatic verified safety backups (newest 3 kept).
 - `.egbackup`: password- or CurrentUser-protected streaming-encrypted archives with HMAC-SHA256; legacy ZIPs are restore-only.
@@ -87,3 +91,10 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 5. Never change the version by hand (Release.cmd owns it). Never rename release assets (updater contract, see docs\RELEASING.md).
 6. Never commit secrets: ssl-certificate\private\, *.pfx, passwords. Never commit Payload\ or compiled\.
 7. All user-facing messages go through CustomMessageBox; never block the UI thread with network or disk work.
+8. Borderless dialogs call DialogWindowHelper.FitToScreen + DragMove (CustomMessageBox.xaml.cs) so they can be moved and never exceed the screen.
+
+## 7) COMMAND LINE (App.OnStartup)
+- Dev/test: `--dev`, `--user-data <dir>`, `--log-dir <dir>`.
+- Install: `--installing`, `--update`, `--preserve`, `--clean`, `--allow-downgrade`, `--upgrade-backup <file>`.
+- Elevated: `--stage2`, `--bootstrapper <path>`, `--extract-dir <dir>`, `--keep-pid <pid>`.
+- Uninstall: `--uninstall`, `--machine-only`.

@@ -30,10 +30,13 @@ namespace Epic_Games_Account_Switcher_Client
         public static string StartPage = "";
         private static Mutex _appMutex;
         private static EventWaitHandle _shutdownEvent;
+        private static EventWaitHandle _showEvent;
         private const string AppMutexName = "{A240C23D-6F45-4E92-9979-11E6CE10A22C}";
         private const string InstallerMutexName = "Global\\EpicSwitcherSetupMutex";
         private const string MsiMutexName = "Global\\_MSIExecute";
         public const string ShutdownEventName = "Local\\EpicGamesAccountSwitcher.ShutdownRequest";
+        // A second launch sets this so the running instance shows its window, even when it is hidden in the notification area.
+        private const string ShowEventName = "Local\\EpicGamesAccountSwitcher.ShowRequest";
         private const string RegPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Epic-Games_Account_Switcher";
         private const string SettingsRegPath = @"Software\Epic-Games_Account_Switcher";
         private const string ShortcutName = "Epic Games Account Switcher.lnk";
@@ -72,7 +75,12 @@ namespace Epic_Games_Account_Switcher_Client
             {
                 string err = ev.ExceptionObject.ToString();
                 Globals.WriteToLog("[FATAL_CRASH] " + err);
-                MessageBox.Show("CRITICAL ERROR:\n\n" + err, "Epic Games Account Switcher", MessageBoxButton.OK, MessageBoxImage.Error);
+                // Plain system dialog on purpose: it works from any thread while the app is terminating. Details stay in the log.
+                string logPath = null;
+                try { logPath = Globals.GetLogPath(); } catch { }
+                MessageBox.Show("Something went wrong and Epic Games Account Switcher has to close.\n\nYour saved accounts are not affected. Please restart the app." +
+                    (string.IsNullOrWhiteSpace(logPath) ? "" : "\n\nIf this keeps happening, share the log file when reporting the problem:\n" + logPath),
+                    "Epic Games Account Switcher", MessageBoxButton.OK, MessageBoxImage.Error);
             };
 
             bool isUninstall = HasArg(e.Args, "--uninstall");
@@ -97,8 +105,10 @@ namespace Epic_Games_Account_Switcher_Client
             Directory.SetCurrentDirectory(Globals.UserDataFolder);
             AccountService.CleanOrphanedTempFolders();
             IsRunningAlready(isDevMode);
+            StartShowRequestListener(isDevMode);
             StartShutdownListener(isDevMode);
             UpdateService.CleanupOldDownloads();
+            System.Threading.Tasks.Task.Run(() => EmbeddedLoginWindow.CleanupLeftoverProfiles());
             if (AppSettings.Instance.OpenEpicLauncherOnStartup)
             {
                 AccountService.PrepareLauncherForInitialSync();
@@ -115,12 +125,45 @@ namespace Epic_Games_Account_Switcher_Client
                 if (!createdNew)
                 {
                     if (_appMutex != null) { try { _appMutex.Dispose(); } catch { } _appMutex = null; }
+                    if (SignalRunningInstanceToShow(devMode)) Environment.Exit(0);
                     if (!devMode && NativeFuncs.BringToFront()) Environment.Exit(0);
                     else { new CustomMessageBox(devMode ? "Dev Instance Running" : "Already Running", devMode ? "A development instance is already running." : "An instance is already running.").ShowDialog(); Environment.Exit(1056); }
                 }
             }
             catch (AbandonedMutexException) { }
         }
+
+        #region Show request (a second launch brings the running window back)
+
+        private static bool SignalRunningInstanceToShow(bool devMode)
+        {
+            try
+            {
+                if (!EventWaitHandle.TryOpenExisting(ShowEventName + (devMode ? ".DEV" : ""), out var ev)) return false;
+                using (ev) ev.Set();
+                return true;
+            }
+            catch (Exception ex) { Globals.WriteToLog("[SHOW] Could not signal the running instance", ex); return false; }
+        }
+
+        private static void StartShowRequestListener(bool devMode)
+        {
+            try { _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName + (devMode ? ".DEV" : "")); }
+            catch (Exception ex) { Globals.WriteToLog("[SHOW] Listener unavailable", ex); return; }
+
+            var handle = _showEvent;
+            new Thread(() =>
+            {
+                while (true)
+                {
+                    try { handle.WaitOne(); } catch { return; }
+                    try { Current.Dispatcher.BeginInvoke(new Action(() => { if (Current.MainWindow is MainWindow mw) mw.ShowFromOtherInstance(); })); }
+                    catch { return; }
+                }
+            }) { IsBackground = true, Name = "ShowRequestListener" }.Start();
+        }
+
+        #endregion
 
         #region Graceful shutdown (setup asks the running app to finish its work and exit)
 
@@ -378,7 +421,7 @@ namespace Epic_Games_Account_Switcher_Client
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         private static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid rfid, uint dwFlags, IntPtr hToken, out IntPtr ppszPath);
 
-        private static string GetDownloadsFolder()
+        internal static string GetDownloadsFolder()
         {
             try
             {
@@ -1001,8 +1044,8 @@ namespace Epic_Games_Account_Switcher_Client
             if (purge)
             {
                 var confirm = new CustomMessageBox("Delete All Accounts?",
-                    "This permanently deletes every saved account profile from this PC.\n\nA safety backup will be saved to your Downloads folder first, so you can bring them back later with RESTORE.",
-                    "Delete Everything", "Keep My Accounts", "Cancel", MessageBoxVisualStyle.Error);
+                    "This permanently deletes every saved account from this PC.\n\nA safety backup will be saved to your Downloads folder first, so you can bring them back later with RESTORE.",
+                    "Delete Everything", "Keep My Accounts", "Cancel", MessageBoxVisualStyle.Danger);
                 confirm.ShowDialog();
                 if (confirm.Result == CustomDialogResult.Secondary) purge = false;
                 else if (confirm.Result != CustomDialogResult.Primary) { Environment.Exit(ExitCancelled); return; }

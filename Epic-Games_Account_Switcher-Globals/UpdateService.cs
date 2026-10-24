@@ -136,7 +136,7 @@ namespace Epic_Games_Account_Switcher_Globals
             catch (Exception ex) when (!(ex is OperationCanceledException))
             {
                 Globals.WriteToLog("[UPDATE] Check failed", ex);
-                return new UpdateCheckResult { Status = UpdateCheckStatus.Failed, Message = "Update check failed: " + ex.Message };
+                return new UpdateCheckResult { Status = UpdateCheckStatus.Failed, Message = "The update check failed. Please try again later." };
             }
         }
 

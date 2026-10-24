@@ -9,7 +9,7 @@
 ## 2. Day-to-day
 | Command | What it does |
 | :--- | :--- |
-| `dev.cmd` / `dev.cmd run` | Debug run with isolated data in `%TMP%\Epic_Games_Account_Switcher_DEV` (never touches real profiles). |
+| `dev.cmd` (watch) / `dev.cmd run` (single) | Debug launch with isolated data in `%TMP%\Epic_Games_Account_Switcher_DEV` (never touches real profiles). Every launch wipes that dev data + logs, force-stops dev instances from this repo and deletes Client/Globals `bin`+`obj`. Also `dev.cmd build`, `restore`, `clean`. |
 | `dev_build.cmd` | Local installer build (`Build.cmd --dev`): no tests, no Git. |
 | `Build.cmd` | Full release build: clean -> tests -> publish (no .pdb) -> sign -> pack (+payload SHA-256) -> installer -> sign -> `compiled\*.exe.sha256`. |
 | `Release.cmd 3.0.1` | Everything below, end to end. |
@@ -31,7 +31,7 @@ Every change must add an entry to `docs\changes.md` -> `## [Unreleased]` (rules 
 Asset names are a contract with the in-app updater (`UpdateService.InstallerAssetName` / `ChecksumAssetName`). Do not rename them.
 
 ## 4. How users receive updates
-- The app checks `releases/latest` at most once a day at startup (10 s timeout; silent when offline) plus OPTIONS -> *Check for updates now*.
+- The app checks `releases/latest` at most once a day at startup (10 s timeout; silent when offline) plus SETTINGS -> *Check for updates now*.
 - The banner offers **Update now / Later (24 h) / Skip version / What's new**. Nothing downloads until *Update now*.
 - The download is verified with SHA-256, plus the Authenticode signature pinned to `ssl-certificate\thumbprint.txt`. A verified download is reused instead of downloaded again.
 - Installation starts only after the user confirms *Install & Restart Now*. The installer runs with `--update`: no questions, accounts kept, app reopens.

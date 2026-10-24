@@ -6,6 +6,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -33,9 +35,15 @@ namespace Epic_Games_Account_Switcher_Client
         private int _lastPreviewIndex = -1;
         private ListBoxItem _dropPreviewContainer;
         private DispatcherTimer _unsavedLoginTimer;
+        private DispatcherTimer _clockTimer;
         private bool _isUnsavedLoginScanRunning;
         private Forms.NotifyIcon _notifyIcon;
         private bool _isExplicitExit;
+        private bool _isForcedExit;
+        private bool _exitWhenIdle;
+        private DateTime _settingsClosedAt = DateTime.MinValue;
+        private Button _settingsOpenedFrom;
+        private IInputElement _focusBeforeBusy;
         private LauncherFrameController _launcherFrame;
         public MainWindow()
         {
@@ -45,9 +53,156 @@ namespace Epic_Games_Account_Switcher_Client
             ViewModel.RequestCapture += ViewModel_RequestCapture;
             ViewModel.OnAccountsChanged += UpdateTrayContextMenu;
             ViewModel.OnAccountsChanged += () => ViewModel.RefreshFrameAccounts();
+            ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+            ViewModel.SwitchCompleted += ViewModel_SwitchCompleted;
+            SettingsPopup.CustomPopupPlacementCallback = (popupSize, targetSize, offset) =>
+                new[] { new CustomPopupPlacement(new Point(targetSize.Width - popupSize.Width, targetSize.Height), PopupPrimaryAxis.Horizontal) };
             Activated += (s, e) => _launcherFrame?.OnActivated();
             Loaded += MainWindow_Loaded;
             if (!ApplySavedWindowPlacement(AppSettings.Instance)) WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        private void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(MainViewModel.IsBusy):
+                    OnBusyChanged(ViewModel.IsBusy);
+                    break;
+                case nameof(MainViewModel.ToastMessage):
+                case nameof(MainViewModel.IsToastVisible):
+                    if (ViewModel.IsToastVisible) AnnounceLiveRegion(ToastText);
+                    break;
+                case nameof(MainViewModel.BusyStatus):
+                    if (ViewModel.IsBusy) AnnounceLiveRegion(BusyStatusText);
+                    break;
+                case nameof(MainViewModel.ShowUnsavedLoginBanner):
+                    if (ViewModel.ShowUnsavedLoginBanner) AnnounceLiveRegion(UnsavedBanner);
+                    break;
+                case nameof(MainViewModel.IsUpdateBannerVisible):
+                    if (ViewModel.IsUpdateBannerVisible) AnnounceLiveRegion(UpdateBanner);
+                    break;
+                case nameof(MainViewModel.Accounts):
+                    UpdateTrayToolTip();
+                    break;
+            }
+        }
+
+        /// <summary>Tells screen readers that a polite live region changed (WPF does not raise this by itself).</summary>
+        private void AnnounceLiveRegion(UIElement element)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    var peer = UIElementAutomationPeer.FromElement(element) ?? UIElementAutomationPeer.CreatePeerForElement(element);
+                    peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+                }
+                catch { }
+            }), DispatcherPriority.Background);
+        }
+
+        /// <summary>Moves keyboard focus into the busy overlay while an operation runs and back afterwards; exits if the user asked to close during it.</summary>
+        private void OnBusyChanged(bool busy)
+        {
+            if (busy)
+            {
+                _focusBeforeBusy = Keyboard.FocusedElement;
+                Dispatcher.BeginInvoke(new Action(() => { if (ViewModel.IsBusy) BusyCancelButton.Focus(); }), DispatcherPriority.Input);
+                return;
+            }
+
+            if (_exitWhenIdle)
+            {
+                _exitWhenIdle = false;
+                Dispatcher.BeginInvoke(new Action(() => { _isExplicitExit = true; Close(); }), DispatcherPriority.Background);
+                return;
+            }
+
+            var previous = _focusBeforeBusy as UIElement;
+            _focusBeforeBusy = null;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (previous != null && previous.IsVisible && previous.IsEnabled && previous.Focusable) previous.Focus();
+            }), DispatcherPriority.Input);
+        }
+
+        private void ViewModel_SwitchCompleted(Account account, bool success)
+        {
+            UpdateTrayToolTip();
+            if (IsVisible || _notifyIcon == null || account == null) return;
+            if (success) ShowTrayNotice("Switched account", "Epic Games Launcher is now signed in as " + account.Name + ".", Forms.ToolTipIcon.Info);
+            else ShowTrayNotice("Switch failed", "Could not switch to " + account.Name + ". Open the app for details.", Forms.ToolTipIcon.Warning);
+        }
+
+        private void ShowTrayNotice(string title, string text, Forms.ToolTipIcon icon)
+        {
+            try { _notifyIcon?.ShowBalloonTip(5000, title, text, icon); } catch { }
+        }
+
+        private void UpdateTrayToolTip()
+        {
+            if (_notifyIcon == null || ViewModel?.Accounts == null) return;
+            var active = ViewModel.Accounts.FirstOrDefault(a => a != null && a.IsActive);
+            var text = active == null ? "Epic Games Account Switcher" : "Epic Account Switcher - " + active.Name;
+            if (text.Length > 63) text = text.Substring(0, 60) + "...";
+            try { _notifyIcon.Text = text; } catch { }
+        }
+
+        private void CardMenu_Click(object sender, RoutedEventArgs e)
+        {
+            var item = FindAncestor<ListBoxItem>(sender as DependencyObject);
+            var card = item?.Template?.FindName("CardButton", item) as Button;
+            if (card?.ContextMenu == null) return;
+            card.ContextMenu.PlacementTarget = card;
+            card.ContextMenu.Placement = PlacementMode.Bottom;
+            card.ContextMenu.IsOpen = true;
+        }
+
+        private void Settings_Click(object sender, RoutedEventArgs e)
+        {
+            // A click on the button while the popup is open first closes it (light dismiss); don't reopen it straight away.
+            if (DateTime.UtcNow - _settingsClosedAt < TimeSpan.FromMilliseconds(250)) return;
+            // The same popup serves the normal header button and the frame-mode button.
+            _settingsOpenedFrom = sender as Button ?? SettingsButton;
+            SettingsPopup.PlacementTarget = _settingsOpenedFrom;
+            SettingsPopup.Placement = ReferenceEquals(_settingsOpenedFrom, SettingsButton) ? PlacementMode.Custom : PlacementMode.Top;
+            SettingsPopup.IsOpen = true;
+        }
+
+        private void SettingsPopup_Opened(object sender, EventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(() => FirstSettingCheckBox.Focus()), DispatcherPriority.Input);
+        }
+
+        private void SettingsPopup_Closed(object sender, EventArgs e)
+        {
+            _settingsClosedAt = DateTime.UtcNow;
+        }
+
+        private void SettingsPopup_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape) return;
+            SettingsPopup.IsOpen = false;
+            (_settingsOpenedFrom ?? SettingsButton).Focus();
+            e.Handled = true;
+        }
+
+        private void ExitApp_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsPopup.IsOpen = false;
+            _isExplicitExit = true;
+            Close();
+        }
+
+        private void Toast_HoldChanged(object sender, MouseEventArgs e)
+        {
+            ViewModel.IsToastHeld = ToastBorder.IsMouseOver || ToastBorder.IsKeyboardFocusWithin;
+        }
+
+        private void Toast_IsKeyboardFocusWithinChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            ViewModel.IsToastHeld = ToastBorder.IsMouseOver || ToastBorder.IsKeyboardFocusWithin;
         }
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
@@ -79,20 +234,48 @@ namespace Epic_Games_Account_Switcher_Client
                 finally { _isUnsavedLoginScanRunning = false; }
             };
             _unsavedLoginTimer.Start();
+
+            _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+            _clockTimer.Tick += (s, args) => { if (IsVisible && !_isDragInProgress) ViewModel?.RefreshRelativeTimes(); };
+            _clockTimer.Start();
         }
+        private enum CaptureOutcome { Saved, Cancelled, Failed }
+
         private async Task<bool> ViewModel_RequestCapture(MainViewModel.AccountMetadata metadata)
         {
-            var captureWin = new CaptureAccountWindow(metadata.Name, "", metadata.Email, metadata.ImagePath, "", metadata.Id, true, false) { Owner = this };
-            if (captureWin.ShowDialog() == true) { return await ExecuteCapture(captureWin); }
-            return false;
+            string name = metadata.Name, description = "", email = metadata.Email, image = metadata.ImagePath, password = "";
+            while (true)
+            {
+                var captureWin = new CaptureAccountWindow(name, description, email, image, password, metadata.Id, true, false) { Owner = this };
+                if (captureWin.ShowDialog() != true) return false;
+                var outcome = await ExecuteCapture(captureWin);
+                if (outcome != CaptureOutcome.Failed) return outcome == CaptureOutcome.Saved;
+                // Keep what the user typed so a retry doesn't start from scratch.
+                name = captureWin.AccountName;
+                description = captureWin.AccountDescription;
+                email = captureWin.AccountEmail;
+                image = captureWin.ProfileImagePath;
+                password = captureWin.AccountPassword;
+            }
         }
         protected override void OnStateChanged(EventArgs e)
         {
             base.OnStateChanged(e);
             if (WindowState == WindowState.Minimized && AppSettings.Instance.MinimizeToTray)
             {
-                Hide();
+                HideToTray();
             }
+        }
+
+        /// <summary>Hides the window to the notification area; the first time, explains that the app is still running.</summary>
+        private void HideToTray()
+        {
+            Hide();
+            var settings = AppSettings.Instance;
+            if (settings.TrayHintShown || _notifyIcon == null) return;
+            ShowTrayNotice("Still running", "Epic Games Account Switcher keeps running here. Click the icon to open it, or right-click and choose Exit to quit.", Forms.ToolTipIcon.Info);
+            settings.TrayHintShown = true;
+            AppSettings.SaveSettings();
         }
         /// <summary>Turns the experimental launcher frame on or off.</summary>
         public void ApplyLauncherFrameSetting(bool enabled)
@@ -109,10 +292,55 @@ namespace Epic_Games_Account_Switcher_Client
             NormalContent.Visibility = frame ? Visibility.Collapsed : Visibility.Visible;
         }
 
+        /// <summary>False when Windows "Show animations" is off (reduced motion): frame transitions then switch instantly.</summary>
+        public static bool AnimationsEnabled => SystemParameters.ClientAreaAnimation;
+        public static readonly TimeSpan FadeInDuration = TimeSpan.FromMilliseconds(220);
+
+        /// <summary>Fades the whole window (it is layered, so Opacity applies to the top-level window).</summary>
+        public void FadeWindow(double to, TimeSpan duration, Action completed)
+        {
+            var animation = new DoubleAnimation(to, duration) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+            animation.Completed += (s, e) =>
+            {
+                BeginAnimation(OpacityProperty, null);
+                Opacity = to;
+                completed?.Invoke();
+            };
+            BeginAnimation(OpacityProperty, animation);
+        }
+
+        /// <summary>Frame-mode entrance: the window fades in while the side cards slide in from the edges and the glow appears.</summary>
+        public void PlayFrameEnter()
+        {
+            if (!AnimationsEnabled) { Opacity = 1; return; }
+            var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+            FadeWindow(1, FadeInDuration, null);
+            SlideIn(FrameLeftPanel, -40, TimeSpan.Zero, easing);
+            SlideIn(FrameRightPanel, 40, TimeSpan.FromMilliseconds(60), easing);
+            FrameGlow.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 0.55, TimeSpan.FromMilliseconds(320)) { BeginTime = TimeSpan.FromMilliseconds(80), EasingFunction = easing });
+        }
+
+        private static void SlideIn(FrameworkElement panel, double fromX, TimeSpan delay, IEasingFunction easing)
+        {
+            var transform = panel.RenderTransform as TranslateTransform;
+            if (transform == null) { transform = new TranslateTransform(); panel.RenderTransform = transform; }
+            var duration = TimeSpan.FromMilliseconds(260);
+            // Start values as base values, so a delayed panel doesn't flash at its final place before it starts moving.
+            transform.X = fromX;
+            panel.Opacity = 0;
+            var slide = new DoubleAnimation(0, duration) { BeginTime = delay, EasingFunction = easing };
+            slide.Completed += (s, e) => { transform.BeginAnimation(TranslateTransform.XProperty, null); transform.X = 0; };
+            var fade = new DoubleAnimation(1, duration) { BeginTime = delay, EasingFunction = easing };
+            fade.Completed += (s, e) => { panel.BeginAnimation(OpacityProperty, null); panel.Opacity = 1; };
+            transform.BeginAnimation(TranslateTransform.XProperty, slide);
+            panel.BeginAnimation(OpacityProperty, fade);
+        }
+
         /// <summary>Closes the app for real (bypasses minimize-to-tray). Used by the tray Exit item, setup's graceful-close request and the updater.</summary>
         public void ExitApplication()
         {
             _isExplicitExit = true;
+            _isForcedExit = true;
             Close();
             try { Application.Current.Shutdown(); } catch { }
         }
@@ -122,13 +350,31 @@ namespace Epic_Games_Account_Switcher_Client
             if (AppSettings.Instance.MinimizeToTray && !_isExplicitExit)
             {
                 e.Cancel = true;
-                Hide();
+                HideToTray();
+                return;
+            }
+            if (!_isForcedExit && ViewModel != null && ViewModel.IsBusy)
+            {
+                e.Cancel = true;
+                _isExplicitExit = false;
+                if (_exitWhenIdle) return;
+                if (!IsVisible) RestoreFromTray();
+                var choice = new CustomMessageBox("Operation In Progress",
+                    "\"" + (ViewModel.BusyStatus ?? "An operation") + "\" is still running.\n\nClosing now could leave Epic Games Launcher half-switched. Wait for it to finish, or cancel it and close once it has stopped safely.",
+                    "Cancel It and Close", "Keep Waiting", null, MessageBoxVisualStyle.Danger);
+                choice.ShowDialog();
+                if (choice.Result == CustomDialogResult.Primary && ViewModel.IsBusy)
+                {
+                    _exitWhenIdle = true;
+                    if (ViewModel.CancelBusyCommand.CanExecute(null)) ViewModel.CancelBusyCommand.Execute(null);
+                }
                 return;
             }
             if (_notifyIcon != null) { _notifyIcon.Visible = false; _notifyIcon.Dispose(); _notifyIcon = null; }
             try { _launcherFrame?.Dispose(); _launcherFrame = null; } catch { }
             try { ViewModel.Shutdown(); } catch { }
             try { if (_unsavedLoginTimer != null) _unsavedLoginTimer.Stop(); } catch { }
+            try { if (_clockTimer != null) _clockTimer.Stop(); } catch { }
             SaveWindowPlacement();
             AppSettings.SaveSettings();
             base.OnClosing(e);
@@ -178,6 +424,7 @@ namespace Epic_Games_Account_Switcher_Client
                 }
                 _notifyIcon.Visible = true;
                 UpdateTrayContextMenu();
+                UpdateTrayToolTip();
             }
             else
             {
@@ -193,7 +440,7 @@ namespace Epic_Games_Account_Switcher_Client
         {
             if (_notifyIcon == null || ViewModel == null) return;
             var menu = new Forms.ContextMenuStrip();
-            var header = new Forms.ToolStripMenuItem("--- Fast Switcher ---") { Enabled = false };
+            var header = new Forms.ToolStripMenuItem("Switch account") { Enabled = false };
             menu.Items.Add(header);
             menu.Items.Add(new Forms.ToolStripSeparator());
 
@@ -211,6 +458,7 @@ namespace Epic_Games_Account_Switcher_Client
                     }
                     if (ViewModel.SwitchCommand.CanExecute(acc))
                     {
+                        if (!IsVisible) ShowTrayNotice("Switching account", "Switching Epic Games Launcher to " + acc.Name + "…", Forms.ToolTipIcon.Info);
                         ViewModel.SwitchCommand.Execute(acc);
                     }
                     UpdateTrayContextMenu();
@@ -220,7 +468,7 @@ namespace Epic_Games_Account_Switcher_Client
 
             if (ViewModel.Accounts.Count == 0)
             {
-                menu.Items.Add(new Forms.ToolStripMenuItem("No accounts saved") { Enabled = false });
+                menu.Items.Add(new Forms.ToolStripMenuItem("No accounts saved yet") { Enabled = false });
             }
 
             menu.Items.Add(new Forms.ToolStripSeparator());
@@ -240,6 +488,15 @@ namespace Epic_Games_Account_Switcher_Client
             _notifyIcon.ContextMenuStrip = menu;
             if (oldMenu != null) oldMenu.Dispose();
         }
+        /// <summary>Called when the app is launched again while running: brings this window back, also from the notification area.</summary>
+        public void ShowFromOtherInstance()
+        {
+            RestoreFromTray();
+            // Briefly topmost so Windows lets the window come to the front over the app the user launched from.
+            Topmost = true;
+            Topmost = false;
+        }
+
         private void RestoreFromTray()
         {
             Show();
@@ -330,7 +587,9 @@ namespace Epic_Games_Account_Switcher_Client
             catch (Exception ex)
             {
                 Globals.WriteToLog("Failed to open log file from dashboard", ex);
-                new CustomMessageBox("Log File Unavailable", "The log file could not be opened:\n\n" + ex.Message, MessageBoxVisualStyle.Error).ShowDialog();
+                string logPath = null;
+                try { logPath = Globals.GetLogPath(); } catch { }
+                new CustomMessageBox("Log File Unavailable", "The log file could not be opened automatically." + (string.IsNullOrWhiteSpace(logPath) ? "" : "\n\nYou can open it yourself in Notepad:\n" + logPath), MessageBoxVisualStyle.Error).ShowDialog();
             }
         }
         private void AccountsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -453,7 +712,8 @@ namespace Epic_Games_Account_Switcher_Client
         }
         private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (Keyboard.Modifiers == ModifierKeys.Control)
+            // Zoom only applies to the normal layout; the compact frame layout has a fixed size.
+            if (Keyboard.Modifiers == ModifierKeys.Control && NormalContent.Visibility == Visibility.Visible)
             {
                 if (e.Delta > 0)
                 {
@@ -490,7 +750,7 @@ namespace Epic_Games_Account_Switcher_Client
             while (current != null) { if (current is T typed) return typed; current = VisualTreeHelper.GetParent(current); }
             return null;
         }
-        private async Task<bool> ExecuteCapture(CaptureAccountWindow captureWin)
+        private async Task<CaptureOutcome> ExecuteCapture(CaptureAccountWindow captureWin)
         {
             var cancellationToken = ViewModel.BeginExternalBusyOperation("Capturing current login...");
             try
@@ -506,22 +766,25 @@ namespace Epic_Games_Account_Switcher_Client
                     {
                         return Task.FromResult((bool)Dispatcher.Invoke(new Func<bool>(() => 
                         {
-                            var r = new CustomMessageBox("Overwrite Account?", "Account '" + existingName + "' already exists for this Epic ID.\n\nDo you want to overwrite it with the current login data?", "Overwrite", "Cancel").ShowDialog();
+                            var r = new CustomMessageBox("Replace Saved Account?", "'" + existingName + "' is already saved for this Epic account.\n\nReplace its saved sign-in and details with the current login? The old saved sign-in can't be brought back.", "Replace", "Cancel", null, MessageBoxVisualStyle.Danger).ShowDialog();
                             return r == true;
                         })));
                     }),
                     false,
                     cancellationToken);
-                if (result.Item1) { await ViewModel.LoadAccountsAsync(); ViewModel.ShowToast("Account captured successfully!"); return true; }
-                else if (result.Item2 != null) { new CustomMessageBox("Capture Failed", result.Item2, MessageBoxVisualStyle.Error).ShowDialog(); }
-                return false;
+                if (result.Item1) { await ViewModel.LoadAccountsAsync(); ViewModel.ShowToast("Account '" + captureWin.AccountName + "' saved."); return CaptureOutcome.Saved; }
+                if (result.Item2 == null) return CaptureOutcome.Cancelled;
+                ViewModel.EndExternalBusyOperation();
+                var retry = new CustomMessageBox("Account Not Saved", result.Item2 + "\n\nYour details are kept, so you can try again.", "Try Again", "Close", null, MessageBoxVisualStyle.Error);
+                retry.ShowDialog();
+                return retry.Result == CustomDialogResult.Primary ? CaptureOutcome.Failed : CaptureOutcome.Cancelled;
             }
             catch (OperationCanceledException)
             {
-                ViewModel.ShowToast("Operation cancelled.");
-                return false;
+                ViewModel.ShowToast("Cancelled. The account was not saved.");
+                return CaptureOutcome.Cancelled;
             }
-            finally { ViewModel.EndExternalBusyOperation(); }
+            finally { if (ViewModel.IsBusy) ViewModel.EndExternalBusyOperation(); }
         }
     }
     public class AnimatedWrapPanel : WrapPanel
@@ -530,6 +793,8 @@ namespace Epic_Games_Account_Switcher_Client
         protected override Size ArrangeOverride(Size finalSize)
         {
             var arrangedSize = base.ArrangeOverride(finalSize);
+            // Respect Windows "Show animations" (reduced motion): cards jump to their new place without sliding.
+            var animate = SystemParameters.ClientAreaAnimation;
             var currentSlots = new Dictionary<UIElement, Rect>();
             foreach (UIElement child in InternalChildren)
             {
@@ -538,7 +803,7 @@ namespace Epic_Games_Account_Switcher_Client
                 var currentSlot = LayoutInformation.GetLayoutSlot(frameworkChild);
                 currentSlots[child] = currentSlot;
                 Rect previousSlot;
-                if (_lastLayoutSlots.TryGetValue(child, out previousSlot))
+                if (animate && _lastLayoutSlots.TryGetValue(child, out previousSlot))
                 {
                     var offsetX = previousSlot.Left - currentSlot.Left;
                     var offsetY = previousSlot.Top - currentSlot.Top;
@@ -586,13 +851,11 @@ namespace Epic_Games_Account_Switcher_Client
                 var dv = new DrawingVisual();
                 using (var dc = dv.RenderOpen())
                 {
-                    var gradient = new LinearGradientBrush(
-                        ((Color)ColorConverter.ConvertFromString("#1E293B")),
-                        ((Color)ColorConverter.ConvertFromString("#0F172A")),
-                        new Point(0, 0), new Point(1, 1));
-                    dc.DrawRoundedRectangle(gradient, new Pen(((Brush)new BrushConverter().ConvertFromString("#3B82F6")), 2), new Rect(0, 0, size, size), 64, 64);
+                    var background = ThemeBrush("CardBackground", "#292E42");
+                    var outline = ThemeBrush("IconFill", "#7AA2F7");
+                    var iconBrush = ThemeBrush("SubTextForeground", "#A9B1D6");
+                    dc.DrawRoundedRectangle(background, new Pen(outline, 2), new Rect(0, 0, size, size), 64, 64);
 
-                    var iconBrush = ((Brush)new BrushConverter().ConvertFromString("#94A3B8"));
                     dc.DrawEllipse(iconBrush, null, new Point(64, 46), 20, 20);
                     
                     var geom = new StreamGeometry();
@@ -610,6 +873,11 @@ namespace Epic_Games_Account_Switcher_Client
                 return _defaultAvatar;
             }
             catch { return null; }
+        }
+
+        private static Brush ThemeBrush(string key, string fallback)
+        {
+            return (Application.Current?.TryFindResource(key) as Brush) ?? (Brush)new BrushConverter().ConvertFromString(fallback);
         }
 
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
