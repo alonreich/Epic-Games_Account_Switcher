@@ -2,12 +2,13 @@ import sys
 import os
 import re
 import ctypes
+from pathlib import Path
 from multiprocessing import Pool, cpu_count
 
 sys.dont_write_bytecode = True
 os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 os.environ['PYTHONPYCACHEPREFIX'] = os.path.join(os.path.expanduser('~'), '.null_cache_dir')
-WORKING_DIRECTORY = r"<REPO_ROOT>\Epic-Games_Account_Switcher"
+WORKING_DIRECTORY = str(Path(__file__).resolve().parent.parent)
 
 try:
     os.chdir(WORKING_DIRECTORY)
