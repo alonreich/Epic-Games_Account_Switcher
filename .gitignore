@@ -22,3 +22,6 @@ ssl-certificate/private/
 *.p12
 *.pvk
 *.snk
+
+*.cer
+*thumbprint*.txt
