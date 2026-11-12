@@ -15,6 +15,8 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using Epic_Games_Account_Switcher_Globals;
 using Forms = System.Windows.Forms;
 using Drawing = System.Drawing;
@@ -45,6 +47,14 @@ namespace Epic_Games_Account_Switcher_Client
         private Button _settingsOpenedFrom;
         private IInputElement _focusBeforeBusy;
         private LauncherFrameController _launcherFrame;
+        private DateTime _busyEndedAt = DateTime.MinValue;
+
+        /// <summary>
+        /// True while an account operation runs and for a short time after it: a switch closes and reopens the launcher, and
+        /// the frame should wait for it to come back instead of collapsing to the normal layout in between.
+        /// </summary>
+        public bool IsLauncherRestartExpected => (ViewModel != null && ViewModel.IsBusy) || DateTime.UtcNow - _busyEndedAt < TimeSpan.FromSeconds(12);
+
         public MainWindow()
         {
             InitializeComponent();
@@ -59,7 +69,174 @@ namespace Epic_Games_Account_Switcher_Client
                 new[] { new CustomPopupPlacement(new Point(targetSize.Width - popupSize.Width, targetSize.Height), PopupPrimaryAxis.Horizontal) };
             Activated += (s, e) => _launcherFrame?.OnActivated();
             Loaded += MainWindow_Loaded;
+            SizeChanged += (s, e) => UpdateZoomFitLimit();
             if (!ApplySavedWindowPlacement(AppSettings.Instance)) WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        #region Window chrome: maximize inside the work area, zoom that always fits
+
+        private const int WM_GETMINMAXINFO = 0x0024;
+        private const uint MONITOR_DEFAULTTONEAREST = 2;
+        // Smallest dashboard (in unzoomed units) in which the header, one row of cards and the toolbar are all usable.
+        private const double MinDashboardWidth = 700;
+        private const double MinDashboardHeight = 460;
+        private const double TitleBarHeight = 40;
+
+        [StructLayout(LayoutKind.Sequential)] private struct NativePoint { public int X, Y; }
+        [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left, Top, Right, Bottom; }
+        [StructLayout(LayoutKind.Sequential)] private struct MinMaxInfo { public NativePoint Reserved, MaxSize, MaxPosition, MinTrackSize, MaxTrackSize; }
+        [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
+        [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+        [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(ChromeWndProc);
+            if (AppSettings.Instance.WindowMaximized) WindowState = WindowState.Maximized;
+            UpdateMaximizeButton();
+        }
+
+        private IntPtr ChromeWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            // Not marked handled: WPF still applies MinWidth/MinHeight to the same message.
+            if (msg == WM_GETMINMAXINFO) ConstrainMaximizedBounds(hwnd, lParam);
+            return IntPtr.Zero;
+        }
+
+        /// <summary>
+        /// A borderless window maximizes to the full monitor plus its resize border, which hides the bottom toolbar behind
+        /// the taskbar. This pins the maximized bounds to the work area of the monitor the window is on.
+        /// </summary>
+        private static void ConstrainMaximizedBounds(IntPtr hwnd, IntPtr lParam)
+        {
+            try
+            {
+                var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                if (monitor == IntPtr.Zero) return;
+                var info = new MonitorInfo { Size = Marshal.SizeOf(typeof(MonitorInfo)) };
+                if (!GetMonitorInfo(monitor, ref info)) return;
+                var mmi = (MinMaxInfo)Marshal.PtrToStructure(lParam, typeof(MinMaxInfo));
+                mmi.MaxPosition.X = info.Work.Left - info.Monitor.Left;
+                mmi.MaxPosition.Y = info.Work.Top - info.Monitor.Top;
+                mmi.MaxSize.X = info.Work.Right - info.Work.Left;
+                mmi.MaxSize.Y = info.Work.Bottom - info.Work.Top;
+                Marshal.StructureToPtr(mmi, lParam, true);
+            }
+            catch { }
+        }
+
+        private void Maximize_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        }
+
+        private void UpdateMaximizeButton()
+        {
+            var maximized = WindowState == WindowState.Maximized;
+            MaximizeButton.Content = maximized ? "" : "";
+            MaximizeButton.ToolTip = maximized ? L.T("Restore down") : L.T("Maximize");
+            AutomationProperties.SetName(MaximizeButton, maximized ? L.T("Restore window") : L.T("Maximize window"));
+            WindowResizeGrip.Visibility = maximized ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        /// <summary>Tells the view model how far the dashboard can be zoomed before it stops fitting this window.</summary>
+        private void UpdateZoomFitLimit()
+        {
+            if (ViewModel == null || ActualWidth <= 0 || ActualHeight <= TitleBarHeight) return;
+            var fit = Math.Min(ActualWidth / MinDashboardWidth, (ActualHeight - TitleBarHeight) / MinDashboardHeight);
+            ViewModel.ZoomFitLimit = Math.Floor(fit * 100) / 100;
+        }
+
+        /// <summary>Card menus follow the zoom like the Settings popup and dialogs (never below 100%).</summary>
+        private static void ApplyMenuZoom(ContextMenu menu)
+        {
+            if (menu == null) return;
+            var zoom = DialogWindowHelper.PopupZoom;
+            menu.LayoutTransform = zoom > 1.01 ? new ScaleTransform(zoom, zoom) : Transform.Identity;
+        }
+
+        private void Card_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            ApplyMenuZoom((sender as FrameworkElement)?.ContextMenu);
+        }
+
+        #endregion
+
+        #region Keyboard: arrow keys move from card to card
+
+        /// <summary>
+        /// The card list is one tab stop. Inside it Left/Right/Up/Down/Home/End move between account cards in reading order,
+        /// whichever part of a card (the card or its "more options" button) has the focus.
+        /// </summary>
+        private void AccountsList_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Keyboard.Modifiers != ModifierKeys.None) return;
+            if (e.Key != Key.Left && e.Key != Key.Right && e.Key != Key.Up && e.Key != Key.Down && e.Key != Key.Home && e.Key != Key.End) return;
+            var item = FindAncestor<ListBoxItem>(Keyboard.FocusedElement as DependencyObject);
+            if (item == null || !ReferenceEquals(ItemsControl.ItemsControlFromItemContainer(item), AccountsList)) return;
+
+            var index = AccountsList.ItemContainerGenerator.IndexFromContainer(item);
+            var count = AccountsList.Items.Count;
+            if (index < 0 || count == 0) return;
+            int target;
+            switch (e.Key)
+            {
+                case Key.Left: target = index - 1; break;
+                case Key.Right: target = index + 1; break;
+                case Key.Home: target = 0; break;
+                case Key.End: target = count - 1; break;
+                default: target = FindCardInNextRow(index, e.Key == Key.Up ? -1 : 1); break;
+            }
+            // Handled also at the edges, so focus never jumps to an unrelated control.
+            e.Handled = true;
+            if (target < 0 || target >= count || target == index) return;
+            FocusCard(target);
+        }
+
+        private bool FocusCard(int index)
+        {
+            var container = AccountsList.ItemContainerGenerator.ContainerFromIndex(index) as ListBoxItem;
+            var card = container?.Template?.FindName("CardButton", container) as Button;
+            if (card == null) return false;
+            container.BringIntoView();
+            return card.Focus();
+        }
+
+        /// <summary>Index of the card in the row above (-1) or below (+1) that is horizontally closest to the given card.</summary>
+        private int FindCardInNextRow(int index, int direction)
+        {
+            var current = AccountsList.ItemContainerGenerator.ContainerFromIndex(index) as ListBoxItem;
+            if (current == null) return -1;
+            var origin = current.TranslatePoint(new Point(0, 0), AccountsList);
+            var best = -1;
+            var bestRowDistance = double.MaxValue;
+            var bestColumnDistance = double.MaxValue;
+            for (var i = 0; i < AccountsList.Items.Count; i++)
+            {
+                var other = AccountsList.ItemContainerGenerator.ContainerFromIndex(i) as ListBoxItem;
+                if (other == null) continue;
+                var position = other.TranslatePoint(new Point(0, 0), AccountsList);
+                var rowOffset = (position.Y - origin.Y) * direction;
+                if (rowOffset < 1) continue;
+                var columnOffset = Math.Abs(position.X - origin.X);
+                if (rowOffset < bestRowDistance - 1 || (Math.Abs(rowOffset - bestRowDistance) <= 1 && columnOffset < bestColumnDistance))
+                {
+                    best = i;
+                    bestRowDistance = rowOffset;
+                    bestColumnDistance = columnOffset;
+                }
+            }
+            return best;
+        }
+
+        #endregion
+
+        /// <summary>Says something to the user wherever they are: a toast in the window, or a tray notification while it is hidden.</summary>
+        private void Notify(string title, string text, Forms.ToolTipIcon icon)
+        {
+            if (!IsVisible && _notifyIcon != null) ShowTrayNotice(title, text, icon);
+            else ViewModel.ShowToast(text);
         }
 
         private void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -105,6 +282,7 @@ namespace Epic_Games_Account_Switcher_Client
         /// <summary>Moves keyboard focus into the busy overlay while an operation runs and back afterwards; exits if the user asked to close during it.</summary>
         private void OnBusyChanged(bool busy)
         {
+            if (!busy) _busyEndedAt = DateTime.UtcNow;
             if (busy)
             {
                 _focusBeforeBusy = Keyboard.FocusedElement;
@@ -131,8 +309,8 @@ namespace Epic_Games_Account_Switcher_Client
         {
             UpdateTrayToolTip();
             if (IsVisible || _notifyIcon == null || account == null) return;
-            if (success) ShowTrayNotice("Switched account", "Epic Games Launcher is now signed in as " + account.Name + ".", Forms.ToolTipIcon.Info);
-            else ShowTrayNotice("Switch failed", "Could not switch to " + account.Name + ". Open the app for details.", Forms.ToolTipIcon.Warning);
+            if (success) ShowTrayNotice(L.T("Switched account"), L.T("Epic Games Launcher is now signed in as {0}.", account.Name), Forms.ToolTipIcon.Info);
+            else ShowTrayNotice(L.T("Switch failed"), L.T("Could not switch to {0}. Open the app for details.", account.Name), Forms.ToolTipIcon.Warning);
         }
 
         private void ShowTrayNotice(string title, string text, Forms.ToolTipIcon icon)
@@ -144,7 +322,7 @@ namespace Epic_Games_Account_Switcher_Client
         {
             if (_notifyIcon == null || ViewModel?.Accounts == null) return;
             var active = ViewModel.Accounts.FirstOrDefault(a => a != null && a.IsActive);
-            var text = active == null ? "Epic Games Account Switcher" : "Epic Account Switcher - " + active.Name;
+            var text = active == null ? "Epic Games Account Switcher" : L.T("Epic Account Switcher - {0}", active.Name);
             if (text.Length > 63) text = text.Substring(0, 60) + "...";
             try { _notifyIcon.Text = text; } catch { }
         }
@@ -154,6 +332,7 @@ namespace Epic_Games_Account_Switcher_Client
             var item = FindAncestor<ListBoxItem>(sender as DependencyObject);
             var card = item?.Template?.FindName("CardButton", item) as Button;
             if (card?.ContextMenu == null) return;
+            ApplyMenuZoom(card.ContextMenu);
             card.ContextMenu.PlacementTarget = card;
             card.ContextMenu.Placement = PlacementMode.Bottom;
             card.ContextMenu.IsOpen = true;
@@ -261,6 +440,7 @@ namespace Epic_Games_Account_Switcher_Client
         protected override void OnStateChanged(EventArgs e)
         {
             base.OnStateChanged(e);
+            UpdateMaximizeButton();
             if (WindowState == WindowState.Minimized && AppSettings.Instance.MinimizeToTray)
             {
                 HideToTray();
@@ -273,7 +453,7 @@ namespace Epic_Games_Account_Switcher_Client
             Hide();
             var settings = AppSettings.Instance;
             if (settings.TrayHintShown || _notifyIcon == null) return;
-            ShowTrayNotice("Still running", "Epic Games Account Switcher keeps running here. Click the icon to open it, or right-click and choose Exit to quit.", Forms.ToolTipIcon.Info);
+            ShowTrayNotice(L.T("Still running"), L.T("Epic Games Account Switcher keeps running here. Click the icon to open it, or right-click and choose Exit to quit."), Forms.ToolTipIcon.Info);
             settings.TrayHintShown = true;
             AppSettings.SaveSettings();
         }
@@ -290,6 +470,8 @@ namespace Epic_Games_Account_Switcher_Client
             ViewModel?.RefreshFrameAccounts();
             FrameContent.Visibility = frame ? Visibility.Visible : Visibility.Collapsed;
             NormalContent.Visibility = frame ? Visibility.Collapsed : Visibility.Visible;
+            // The frame takes its size from the launcher, so maximizing it makes no sense.
+            MaximizeButton.Visibility = frame ? Visibility.Collapsed : Visibility.Visible;
         }
 
         /// <summary>False when Windows "Show animations" is off (reduced motion): frame transitions then switch instantly.</summary>
@@ -359,9 +541,9 @@ namespace Epic_Games_Account_Switcher_Client
                 _isExplicitExit = false;
                 if (_exitWhenIdle) return;
                 if (!IsVisible) RestoreFromTray();
-                var choice = new CustomMessageBox("Operation In Progress",
-                    "\"" + (ViewModel.BusyStatus ?? "An operation") + "\" is still running.\n\nClosing now could leave Epic Games Launcher half-switched. Wait for it to finish, or cancel it and close once it has stopped safely.",
-                    "Cancel It and Close", "Keep Waiting", null, MessageBoxVisualStyle.Danger);
+                var choice = new CustomMessageBox(L.T("Operation In Progress"),
+                    L.T("\"{0}\" is still running.\n\nClosing now could leave Epic Games Launcher half-switched. Wait for it to finish, or cancel it and close once it has stopped safely.", string.IsNullOrWhiteSpace(ViewModel.BusyStatus) ? L.T("An operation") : ViewModel.BusyStatus),
+                    L.T("Cancel It and Close"), L.T("Keep Waiting"), null, MessageBoxVisualStyle.Danger);
                 choice.ShowDialog();
                 if (choice.Result == CustomDialogResult.Primary && ViewModel.IsBusy)
                 {
@@ -440,25 +622,26 @@ namespace Epic_Games_Account_Switcher_Client
         {
             if (_notifyIcon == null || ViewModel == null) return;
             var menu = new Forms.ContextMenuStrip();
-            var header = new Forms.ToolStripMenuItem("Switch account") { Enabled = false };
+            var header = new Forms.ToolStripMenuItem(L.T("Switch account")) { Enabled = false };
             menu.Items.Add(header);
             menu.Items.Add(new Forms.ToolStripSeparator());
 
             foreach (var acc in ViewModel.Accounts)
             {
                 var itemText = acc.Name;
-                if (acc.IsActive) itemText += " (Active)";
+                if (acc.IsActive) itemText = L.T("{0} (Active)", acc.Name);
                 var item = new Forms.ToolStripMenuItem(itemText) { Enabled = !acc.IsActive };
                 item.Click += (s, e) =>
                 {
                     if (ViewModel.IsBusy)
                     {
-                        ViewModel.ShowToast("Cannot switch while an operation is running.");
+                        // The window may be hidden in the notification area: a toast inside it would never be seen.
+                        Notify(L.T("Please wait"), L.T("Another operation is still running. Try again when it has finished."), Forms.ToolTipIcon.Warning);
                         return;
                     }
                     if (ViewModel.SwitchCommand.CanExecute(acc))
                     {
-                        if (!IsVisible) ShowTrayNotice("Switching account", "Switching Epic Games Launcher to " + acc.Name + "…", Forms.ToolTipIcon.Info);
+                        if (!IsVisible) ShowTrayNotice(L.T("Switching account"), L.T("Switching Epic Games Launcher to {0}…", acc.Name), Forms.ToolTipIcon.Info);
                         ViewModel.SwitchCommand.Execute(acc);
                     }
                     UpdateTrayContextMenu();
@@ -468,15 +651,15 @@ namespace Epic_Games_Account_Switcher_Client
 
             if (ViewModel.Accounts.Count == 0)
             {
-                menu.Items.Add(new Forms.ToolStripMenuItem("No accounts saved yet") { Enabled = false });
+                menu.Items.Add(new Forms.ToolStripMenuItem(L.T("No accounts saved yet")) { Enabled = false });
             }
 
             menu.Items.Add(new Forms.ToolStripSeparator());
-            var dashboardItem = new Forms.ToolStripMenuItem("Open Dashboard");
+            var dashboardItem = new Forms.ToolStripMenuItem(L.T("Open Account Switcher"));
             dashboardItem.Click += (s, e) => RestoreFromTray();
             menu.Items.Add(dashboardItem);
 
-            var exitItem = new Forms.ToolStripMenuItem("Exit");
+            var exitItem = new Forms.ToolStripMenuItem(L.T("Exit"));
             exitItem.Click += (s, e) =>
             {
                 _isExplicitExit = true;
@@ -555,6 +738,7 @@ namespace Epic_Games_Account_Switcher_Client
             settings.WindowMonitorDeviceName = screen == null ? "" : screen.DeviceName;
             settings.WindowRelativeLeft = screen == null ? -1 : rect.Left - screen.WorkingArea.Left;
             settings.WindowRelativeTop = screen == null ? -1 : rect.Top - screen.WorkingArea.Top;
+            settings.WindowMaximized = WindowState == WindowState.Maximized;
         }
 
         private static double Clamp(double value, double min, double max)
@@ -589,7 +773,9 @@ namespace Epic_Games_Account_Switcher_Client
                 Globals.WriteToLog("Failed to open log file from dashboard", ex);
                 string logPath = null;
                 try { logPath = Globals.GetLogPath(); } catch { }
-                new CustomMessageBox("Log File Unavailable", "The log file could not be opened automatically." + (string.IsNullOrWhiteSpace(logPath) ? "" : "\n\nYou can open it yourself in Notepad:\n" + logPath), MessageBoxVisualStyle.Error).ShowDialog();
+                new CustomMessageBox(L.T("Log File Unavailable"), string.IsNullOrWhiteSpace(logPath)
+                    ? L.T("The log file could not be opened automatically.")
+                    : L.T("The log file could not be opened automatically.\n\nYou can open it yourself in Notepad:\n{0}", logPath), MessageBoxVisualStyle.Error).ShowDialog();
             }
         }
         private void AccountsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -704,11 +890,23 @@ namespace Epic_Games_Account_Switcher_Client
         }
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control && ViewModel != null && ViewModel.UndoReorderCommand.CanExecute(null))
+            if (ViewModel == null || Keyboard.Modifiers != ModifierKeys.Control) return;
+            if (e.Key == Key.Z && ViewModel.UndoReorderCommand.CanExecute(null))
             {
                 ViewModel.UndoReorderCommand.Execute(null);
                 e.Handled = true;
+                return;
             }
+
+            // Keyboard zoom, matching Ctrl + mouse wheel. Only the normal layout zooms.
+            if (NormalContent.Visibility != Visibility.Visible) return;
+            ICommand zoom = null;
+            if (e.Key == Key.OemPlus || e.Key == Key.Add) zoom = ViewModel.ZoomInCommand;
+            else if (e.Key == Key.OemMinus || e.Key == Key.Subtract) zoom = ViewModel.ZoomOutCommand;
+            else if (e.Key == Key.D0 || e.Key == Key.NumPad0) zoom = ViewModel.ZoomResetCommand;
+            if (zoom == null) return;
+            zoom.Execute(null);
+            e.Handled = true;
         }
         private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
@@ -752,7 +950,7 @@ namespace Epic_Games_Account_Switcher_Client
         }
         private async Task<CaptureOutcome> ExecuteCapture(CaptureAccountWindow captureWin)
         {
-            var cancellationToken = ViewModel.BeginExternalBusyOperation("Capturing current login...");
+            var cancellationToken = ViewModel.BeginExternalBusyOperation(L.T("Saving the signed-in account…"));
             try
             {
                 var result = await AccountService.CaptureCurrentAccount(
@@ -766,22 +964,22 @@ namespace Epic_Games_Account_Switcher_Client
                     {
                         return Task.FromResult((bool)Dispatcher.Invoke(new Func<bool>(() => 
                         {
-                            var r = new CustomMessageBox("Replace Saved Account?", "'" + existingName + "' is already saved for this Epic account.\n\nReplace its saved sign-in and details with the current login? The old saved sign-in can't be brought back.", "Replace", "Cancel", null, MessageBoxVisualStyle.Danger).ShowDialog();
+                            var r = new CustomMessageBox(L.T("Replace Saved Account?"), L.T("'{0}' is already saved for this Epic account.\n\nReplace its saved sign-in and details with the current login? The old saved sign-in can't be brought back.", existingName), L.T("Replace"), L.T("Cancel"), null, MessageBoxVisualStyle.Danger).ShowDialog();
                             return r == true;
                         })));
                     }),
                     false,
                     cancellationToken);
-                if (result.Item1) { await ViewModel.LoadAccountsAsync(); ViewModel.ShowToast("Account '" + captureWin.AccountName + "' saved."); return CaptureOutcome.Saved; }
+                if (result.Item1) { await ViewModel.LoadAccountsAsync(); ViewModel.ShowToast(L.T("Account '{0}' saved.", captureWin.AccountName)); return CaptureOutcome.Saved; }
                 if (result.Item2 == null) return CaptureOutcome.Cancelled;
                 ViewModel.EndExternalBusyOperation();
-                var retry = new CustomMessageBox("Account Not Saved", result.Item2 + "\n\nYour details are kept, so you can try again.", "Try Again", "Close", null, MessageBoxVisualStyle.Error);
+                var retry = new CustomMessageBox(L.T("Account Not Saved"), result.Item2 + "\n\n" + L.T("Your details are kept, so you can try again."), L.T("Try Again"), L.T("Close"), null, MessageBoxVisualStyle.Error);
                 retry.ShowDialog();
                 return retry.Result == CustomDialogResult.Primary ? CaptureOutcome.Failed : CaptureOutcome.Cancelled;
             }
             catch (OperationCanceledException)
             {
-                ViewModel.ShowToast("Cancelled. The account was not saved.");
+                ViewModel.ShowToast(L.T("Cancelled. The account was not saved."));
                 return CaptureOutcome.Cancelled;
             }
             finally { if (ViewModel.IsBusy) ViewModel.EndExternalBusyOperation(); }

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using Epic_Games_Account_Switcher_Globals;
 
 namespace Epic_Games_Account_Switcher_Client
 {
@@ -18,12 +19,12 @@ namespace Epic_Games_Account_Switcher_Client
             DialogWindowHelper.FitToScreen(this);
             _confirmPassword = confirmPassword;
             _minimumLength = minimumLength < 1 ? 1 : minimumLength;
-            TitleText.Text = (title ?? "Backup Password").ToUpperInvariant();
-            Title = title ?? "Backup Password";
+            TitleText.Text = (title ?? L.T("Backup Password")).ToUpper();
+            Title = title ?? L.T("Backup Password");
             MessageText.Text = message ?? "";
             ConfirmPanel.Visibility = confirmPassword ? Visibility.Visible : Visibility.Collapsed;
-            OkButton.Content = confirmPassword ? "CREATE BACKUP" : "RESTORE";
-            if (_minimumLength > 1) PasswordLabel.Text = "Password (at least " + _minimumLength + " characters)";
+            OkButton.Content = confirmPassword ? L.T("CREATE BACKUP") : L.T("RESTORE");
+            if (_minimumLength > 1) PasswordLabel.Text = L.T("Password (at least {0} characters)", _minimumLength);
             Loaded += (s, e) => PasswordInput.Focus();
         }
 
@@ -42,13 +43,13 @@ namespace Epic_Games_Account_Switcher_Client
             var password = PasswordInput.Password ?? "";
             if (password.Length < _minimumLength)
             {
-                ShowError(_minimumLength > 1 ? "Use a password with at least " + _minimumLength + " characters." : "Enter the password.", PasswordInput);
+                ShowError(_minimumLength > 1 ? L.T("Use a password with at least {0} characters.", _minimumLength) : L.T("Enter the password."), PasswordInput);
                 return;
             }
 
             if (_confirmPassword && password != (ConfirmPasswordInput.Password ?? ""))
             {
-                ShowError("The two passwords don't match. Type the same password in both fields.", ConfirmPasswordInput);
+                ShowError(L.T("The two passwords don't match. Type the same password in both fields."), ConfirmPasswordInput);
                 return;
             }
 

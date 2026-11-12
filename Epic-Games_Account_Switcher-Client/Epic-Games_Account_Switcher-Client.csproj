@@ -32,7 +32,8 @@
 
   <Target Name="CopySkins" AfterTargets="Build">
     <ItemGroup>
-      <SkinsFiles Include="$(SolutionDir)Skin_Icons\**\*.*" />
+      <!-- Relative to this project, not $(SolutionDir): that is empty when the project is built on its own (dev.cmd). -->
+      <SkinsFiles Include="$(MSBuildThisFileDirectory)..\Skin_Icons\**\*.*" />
     </ItemGroup>
     <Copy SourceFiles="@(SkinsFiles)" DestinationFolder="$(TargetDir)Skin_Icons\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>

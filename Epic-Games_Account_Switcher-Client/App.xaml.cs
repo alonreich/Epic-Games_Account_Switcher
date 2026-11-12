@@ -101,6 +101,8 @@ namespace Epic_Games_Account_Switcher_Client
             }
 
             Globals.WriteToLog("APP_LAUNCH_CONTINUE Mode=" + (isDevMode ? "Dev" : "Normal"));
+            // Follow Windows contrast themes (and keep following while the app runs). --force-high-contrast is a test switch.
+            ThemeManager.Initialize(HasArg(e.Args, "--force-high-contrast"));
             Globals.CreateDataFolder(false);
             Directory.SetCurrentDirectory(Globals.UserDataFolder);
             AccountService.CleanOrphanedTempFolders();
@@ -127,7 +129,7 @@ namespace Epic_Games_Account_Switcher_Client
                     if (_appMutex != null) { try { _appMutex.Dispose(); } catch { } _appMutex = null; }
                     if (SignalRunningInstanceToShow(devMode)) Environment.Exit(0);
                     if (!devMode && NativeFuncs.BringToFront()) Environment.Exit(0);
-                    else { new CustomMessageBox(devMode ? "Dev Instance Running" : "Already Running", devMode ? "A development instance is already running." : "An instance is already running.").ShowDialog(); Environment.Exit(1056); }
+                    else { new CustomMessageBox(devMode ? "Dev Instance Running" : L.T("Already Running"), devMode ? "A development instance is already running." : L.T("Epic Games Account Switcher is already running.")).ShowDialog(); Environment.Exit(1056); }
                 }
             }
             catch (AbandonedMutexException) { }
@@ -608,8 +610,8 @@ namespace Epic_Games_Account_Switcher_Client
                 {
                     log("FATAL: " + ex.Message);
                     Globals.WriteToLog("[SETUP] Fatal error", ex);
-                    AskOnUi(title.IndexOf("Uninstall", StringComparison.OrdinalIgnoreCase) >= 0 ? "Uninstall Failed" : "Setup Failed",
-                        ex.Message + (logFile != null ? "\n\nSetup log: " + logFile : ""), "OK", null, null, MessageBoxVisualStyle.Error);
+                    AskOnUi(title.IndexOf("Uninstall", StringComparison.OrdinalIgnoreCase) >= 0 ? L.T("Uninstall Failed") : L.T("Setup Failed"),
+                        ex.Message + (logFile != null ? "\n\n" + L.T("Setup log: {0}", logFile) : ""), L.T("OK"), null, null, MessageBoxVisualStyle.Error);
                     exitCode = ExitFailed;
                 }
                 finally { try { _progress.Dispatcher.Invoke(() => _progress.Close()); } catch { } }
@@ -650,7 +652,7 @@ namespace Epic_Games_Account_Switcher_Client
             {
                 if (!Globals.IsAdministrator)
                 {
-                    new CustomMessageBox("Administrator Required", "Setup could not get administrator permission, so nothing was changed.", MessageBoxVisualStyle.Error).ShowDialog();
+                    new CustomMessageBox(L.T("Administrator Required"), L.T("Setup could not get administrator permission, so nothing was changed."), MessageBoxVisualStyle.Error).ShowDialog();
                     Environment.Exit(ExitFailed);
                     return;
                 }
@@ -683,10 +685,9 @@ namespace Epic_Games_Account_Switcher_Client
                     log("CANCELLED: A newer version (" + installedVersion + ") is already installed.");
                     return ExitCancelled;
                 }
-                var answer = AskOnUi("Newer Version Already Installed",
-                    "Version " + installedVersion + " is already installed. This setup contains the OLDER version " + current + ".\n\n" +
-                    "Going back to an older version can break features and data saved by the newer one. Keep the newer version unless you have a specific reason.",
-                    "Keep Version " + installedVersion, "Install Older " + current + " Anyway", null, MessageBoxVisualStyle.Error);
+                var answer = AskOnUi(L.T("Newer Version Already Installed"),
+                    L.T("Version {0} is already installed. This setup contains the OLDER version {1}.\n\nGoing back to an older version can break features and data saved by the newer one. Keep the newer version unless you have a specific reason.", installedVersion, current),
+                    L.T("Keep Version {0}", installedVersion), L.T("Install Older {0} Anyway", current), null, MessageBoxVisualStyle.Error);
                 if (answer != CustomDialogResult.Secondary) { log("CANCELLED: Kept the newer installed version. Nothing was changed."); return ExitCancelled; }
                 o.AllowDowngrade = true;
                 log("WARNING: User chose to downgrade from " + installedVersion + " to " + current + ".");
@@ -697,12 +698,11 @@ namespace Epic_Games_Account_Switcher_Client
             else if (o.CleanRequested) cleanInstall = true;
             else if (existing)
             {
-                var versionLine = installedVersion != null ? "Installed version: " + installedVersion + "\nThis setup: " + current + "\n\n" : "";
-                var answer = AskOnUi("Existing Installation Detected",
+                var versionLine = installedVersion != null ? L.T("Installed version: {0}\nThis setup: {1}", installedVersion, current) + "\n\n" : "";
+                var answer = AskOnUi(L.T("Existing Installation Detected"),
                     versionLine +
-                    "• Upgrade keeps all your saved accounts and settings (recommended).\n" +
-                    "• Clean Install deletes the app AND all saved accounts, then installs fresh. A safety backup is saved to your Downloads folder first.",
-                    "Upgrade & Keep Accounts", "Clean Install", "Cancel Setup");
+                    L.T("• Upgrade keeps all your saved accounts and settings (recommended).\n• Clean Install deletes the app AND all saved accounts, then installs fresh. A safety backup is saved to your Downloads folder first."),
+                    L.T("Upgrade & Keep Accounts"), L.T("Clean Install"), L.T("Cancel Setup"));
                 if (answer == CustomDialogResult.Primary) cleanInstall = false;
                 else if (answer == CustomDialogResult.Secondary) cleanInstall = true;
                 else { log("CANCELLED: Setup was cancelled. Nothing was changed."); return ExitCancelled; }
@@ -728,10 +728,9 @@ namespace Epic_Games_Account_Switcher_Client
 
             if (cleanInstall && hasAccounts && backupError != null)
             {
-                var answer = AskOnUi("Safety Backup Failed",
-                    "The safety backup of your saved accounts could NOT be created:\n" + backupError + "\n\n" +
-                    "A Clean Install now would permanently delete your saved accounts with no way to get them back.",
-                    "Upgrade & Keep Accounts Instead", "Delete My Accounts Permanently", "Cancel Setup", MessageBoxVisualStyle.Error);
+                var answer = AskOnUi(L.T("Safety Backup Failed"),
+                    L.T("The safety backup of your saved accounts could NOT be created:\n{0}\n\nA Clean Install now would permanently delete your saved accounts with no way to get them back.", backupError),
+                    L.T("Upgrade & Keep Accounts Instead"), L.T("Delete My Accounts Permanently"), L.T("Cancel Setup"), MessageBoxVisualStyle.Error);
                 if (answer == CustomDialogResult.Primary) { cleanInstall = false; log("SETUP: Switched to upgrade mode to protect accounts."); }
                 else if (answer == CustomDialogResult.Secondary) log("WARNING: User confirmed permanent deletion without a backup.");
                 else { log("CANCELLED: Setup was cancelled. Nothing was changed."); return ExitCancelled; }
@@ -747,7 +746,7 @@ namespace Epic_Games_Account_Switcher_Client
             {
                 log(machine == ExitCancelled ? "CANCELLED: Nothing was changed. Your accounts are untouched." : "FAILED: The previous installation was kept or restored. Your accounts are untouched.");
                 if (machine == ExitFailed)
-                    AskOnUi("Setup Failed", "Setup could not finish installing the new version. Your previous installation was kept (or restored) and your saved accounts were not touched.\n\nPlease try again. If it keeps failing, check the setup log in your Temp folder (Epic_Setup_*.log).", "OK", null, null, MessageBoxVisualStyle.Error);
+                    AskOnUi(L.T("Setup Failed"), L.T("Setup could not finish installing the new version. Your previous installation was kept (or restored) and your saved accounts were not touched.\n\nPlease try again. If it keeps failing, check the setup log in your Temp folder (Epic_Setup_*.log)."), L.T("OK"), null, null, MessageBoxVisualStyle.Error);
                 return machine;
             }
             _progress.UpdateProgress(80);
@@ -825,14 +824,14 @@ namespace Epic_Games_Account_Switcher_Client
                 try { owned = setupMutex.WaitOne(TimeSpan.FromSeconds(10), false); } catch (AbandonedMutexException) { owned = true; }
                 if (!owned)
                 {
-                    AskOnUi("Installer Busy", "Another installation is already in progress. Please wait for it to finish.", "OK");
+                    AskOnUi(L.T("Installer Busy"), L.T("Another installation is already in progress. Please wait for it to finish."), L.T("OK"));
                     return ExitCancelled;
                 }
                 try
                 {
                     if (IsMsiBusy())
                     {
-                        AskOnUi("System Busy", "Windows Installer is busy or a reboot is pending. Please wait and try again.", "OK");
+                        AskOnUi(L.T("System Busy"), L.T("Windows Installer is busy or a reboot is pending. Please wait and try again."), L.T("OK"));
                         return ExitCancelled;
                     }
 
@@ -1035,17 +1034,17 @@ namespace Epic_Games_Account_Switcher_Client
                 return;
             }
 
-            var choice = new CustomMessageBox("Uninstall Epic Games Account Switcher",
-                "Your saved accounts are KEPT by default, so reinstalling later brings everything back.\n\nWhat would you like to remove?",
-                "Remove App, Keep My Accounts", "Remove App and All Accounts", "Cancel");
+            var choice = new CustomMessageBox(L.T("Uninstall Epic Games Account Switcher"),
+                L.T("Your saved accounts are KEPT by default, so reinstalling later brings everything back.\n\nWhat would you like to remove?"),
+                L.T("Remove App, Keep My Accounts"), L.T("Remove App and All Accounts"), L.T("Cancel"));
             choice.ShowDialog();
             if (choice.Result != CustomDialogResult.Primary && choice.Result != CustomDialogResult.Secondary) { Environment.Exit(ExitCancelled); return; }
             bool purge = choice.Result == CustomDialogResult.Secondary;
             if (purge)
             {
-                var confirm = new CustomMessageBox("Delete All Accounts?",
-                    "This permanently deletes every saved account from this PC.\n\nA safety backup will be saved to your Downloads folder first, so you can bring them back later with RESTORE.",
-                    "Delete Everything", "Keep My Accounts", "Cancel", MessageBoxVisualStyle.Danger);
+                var confirm = new CustomMessageBox(L.T("Delete All Accounts?"),
+                    L.T("This permanently deletes every saved account from this PC.\n\nA safety backup will be saved to your Downloads folder first, so you can bring them back later with RESTORE."),
+                    L.T("Delete Everything"), L.T("Keep My Accounts"), L.T("Cancel"), MessageBoxVisualStyle.Danger);
                 confirm.ShowDialog();
                 if (confirm.Result == CustomDialogResult.Secondary) purge = false;
                 else if (confirm.Result != CustomDialogResult.Primary) { Environment.Exit(ExitCancelled); return; }
@@ -1069,9 +1068,9 @@ namespace Epic_Games_Account_Switcher_Client
                 if (error != null)
                 {
                     backupPath = null;
-                    var answer = AskOnUi("Safety Backup Failed",
-                        "The safety backup could NOT be created:\n" + error + "\n\nDeleting now would permanently remove your saved accounts.",
-                        "Keep My Accounts", "Delete Permanently", "Cancel", MessageBoxVisualStyle.Error);
+                    var answer = AskOnUi(L.T("Safety Backup Failed"),
+                        L.T("The safety backup could NOT be created:\n{0}\n\nDeleting now would permanently remove your saved accounts.", error),
+                        L.T("Keep My Accounts"), L.T("Delete Permanently"), L.T("Cancel"), MessageBoxVisualStyle.Error);
                     if (answer == CustomDialogResult.Primary) purge = false;
                     else if (answer != CustomDialogResult.Secondary) return ExitCancelled;
                 }
@@ -1101,7 +1100,7 @@ namespace Epic_Games_Account_Switcher_Client
             }
             if (machine != ExitOk)
             {
-                AskOnUi("Uninstall Failed", "The program files could not be removed. Your accounts were not touched.", "OK", null, null, MessageBoxVisualStyle.Error);
+                AskOnUi(L.T("Uninstall Failed"), L.T("The program files could not be removed. Your accounts were not touched."), L.T("OK"), null, null, MessageBoxVisualStyle.Error);
                 return machine;
             }
             _progress.UpdateProgress(75);
@@ -1119,10 +1118,10 @@ namespace Epic_Games_Account_Switcher_Client
             _progress.UpdateProgress(100);
             log("SUCCESS: Uninstall complete.");
 
-            AskOnUi("Uninstall Complete",
-                "Epic Games Account Switcher was removed." +
-                (purge ? (backupPath != null ? "\n\nA backup of your accounts was saved to:\n" + backupPath : "") : "\n\nYour saved accounts were kept. Reinstall at any time to get them back."),
-                "OK", null, null, MessageBoxVisualStyle.Success);
+            AskOnUi(L.T("Uninstall Complete"),
+                L.T("Epic Games Account Switcher was removed.") +
+                (purge ? (backupPath != null ? "\n\n" + L.T("A backup of your accounts was saved to:\n{0}", backupPath) : "") : "\n\n" + L.T("Your saved accounts were kept. Reinstall at any time to get them back.")),
+                L.T("OK"), null, null, MessageBoxVisualStyle.Success);
             return ExitOk;
         }
 

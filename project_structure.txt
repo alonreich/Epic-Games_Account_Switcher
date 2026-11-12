@@ -34,6 +34,7 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 | `.\developer_tools\Set-Version.ps1` | Bumps VersionPrefix (must increase). |
 | `.\developer_tools\Release-Notes.ps1` | Validates/promotes docs\changes.md -> docs\CHANGELOG.md + GitHub release body. Enforces jargon-free Public lines and history growth. |
 | `.\developer_tools\SetConsoleFont.ps1` | Console cosmetics used at the end of Build.cmd. |
+| `.\developer_tools\Extract-Strings.ps1` | Regenerates `Globals\Strings.resx` from all `L.T("...")` / `{local:T '...'}` texts. `-Check` only verifies it is current. Run after adding or changing UI text. |
 | `.\developer_tools\*.py` | Maintenance helpers (code extraction / comment removal). |
 | `.\ssl-certificate\` | Free self-signed code signing: Create-CodeSigningCert.ps1 (one-time), Sign-File.ps1 (used by Build.cmd), public .cer + thumbprint.txt. `private\` is git-ignored. |
 | `Epic-Games_Account_Switcher-Client\` | **WPF UI Layer** (assembly `Epic-Games_Account_Switcher.exe`). |
@@ -42,22 +43,25 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 | `  - MainViewModel.Updates.cs` | Update banner/commands (check, Update now, Later, Skip, What's new). |
 | `  - MainViewModel.LauncherFrame.cs` | Experimental launcher-frame setting + left/right card lists. |
 | `  - LauncherFrameController.cs` | Wraps the main window around the Epic launcher: WinEvent hooks (timer fallback), one-call SetWindowPos placement, frame drag/resize moves the launcher, fade/slide transitions (off when Windows animations are off). |
-| `  - MainWindow.xaml(.cs)` | Dashboard: card grid (+ ⋯ card menu), frame layout, update/unsaved banners, Settings popup (general, launcher, updates, exit), tray, zoom, off-screen recovery. |
+| `  - MainWindow.xaml(.cs)` | Dashboard: card grid (+ ⋯ card menu, arrow-key navigation), frame layout, update/unsaved banners, Settings popup (general, launcher, updates, exit), tray, zoom (capped to what fits the window), maximize inside the work area, off-screen recovery. |
 | `  - CaptureAccountWindow.xaml(.cs)` | Wizard for adding/editing profiles. |
 | `  - EmbeddedLoginWindow.xaml(.cs)` | WebView2 direct Epic login (exchange code capture). |
 | `  - PasswordPromptWindow.xaml(.cs)` | Backup password prompt. |
 | `  - ProgressWindow.xaml(.cs)` | Setup/uninstall progress UI. |
 | `  - SkinPickerWindow.xaml(.cs)` | Avatar picker. |
-| `  - CustomMessageBox.xaml(.cs)` | Mandated UI for all user notifications (Primary/Secondary/Cancel). |
+| `  - CustomMessageBox.xaml(.cs)` | Mandated UI for all user notifications (Primary/Secondary/Cancel); text is selectable, Ctrl+C copies it. Also `DialogWindowHelper` (FitToScreen, DragMove, dialog/popup zoom). |
+| `  - UiHelpers.cs` | `TExtension` (`{local:T '...'}` localized XAML text), `ThemeManager` (Windows contrast themes), `ClipboardHelper` (password copy that skips clipboard history and clears itself). |
 | `Epic-Games_Account_Switcher-Globals\` | **Core Logic Layer**. |
 | `  - AccountService.cs` | Critical engine: atomic directory moves, session clones, process kill polling, registry identity switching with rollback, streaming encrypted backups, `VerifyBackupFile`. `SessionOperationLock` serializes session work. |
 | `  - AppVersion.cs` | Version read-back + SemVer/legacy comparison. |
 | `  - UpdateService.cs` | GitHub Releases check, download, SHA-256 + Authenticode/thumbprint verification, installer launch (`--installing --update`). |
-| `  - AppSettings.cs` | `appsettings.json` singleton (incl. update + experimental settings). |
+| `  - AppSettings.cs` | `appsettings.json` singleton (incl. update + experimental settings, `KeepLauncherWindowPlacement`, `WindowMaximized`). |
+| `  - LauncherWindowPlacement.cs` | Reads the launcher's real window rectangle before a switch stops it and rewrites the `MainLauncherWindow` setting with it. |
+| `  - L.cs`, `Strings.resx` | Localization: `L.T("English text", args)`; the English text is the resource key. `Strings.resx` is GENERATED (Extract-Strings.ps1); a translation is `Strings.<culture>.resx`. |
 | `  - Globals.cs` | I/O helpers, logging, install paths (`InstallDirectory`), shortcut creation, shell-folder probing. |
 | `  - AccountModel.cs`, `CredentialService.cs`, `Registry.cs`, `Windows.cs` | Account model + DPAPI, Credential Manager, registry helpers, Win32 interop. |
 | `SingleFilePacker\` | Installer bootstrapper (asInvoker): payload SHA-256 check, extraction (user %TEMP% or admin-only Program Files folder when elevated), waits for setup, cleans up. |
-| `Epic-Games_Account_Switcher-Tests\` | MSTest: backup encryption, restore safety, path traversal, auth validation, version comparison. Run by Build.cmd. |
+| `Epic-Games_Account_Switcher-Tests\` | MSTest: backup encryption, restore safety, path traversal, auth validation, version comparison, localization lookup, launcher window value rewriting. Run by Build.cmd. |
 | `Skin_Icons\`, `Application_Icons\` | Default avatars and app icons. |
 | `Payload\`, `compiled\` | Build outputs (git-ignored). |
 
@@ -70,10 +74,13 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 6. **Never lose user data**: Never say a backup exists without `AccountService.VerifyBackupFile`. Never delete accounts without explicit user choice; uninstall keeps accounts by default.
 7. **No surprise restarts**: The app never installs/restarts without explicit user confirmation. Setup asks the running app to exit gracefully (finishing any switch) before force-stopping it.
 8. **Low-RAM & Safe Diagnostics**: Streaming crypto for backups; copy-on-read for locked Epic logs/INIs.
+9. **Localizable text**: Every text a user can see goes through `L.T("English text", args)` (C#) or `{local:T 'English text'}` (XAML). The first argument is ONE string literal with `{0}` placeholders (never `"a" + x + "b"`). Log lines and setup detail lines stay English.
+10. **Theme tokens only**: Colours come from the brush keys in `App.xaml` via `DynamicResource` (never literals), so `ThemeManager` can swap them for Windows contrast themes. Outlines of inputs use `InputBorder`.
+11. **Launcher window placement**: With `KeepLauncherWindowPlacement` (default) a switch keeps the launcher's live `[WindowSettings] MainLauncherWindow` value, corrected with the real window rectangle read just before the launcher is stopped, instead of restoring the account's saved one.
 
 ## 5) DATA MODEL
 - `%LOCALAPPDATA%\EpicAccountSwitcher\EG\accounts.json` and `EG\<Id>\{Saved,EOS_Data,Roaming_Data,ProgramData_Data}`: profiles.
-- `%LOCALAPPDATA%\EpicAccountSwitcher\appsettings.json`: settings (incl. AutoCheckForUpdates, SkippedUpdateVersion, ExperimentalLauncherFrame).
+- `%LOCALAPPDATA%\EpicAccountSwitcher\appsettings.json`: settings (incl. AutoCheckForUpdates, SkippedUpdateVersion, ExperimentalLauncherFrame, KeepLauncherWindowPlacement, WindowMaximized, ZoomFactor).
 - `%LOCALAPPDATA%\EpicAccountSwitcher\Updates\<version>\`: verified update downloads (old ones cleaned at startup).
 - `EG\accounts.json.unreadable_<time>`: safety copy made when accounts.json can't be parsed (never auto-deleted).
 - `%TEMP%\EpicSwitcherWebView2_<guid>\`: temporary sign-in browser profile; erased on close + startup sweep (older than 10 min).
@@ -91,10 +98,11 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 5. Never change the version by hand (Release.cmd owns it). Never rename release assets (updater contract, see docs\RELEASING.md).
 6. Never commit secrets: ssl-certificate\private\, *.pfx, passwords. Never commit Payload\ or compiled\.
 7. All user-facing messages go through CustomMessageBox; never block the UI thread with network or disk work.
-8. Borderless dialogs call DialogWindowHelper.FitToScreen + DragMove (CustomMessageBox.xaml.cs) so they can be moved and never exceed the screen.
+8. Borderless dialogs call DialogWindowHelper.FitToScreen + DragMove (CustomMessageBox.xaml.cs) so they can be moved, never exceed the screen and follow the zoom.
+9. After adding or changing UI text run `developer_tools\Extract-Strings.ps1` and commit the regenerated `Strings.resx`.
 
 ## 7) COMMAND LINE (App.OnStartup)
-- Dev/test: `--dev`, `--user-data <dir>`, `--log-dir <dir>`.
+- Dev/test: `--dev`, `--user-data <dir>`, `--log-dir <dir>`, `--force-high-contrast` (shows the contrast-theme palette without changing Windows settings).
 - Install: `--installing`, `--update`, `--preserve`, `--clean`, `--allow-downgrade`, `--upgrade-backup <file>`.
 - Elevated: `--stage2`, `--bootstrapper <path>`, `--extract-dir <dir>`, `--keep-pid <pid>`.
 - Uninstall: `--uninstall`, `--machine-only`.

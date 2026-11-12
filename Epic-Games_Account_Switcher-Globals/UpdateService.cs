@@ -86,25 +86,25 @@ namespace Epic_Games_Account_Switcher_Globals
         public static async Task<UpdateCheckResult> CheckAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
             if (!NetworkInterface.GetIsNetworkAvailable())
-                return new UpdateCheckResult { Status = UpdateCheckStatus.Offline, Message = "You appear to be offline." };
+                return new UpdateCheckResult { Status = UpdateCheckStatus.Offline, Message = L.T("You appear to be offline.") };
             try
             {
                 using (var client = CreateClient(CheckTimeout))
                 using (var response = await client.GetAsync(LatestReleaseApi, cancellationToken).ConfigureAwait(false))
                 {
                     if (response.StatusCode == HttpStatusCode.NotFound)
-                        return new UpdateCheckResult { Status = UpdateCheckStatus.UpToDate, Message = "No published releases yet." };
+                        return new UpdateCheckResult { Status = UpdateCheckStatus.UpToDate, Message = L.T("No published releases yet.") };
                     if (!response.IsSuccessStatusCode)
-                        return new UpdateCheckResult { Status = UpdateCheckStatus.Failed, Message = "Update server answered " + (int)response.StatusCode + ". Try again later." };
+                        return new UpdateCheckResult { Status = UpdateCheckStatus.Failed, Message = L.T("The update server is not available right now (code {0}). Try again later.", (int)response.StatusCode) };
 
                     var json = JObject.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
                     var tag = (string)json["tag_name"];
                     var version = AppVersion.Normalize(tag);
                     if (!AppVersion.IsValid(version))
-                        return new UpdateCheckResult { Status = UpdateCheckStatus.Failed, Message = "Latest release has an unrecognized version: " + tag };
+                        return new UpdateCheckResult { Status = UpdateCheckStatus.Failed, Message = L.T("The latest release has a version number this app does not understand ({0}).", tag) };
 
                     if (!AppVersion.IsNewer(version, Globals.Version))
-                        return new UpdateCheckResult { Status = UpdateCheckStatus.UpToDate, Message = "You have the latest version (" + Globals.Version + ")." };
+                        return new UpdateCheckResult { Status = UpdateCheckStatus.UpToDate, Message = L.T("You have the latest version ({0}).", Globals.Version) };
 
                     var assets = (json["assets"] as JArray) ?? new JArray();
                     JToken installer = assets.FirstOrDefault(a => string.Equals((string)a["name"], InstallerAssetName, StringComparison.OrdinalIgnoreCase));
@@ -121,22 +121,22 @@ namespace Epic_Games_Account_Switcher_Globals
                         ChecksumUrl = checksum == null ? null : (string)checksum["browser_download_url"],
                         PublishedUtc = (DateTime?)json["published_at"] ?? DateTime.UtcNow
                     };
-                    return new UpdateCheckResult { Status = UpdateCheckStatus.UpdateAvailable, Info = info, Message = "Version " + version + " is available." };
+                    return new UpdateCheckResult { Status = UpdateCheckStatus.UpdateAvailable, Info = info, Message = L.T("Version {0} is available.", version) };
                 }
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                return new UpdateCheckResult { Status = UpdateCheckStatus.Offline, Message = "The update server did not respond in time." };
+                return new UpdateCheckResult { Status = UpdateCheckStatus.Offline, Message = L.T("The update server did not respond in time.") };
             }
             catch (HttpRequestException ex)
             {
                 Globals.WriteToLog("[UPDATE] Check failed (network)", ex);
-                return new UpdateCheckResult { Status = UpdateCheckStatus.Offline, Message = "Could not reach the update server." };
+                return new UpdateCheckResult { Status = UpdateCheckStatus.Offline, Message = L.T("Could not reach the update server.") };
             }
             catch (Exception ex) when (!(ex is OperationCanceledException))
             {
                 Globals.WriteToLog("[UPDATE] Check failed", ex);
-                return new UpdateCheckResult { Status = UpdateCheckStatus.Failed, Message = "The update check failed. Please try again later." };
+                return new UpdateCheckResult { Status = UpdateCheckStatus.Failed, Message = L.T("The update check failed. Please try again later.") };
             }
         }
 
@@ -144,8 +144,8 @@ namespace Epic_Games_Account_Switcher_Globals
         public static async Task<string> DownloadAndVerifyAsync(UpdateInfo info, IProgress<double> progress, CancellationToken cancellationToken)
         {
             if (info == null) throw new ArgumentNullException(nameof(info));
-            if (string.IsNullOrWhiteSpace(info.InstallerUrl)) throw new InvalidOperationException("This release has no installer attached. Please download it from the release page.");
-            if (string.IsNullOrWhiteSpace(info.ChecksumUrl)) throw new InvalidOperationException("This release has no checksum file, so it cannot be verified. Please download it from the release page.");
+            if (string.IsNullOrWhiteSpace(info.InstallerUrl)) throw new InvalidOperationException(L.T("This release has no installer attached. Please download it from the release page."));
+            if (string.IsNullOrWhiteSpace(info.ChecksumUrl)) throw new InvalidOperationException(L.T("This release has no checksum file, so it cannot be verified. Please download it from the release page."));
 
             var folder = Path.Combine(UpdatesFolder, info.Version);
             Directory.CreateDirectory(folder);
@@ -193,7 +193,7 @@ namespace Epic_Games_Account_Switcher_Globals
                         {
                             target.Dispose();
                             TryDelete(partialPath);
-                            throw new CryptographicException("The downloaded update is corrupted or was tampered with (checksum mismatch). Nothing was installed.");
+                            throw new CryptographicException(L.T("The downloaded update is corrupted or was tampered with (checksum mismatch). Nothing was installed."));
                         }
                     }
                 }
@@ -203,7 +203,7 @@ namespace Epic_Games_Account_Switcher_Globals
             if (!VerifySignature(partialPath, out signatureProblem))
             {
                 TryDelete(partialPath);
-                throw new CryptographicException("The downloaded update failed its digital signature check (" + signatureProblem + "). Nothing was installed.");
+                throw new CryptographicException(L.T("The downloaded update failed its digital signature check ({0}). Nothing was installed.", signatureProblem));
             }
 
             TryDelete(finalPath);
@@ -246,7 +246,7 @@ namespace Epic_Games_Account_Switcher_Globals
             var text = await client.GetStringAsync(url).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             var match = Regex.Match(text ?? "", "\\b[0-9a-fA-F]{64}\\b");
-            if (!match.Success) throw new InvalidDataException("The release checksum file is not valid.");
+            if (!match.Success) throw new InvalidDataException(L.T("The release checksum file is not valid."));
             return match.Value.ToUpperInvariant();
         }
 
@@ -258,7 +258,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 var drive = new DriveInfo(root);
                 var needed = payloadBytes * 2 + MinimumFreeSpaceBytes;
                 if (drive.IsReady && drive.AvailableFreeSpace < needed)
-                    throw new IOException("Not enough free disk space on " + root + " to download the update. Free up at least " + (needed / (1024 * 1024)) + " MB and try again.");
+                    throw new IOException(L.T("Not enough free disk space on {0} to download the update. Free up at least {1} MB and try again.", root, needed / (1024 * 1024)));
             }
             catch (IOException) { throw; }
             catch { }

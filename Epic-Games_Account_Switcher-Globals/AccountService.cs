@@ -503,6 +503,35 @@ namespace Epic_Games_Account_Switcher_Globals
             return true;
         }
 
+        /// <summary>
+        /// Writes the launcher window size/position that was live just before the switch into the restored config, so the
+        /// launcher reopens where the user left it for every account (AppSettings.KeepLauncherWindowPlacement).
+        /// Returns false when there is nothing to keep; the caller then falls back to the account's own saved placement.
+        /// </summary>
+        private static bool ApplyKeptLauncherWindowSettings(Dictionary<string, string> liveBeforeSwitch)
+        {
+            if (liveBeforeSwitch == null || liveBeforeSwitch.Count == 0) return false;
+            try
+            {
+                var fallback = liveBeforeSwitch.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+                if (string.IsNullOrWhiteSpace(fallback)) return false;
+                var applied = 0;
+                foreach (var ini in GetGameUserSettingsFiles())
+                {
+                    string value;
+                    if (!liveBeforeSwitch.TryGetValue(MakeRelativePath(EpicConfigPath, ini), out value) || string.IsNullOrWhiteSpace(value)) value = fallback;
+                    ApplyIniValuesAtomic(ini, "WindowSettings", new Dictionary<string, string> { { "MainLauncherWindow", value } });
+                    applied++;
+                }
+                return applied > 0;
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("[INI] Could not keep the launcher window placement", ex);
+                return false;
+            }
+        }
+
         private static void SetEmailSurgically(string email)
         {
             if (string.IsNullOrWhiteSpace(email)) return;
@@ -1337,11 +1366,11 @@ namespace Epic_Games_Account_Switcher_Globals
                 cancellationToken.ThrowIfCancellationRequested();
                 _lastDetected = new Tuple<string, string, string>(null, "N/A", "N/A");
                 var det = await GetDetectedMetadataAsync();
-                if (string.IsNullOrWhiteSpace(det.Item1)) return new Tuple<bool, string>(false, "No account is signed in to Epic Games Launcher. Sign in there first, then try again.");
+                if (string.IsNullOrWhiteSpace(det.Item1)) return new Tuple<bool, string>(false, L.T("No account is signed in to Epic Games Launcher. Sign in there first, then try again."));
                 if (!string.IsNullOrWhiteSpace(expectedAccountId) && !string.Equals(det.Item1, expectedAccountId, StringComparison.OrdinalIgnoreCase))
                 {
                     Globals.WriteToLog("[CAPTURE] Signed-in account does not match. Expected " + Globals.SafeLogId(expectedAccountId) + " but detected " + Globals.SafeLogId(det.Item1) + ".");
-                    return new Tuple<bool, string>(false, "A different account is signed in to Epic Games Launcher. Sign in to the account you want to save, then try again.");
+                    return new Tuple<bool, string>(false, L.T("A different account is signed in to Epic Games Launcher. Sign in to the account you want to save, then try again."));
                 }
                 // Ask before anything is closed or changed, so Cancel leaves Epic Games Launcher running. (Item2 null = cancelled, no error.)
                 var accounts = GetAccounts();
@@ -1350,13 +1379,13 @@ namespace Epic_Games_Account_Switcher_Globals
                 {
                     if (confirmOverwrite == null || !await confirmOverwrite(existing.Name)) return new Tuple<bool, string>(false, null);
                 }
-                progress?.Invoke("Closing Epic Games...");
-                if (!await EnsureEpicIsClosed(60000, cancellationToken)) return new Tuple<bool, string>(false, "Epic Games Launcher could not be closed. Close it yourself (also from the notification area), then try again.");
+                progress?.Invoke(L.T("Closing Epic Games..."));
+                if (!await EnsureEpicIsClosed(60000, cancellationToken)) return new Tuple<bool, string>(false, L.T("Epic Games Launcher could not be closed. Close it yourself (also from the notification area), then try again."));
                 var liveValidation = ValidateSession(EpicSavedPath, det.Item1);
                 if (!liveValidation.IsValid)
                 {
                     Globals.WriteToLog("[CAPTURE] Live session invalid: " + liveValidation.Message);
-                    return new Tuple<bool, string>(false, "Epic Games Launcher's sign-in looks incomplete or expired. Open Epic Games Launcher, sign in again (tick \"Remember me\"), then try again.");
+                    return new Tuple<bool, string>(false, L.T("Epic Games Launcher's sign-in looks incomplete or expired. Open Epic Games Launcher, sign in again (tick \"Remember me\"), then try again."));
                 }
                 var acc = existing ?? new Account(det.Item1, nameOverride ?? (det.Item2 == "N/A" ? "Epic Account" : det.Item2));
                 if (!string.IsNullOrWhiteSpace(nameOverride)) acc.Name = nameOverride.Trim();
@@ -1369,7 +1398,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 acc.ProfileImagePath = NormalizeProfileImagePath(acc.ProfileImagePath);
                 acc.AccentColor = GetDeterministicColor(acc.Name ?? acc.Id);
                 StampAccountUsage(acc, true);
-                progress?.Invoke("Capturing session...");
+                progress?.Invoke(L.T("Capturing session..."));
                 var target = Path.Combine(BaseDataPath, acc.Id);
                 tmp = target + "_n" + GetShortId();
                 await CaptureSessionToFolder(EpicSavedPath, tmp, cancellationToken);
@@ -1378,7 +1407,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 {
                     Globals.WriteToLog("[CAPTURE] Captured session failed verification: " + capturedValidation.Message);
                     await SafeDeleteDirectoryAsync(tmp, 10, cancellationToken);
-                    return new Tuple<bool, string>(false, "The sign-in could not be copied completely. Open Epic Games Launcher, make sure you are signed in, then try again.");
+                    return new Tuple<bool, string>(false, L.T("The sign-in could not be copied completely. Open Epic Games Launcher, make sure you are signed in, then try again."));
                 }
                 acc.RegistryData = CaptureRegistryData();
                 acc.Credentials = CredentialService.CaptureCredentials(acc.Id);
@@ -1396,7 +1425,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 if (!string.IsNullOrWhiteSpace(tmp) && Directory.Exists(tmp)) await SafeDeleteDirectoryAsync(tmp);
                 throw;
             }
-            catch (Exception ex) { Globals.WriteToLog("[CAPTURE] Fatal error", ex); return new Tuple<bool, string>(false, "Something unexpected stopped the account from being saved. Try again. If it keeps happening, use SHOW LOGS for details."); }
+            catch (Exception ex) { Globals.WriteToLog("[CAPTURE] Fatal error", ex); return new Tuple<bool, string>(false, L.T("Something unexpected stopped the account from being saved. Try again. If it keeps happening, use SHOW LOGS for details.")); }
             finally { SessionOperationLock.Release(); }
         }
 
@@ -1410,7 +1439,7 @@ namespace Epic_Games_Account_Switcher_Globals
             if (acc == null) return;
             var liveValidation = ValidateSession(EpicSavedPath, curId);
             if (!liveValidation.IsValid) return;
-            progress?.Invoke("Saving current session...");
+            progress?.Invoke(L.T("Saving current session..."));
             acc.RegistryData = CaptureRegistryData();
             acc.Credentials = CredentialService.CaptureCredentials(acc.Id);
             acc.RememberMeDataByPath = GetRememberMeDataByPath();
@@ -1453,9 +1482,9 @@ namespace Epic_Games_Account_Switcher_Globals
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                progress?.Invoke("Closing Epic Games...");
+                progress?.Invoke(L.T("Closing Epic Games..."));
                 if (!await EnsureEpicIsClosed(60000, cancellationToken))
-                    return new Tuple<bool, string>(false, "Epic Games Launcher could not be closed. Close it yourself (also from the notification area), then try again.");
+                    return new Tuple<bool, string>(false, L.T("Epic Games Launcher could not be closed. Close it yourself (also from the notification area), then try again."));
 
                 // Purge existing auth state to ensure clean capture
                 try
@@ -1482,10 +1511,10 @@ namespace Epic_Games_Account_Switcher_Globals
                     Globals.WriteToLog("[EXCHANGE] Failed to purge existing auth state", ex);
                 }
 
-                progress?.Invoke("Processing login...");
+                progress?.Invoke(L.T("Processing login..."));
                 var exe = ResolveEpicLauncherExecutable();
                 if (string.IsNullOrEmpty(exe))
-                    return new Tuple<bool, string>(false, "Epic Games Launcher was not found on this PC. Install it, then try again.");
+                    return new Tuple<bool, string>(false, L.T("Epic Games Launcher was not found on this PC. Install it, then try again."));
 
                 var args = $"-exchangecode={exchangeCode} -nosplash -silent -minimized";
                 Process.Start(new ProcessStartInfo { FileName = exe, Arguments = args, UseShellExecute = true });
@@ -1503,7 +1532,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 }
 
                 if (detected == null || string.IsNullOrWhiteSpace(detected.Item1))
-                    return new Tuple<bool, string>(false, "Epic Games Launcher did not finish signing in within 45 seconds. Check your internet connection, then try again.");
+                    return new Tuple<bool, string>(false, L.T("Epic Games Launcher did not finish signing in within 45 seconds. Check your internet connection, then try again."));
 
                 // We can't hold the lock when calling CaptureCurrentAccount because it also waits on it.
                 // We'll release the lock early in the finally block.
@@ -1511,7 +1540,7 @@ namespace Epic_Games_Account_Switcher_Globals
             catch (Exception ex)
             {
                 Globals.WriteToLog("[EXCHANGE] Fatal error during exchange capture", ex);
-                return new Tuple<bool, string>(false, "Something unexpected stopped the account from being saved. Try again. If it keeps happening, use SHOW LOGS for details.");
+                return new Tuple<bool, string>(false, L.T("Something unexpected stopped the account from being saved. Try again. If it keeps happening, use SHOW LOGS for details."));
             }
             finally
             {
@@ -1627,7 +1656,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 {
                     if (!launchRequested)
                     {
-                        progress?.Invoke("Launching Epic Games...");
+                        progress?.Invoke(L.T("Launching Epic Games..."));
                         var launchOk = AutoLaunchEpicLauncher(false);
                         Globals.WriteToLog("[VERIFY] Launcher was not running. LaunchRequestAccepted=" + launchOk);
                         launchRequested = true;
@@ -1657,7 +1686,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 {
                     if (!healthySince.HasValue)
                     {
-                        progress?.Invoke("Verifying Epic sign-in...");
+                        progress?.Invoke(L.T("Verifying Epic sign-in..."));
                         healthySince = DateTime.UtcNow;
                     }
 
@@ -1695,7 +1724,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 var t = accs.FirstOrDefault(a => string.Equals(a.Id, accId, StringComparison.OrdinalIgnoreCase));
                 if (t == null)
                 {
-                    SetLastSwitchFailure("Target account is not saved.");
+                    SetLastSwitchFailure(L.T("Target account is not saved."));
                     LogSwitch(operationId, "FAILED Target account not found.");
                     return false;
                 }
@@ -1704,7 +1733,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 LogSwitch(operationId, "Target resolved. Target=" + Globals.SafeLogId(t.Id) + "; SourceState=" + PathStateSummary(src));
                 if (!Directory.Exists(src))
                 {
-                    SetLastSwitchFailure("Saved account session folder is missing.");
+                    SetLastSwitchFailure(L.T("Saved account session folder is missing."));
                     LogSwitch(operationId, "FAILED Source folder missing. Source=" + src);
                     return false;
                 }
@@ -1712,20 +1741,32 @@ namespace Epic_Games_Account_Switcher_Globals
                 LogSwitch(operationId, "Source validation. " + ValidationSummary(sourceValidation));
                 if (!sourceValidation.IsValid)
                 {
-                    SetLastSwitchFailure("Saved account session is invalid: " + sourceValidation.Message);
+                    SetLastSwitchFailure(L.T("The saved sign-in of this account is no longer valid: {0}", sourceValidation.Message));
                     LogSwitch(operationId, "FAILED Source validation rejected target session.");
                     return false;
                 }
                 var curB = GetCurrentAccountId();
                 LogSwitch(operationId, "Current live account before close=" + Globals.SafeLogId(curB));
-                progress?.Invoke("Closing Epic Games...");
+                // The launcher is force-stopped below and never saves its own window position, so read it from the live window now.
+                var keepWindowPlacement = AppSettings.Instance.KeepLauncherWindowPlacement;
+                var liveWindow = keepWindowPlacement ? LauncherWindowPlacement.Capture() : null;
+                LogSwitch(operationId, "Launcher window before close: " + (liveWindow == null ? "none" : (liveWindow.Right - liveWindow.Left) + "x" + (liveWindow.Bottom - liveWindow.Top) + " at " + liveWindow.Left + "," + liveWindow.Top + (liveWindow.Maximized ? " (maximized)" : "")));
+                progress?.Invoke(L.T("Closing Epic Games..."));
                 if (!await EnsureEpicIsClosed(60000, cancellationToken))
                 {
-                    SetLastSwitchFailure("Epic Games Launcher or one of its helper processes could not be closed.");
+                    SetLastSwitchFailure(L.T("Epic Games Launcher or one of its helper processes could not be closed."));
                     LogSwitch(operationId, "FAILED Epic process cleanup timed out.");
                     return false;
                 }
                 LogSwitch(operationId, "Epic process cleanup completed. ElapsedMs=" + sw.ElapsedMilliseconds);
+                // Placement to carry into the target account: the stored value of the live config (taken before it is swapped
+                // out), corrected with the rectangle the launcher window really had a moment ago.
+                var liveWindowPlacement = keepWindowPlacement ? GetLauncherWindowSettingsByPath() : null;
+                if (liveWindowPlacement != null && liveWindow != null)
+                {
+                    foreach (var path in liveWindowPlacement.Keys.ToList())
+                        liveWindowPlacement[path] = LauncherWindowPlacement.Apply(liveWindowPlacement[path], liveWindow);
+                }
                 await RefreshSnapshotOfCurrentSavedAccount(accs, t.Id, curB, progress, cancellationToken);
                 LogSwitch(operationId, "Current account snapshot refresh completed.");
                 var rbB = Path.Combine(BaseDataPath, "_switch_rb");
@@ -1736,7 +1777,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 LogSwitch(operationId, "Credential rollback captured. Count=" + (credentialRollback == null ? 0 : credentialRollback.Count));
                 try
                 {
-                    progress?.Invoke("Preparing session...");
+                    progress?.Invoke(L.T("Preparing session..."));
                     LogSwitch(operationId, "Preparing target session. RollbackState=" + PathStateSummary(rbB) + "; TempState=" + PathStateSummary(tmpB));
                     if (Directory.Exists(rbB)) await SafeDeleteDirectoryAsync(rbB, 10, cancellationToken);
                     Directory.CreateDirectory(rbB);
@@ -1806,8 +1847,9 @@ namespace Epic_Games_Account_Switcher_Globals
                     LogSwitch(operationId, "Credentials swapped. DeletedCurrent=" + deletedCurrentCredentials + "; TargetCredentialCount=" + (t.Credentials == null ? 0 : t.Credentials.Count) + "; RestoredTarget=" + restoredTargetCredentials);
                     SetEmailSurgically(t.Email);
                     SetRememberMeDataSurgically(t);
-                    SetLauncherWindowSettingsSurgically(t);
-                    LogSwitch(operationId, "Launcher config patched. RememberMePaths=" + (t.RememberMeDataByPath == null ? 0 : t.RememberMeDataByPath.Count) + "; WindowSettingPaths=" + (t.LauncherWindowSettingsByPath == null ? 0 : t.LauncherWindowSettingsByPath.Count));
+                    var keptWindowPlacement = ApplyKeptLauncherWindowSettings(liveWindowPlacement);
+                    if (!keptWindowPlacement) SetLauncherWindowSettingsSurgically(t);
+                    LogSwitch(operationId, "Launcher config patched. KeptWindowPlacement=" + keptWindowPlacement + "; RememberMePaths=" + (t.RememberMeDataByPath == null ? 0 : t.RememberMeDataByPath.Count) + "; WindowSettingPaths=" + (t.LauncherWindowSettingsByPath == null ? 0 : t.LauncherWindowSettingsByPath.Count));
                     var liveValidation = ValidateRestoredState(t);
                     LogSwitch(operationId, "Live validation. " + ValidationSummary(liveValidation));
                     if (!liveValidation.IsValid) throw new InvalidDataException(liveValidation.Message);
@@ -1818,14 +1860,14 @@ namespace Epic_Games_Account_Switcher_Globals
                     await SafeDeleteDirectoryAsync(rbB, 10, cancellationToken);
                     await SafeDeleteDirectoryAsync(tmpB, 10, cancellationToken);
                     LogSwitch(operationId, "Temporary folders cleaned. RollbackExists=" + Directory.Exists(rbB) + "; TempExists=" + Directory.Exists(tmpB));
-                    progress?.Invoke("Launching Epic Games...");
+                    progress?.Invoke(L.T("Launching Epic Games..."));
                     var launchAccepted = AutoLaunchEpicLauncher(false);
                     LogSwitch(operationId, "END SUCCESS. LaunchRequestAccepted=" + launchAccepted + "; ElapsedMs=" + sw.ElapsedMilliseconds);
                     return true;
                 }
                 catch (OperationCanceledException)
                 {
-                    SetLastSwitchFailure("Switch was cancelled.");
+                    SetLastSwitchFailure(L.T("Switch was cancelled."));
                     LogSwitch(operationId, "CANCELLED. Starting rollback. ElapsedMs=" + sw.ElapsedMilliseconds);
                     await RollbackSwitchAsync(rbB);
                     RestoreRegistrySnapshot(registryRollback);
@@ -1836,7 +1878,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 }
                 catch (Exception ex)
                 {
-                    SetLastSwitchFailure("Switch failed during restore: " + ex.Message);
+                    SetLastSwitchFailure(L.T("The switch failed while restoring the account, and the previous sign-in was put back: {0}", ex.Message));
                     LogSwitch(operationId, "FAILED during restore. Starting rollback. RollbackState=" + PathStateSummary(rbB) + "; TempState=" + PathStateSummary(tmpB), ex);
                     await RollbackSwitchAsync(rbB);
                     RestoreRegistrySnapshot(registryRollback);
@@ -1849,7 +1891,7 @@ namespace Epic_Games_Account_Switcher_Globals
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                SetLastSwitchFailure("Switch failed before restore: " + ex.Message);
+                SetLastSwitchFailure(L.T("The switch could not start: {0}", ex.Message));
                 LogSwitch(operationId, "FAILED before restore phase. ElapsedMs=" + sw.ElapsedMilliseconds, ex);
                 return false;
             }

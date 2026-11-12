@@ -80,7 +80,7 @@ namespace Epic_Games_Account_Switcher_Client
             catch (Exception ex)
             {
                 Globals.WriteToLog("Embedded sign-in: WebView2 initialization failed", ex);
-                new CustomMessageBox("Sign-In Window Unavailable", "The sign-in window needs the Microsoft Edge WebView2 Runtime, which could not be started.\n\nInstall or repair \"Microsoft Edge WebView2 Runtime\" from Microsoft, then try again. You can still use ADD SIGNED-IN ACCOUNT with Epic Games Launcher.", MessageBoxVisualStyle.Error).ShowDialog();
+                new CustomMessageBox(L.T("Sign-In Window Unavailable"), L.T("The sign-in window needs the Microsoft Edge WebView2 Runtime, which could not be started.\n\nInstall or repair \"Microsoft Edge WebView2 Runtime\" from Microsoft, then try again. You can still use ADD SIGNED-IN ACCOUNT with Epic Games Launcher."), MessageBoxVisualStyle.Error).ShowDialog();
                 Close();
             }
         }
@@ -112,14 +112,14 @@ namespace Epic_Games_Account_Switcher_Client
             if (!_pageShown)
             {
                 Globals.WriteToLog("Embedded sign-in: page failed to load (" + e.WebErrorStatus + ")");
-                ShowOverlay("The Epic Games sign-in page couldn't be loaded. Check your internet connection, then try again.", true);
+                ShowOverlay(L.T("The Epic Games sign-in page couldn't be loaded. Check your internet connection, then try again."), true);
             }
         }
 
         private void Retry_Click(object sender, RoutedEventArgs e)
         {
             if (LoginWebView.CoreWebView2 == null) return;
-            ShowOverlay("Opening the Epic Games sign-in page…", false);
+            ShowOverlay(L.T("Opening the Epic Games sign-in page…"), false);
             LoginWebView.CoreWebView2.Navigate(LoginUrl);
         }
 
@@ -134,7 +134,7 @@ namespace Epic_Games_Account_Switcher_Client
         {
             _isCapturing = false;
             _pageShown = false;
-            ShowOverlay("Opening the Epic Games sign-in page…", false);
+            ShowOverlay(L.T("Opening the Epic Games sign-in page…"), false);
             LoginWebView.CoreWebView2.Navigate(LoginUrl);
         }
 
@@ -145,7 +145,7 @@ namespace Epic_Games_Account_Switcher_Client
             if (uri.Contains("/id/api/exchange") && e.Response.StatusCode == 200)
             {
                 _isCapturing = true;
-                Dispatcher.Invoke(() => ShowOverlay("Signed in. Saving your account… Please wait.", false));
+                Dispatcher.Invoke(() => ShowOverlay(L.T("Signed in. Saving your account… Please wait."), false));
 
                 try
                 {
@@ -171,7 +171,7 @@ namespace Epic_Games_Account_Switcher_Client
                     Globals.WriteToLog("Embedded sign-in: could not read the sign-in result", ex);
                     Dispatcher.Invoke(() =>
                     {
-                        new CustomMessageBox("Account Not Saved", "You signed in, but the app couldn't read the result from Epic Games. Please sign in again.", MessageBoxVisualStyle.Error).ShowDialog();
+                        new CustomMessageBox(L.T("Account Not Saved"), L.T("You signed in, but the app couldn't read the result from Epic Games. Please sign in again."), MessageBoxVisualStyle.Error).ShowDialog();
                         RestartSignIn();
                     });
                 }
@@ -196,7 +196,7 @@ namespace Epic_Games_Account_Switcher_Client
                     }
                     else
                     {
-                        new CustomMessageBox("Account Not Saved", result.Item2, MessageBoxVisualStyle.Error).ShowDialog();
+                        new CustomMessageBox(L.T("Account Not Saved"), result.Item2, MessageBoxVisualStyle.Error).ShowDialog();
                         RestartSignIn();
                     }
                 });
@@ -207,7 +207,7 @@ namespace Epic_Games_Account_Switcher_Client
                 Globals.WriteToLog("Embedded sign-in: unexpected capture failure", ex);
                 Dispatcher.Invoke(() =>
                 {
-                    new CustomMessageBox("Account Not Saved", "Something unexpected stopped the account from being saved. Please try again.\n\nIf it keeps happening, use SHOW LOGS for details.", MessageBoxVisualStyle.Error).ShowDialog();
+                    new CustomMessageBox(L.T("Account Not Saved"), L.T("Something unexpected stopped the account from being saved. Please try again.\n\nIf it keeps happening, use SHOW LOGS for details."), MessageBoxVisualStyle.Error).ShowDialog();
                     Close();
                 });
             }

@@ -17,9 +17,28 @@ namespace Epic_Games_Account_Switcher_Globals
         private string _name;
         public string Name 
         { 
-            get => _name; 
-            set { _name = value; OnPropertyChanged(); } 
+            get => _name;
+            set
+            {
+                _name = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(AccessibleName));
+                OnPropertyChanged(nameof(SwitchActionName));
+                OnPropertyChanged(nameof(MenuActionName));
+            }
         }
+
+        /// <summary>What screen readers announce for this account's list item.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public string AccessibleName => IsActive ? L.T("{0}, active now", Name) : (Name ?? "");
+
+        [Newtonsoft.Json.JsonIgnore]
+        public string SwitchActionName => IsActive ? L.T("{0}, active account", Name) : L.T("Switch to {0}", Name);
+
+        [Newtonsoft.Json.JsonIgnore]
+        public string MenuActionName => L.T("More options for {0}", Name);
+
+        public override string ToString() => Name ?? "";
 
         private string _email;
         public string Email
@@ -53,7 +72,14 @@ namespace Epic_Games_Account_Switcher_Globals
         public bool IsActive 
         { 
             get => _isActive; 
-            set { _isActive = value; OnPropertyChanged(); OnPropertyChanged(nameof(RecencyLabel)); } 
+            set
+            {
+                _isActive = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(RecencyLabel));
+                OnPropertyChanged(nameof(AccessibleName));
+                OnPropertyChanged(nameof(SwitchActionName));
+            }
         }
 
         public string RememberMeData { get; set; }
@@ -75,6 +101,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasUsageHistory));
                 OnPropertyChanged(nameof(LastPlayedDisplay));
+                OnPropertyChanged(nameof(LastUsedLine));
                 OnPropertyChanged(nameof(RecencyLabel));
                 OnPropertyChanged(nameof(IsRecentlyUsed));
             }
@@ -104,23 +131,28 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             get
             {
-                if (!HasUsageHistory) return "Never used";
+                if (!HasUsageHistory) return L.T("Never used");
                 var now = DateTime.Now;
                 var span = now - LastPlayed;
-                if (span.TotalMinutes < 1) return "Just now";
-                if (span.TotalHours < 1) return ((int)span.TotalMinutes).ToString() + " min ago";
+                if (span.TotalMinutes < 1) return L.T("Just now");
+                if (span.TotalHours < 1) return L.T("{0} min ago", (int)span.TotalMinutes);
                 // "t" / "d" follow the user's Windows regional format.
-                if (LastPlayed.Date == now.Date) return "Today at " + LastPlayed.ToString("t");
-                if (LastPlayed.Date == now.Date.AddDays(-1)) return "Yesterday at " + LastPlayed.ToString("t");
-                if (span.TotalDays < 7) return ((int)span.TotalDays).ToString() + " days ago";
+                if (LastPlayed.Date == now.Date) return L.T("Today at {0}", LastPlayed.ToString("t"));
+                if (LastPlayed.Date == now.Date.AddDays(-1)) return L.T("Yesterday at {0}", LastPlayed.ToString("t"));
+                if (span.TotalDays < 7) return L.T("{0} days ago", (int)span.TotalDays);
                 return LastPlayed.ToString("d");
             }
         }
+
+        /// <summary>The "last used" line of a card. Always has text, so every card has the same height.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public string LastUsedLine => HasUsageHistory ? L.T("Last used: {0}", LastPlayedDisplay) : L.T("Not used yet");
 
         /// <summary>Re-evaluates the time-relative labels ("5 min ago", RECENT) so they don't go stale while the app stays open.</summary>
         public void RefreshTimeLabels()
         {
             OnPropertyChanged(nameof(LastPlayedDisplay));
+            OnPropertyChanged(nameof(LastUsedLine));
             OnPropertyChanged(nameof(RecencyLabel));
             OnPropertyChanged(nameof(IsRecentlyUsed));
         }
@@ -130,9 +162,9 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             get
             {
-                if (IsActive) return "ACTIVE NOW";
-                if (!HasUsageHistory) return "NEW";
-                if (IsRecentlyUsed) return "RECENT";
+                if (IsActive) return L.T("ACTIVE NOW");
+                if (!HasUsageHistory) return L.T("NEW");
+                if (IsRecentlyUsed) return L.T("RECENT");
                 return "";
             }
         }
@@ -142,11 +174,15 @@ namespace Epic_Games_Account_Switcher_Globals
         {
             get
             {
-                if (UsageCount <= 0) return "Not switched to yet";
-                if (UsageCount == 1) return "Switched to once";
-                return "Switched to " + UsageCount.ToString() + " times";
+                if (UsageCount <= 0) return L.T("Not switched to yet");
+                if (UsageCount == 1) return L.T("Switched to once");
+                return L.T("Switched to {0} times", UsageCount);
             }
         }
+
+        /// <summary>True when a password is stored for this account (it can then be copied from the card menu).</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public bool HasSavedPassword => !string.IsNullOrEmpty(EncryptedPassword);
 
         [Newtonsoft.Json.JsonIgnore]
         public double UsageHeatWidth => UsageCount <= 0 ? 16 : Math.Min(112, 20 + (UsageCount * 12));
@@ -199,6 +235,7 @@ namespace Epic_Games_Account_Switcher_Globals
                     }
                 }
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(HasSavedPassword));
             }
         }
 

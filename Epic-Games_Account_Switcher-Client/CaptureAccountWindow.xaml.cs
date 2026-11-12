@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Epic_Games_Account_Switcher_Globals;
 
@@ -11,7 +13,7 @@ namespace Epic_Games_Account_Switcher_Client
 {
     public partial class CaptureAccountWindow : Window, System.ComponentModel.INotifyPropertyChanged, System.ComponentModel.IDataErrorInfo
     {
-        private bool _isClosing;
+        private bool _saved;
         private string _accountName;
         public string AccountName
         {
@@ -41,10 +43,13 @@ namespace Epic_Games_Account_Switcher_Client
         private readonly HashSet<string> _touchedFields = new HashSet<string>();
         // Read once per dialog: duplicate checks must not hit the disk on every keystroke.
         private readonly List<Account> _otherAccounts;
-        public string EmailLabel => _enforceStrictRequiredFields ? "Epic account email *" : "Epic account email";
+        // What the dialog opened with, to tell whether closing would lose anything.
+        private readonly string _initialName, _initialEmail, _initialDescription, _initialPassword, _initialImage;
+        private DispatcherTimer _copiedTimer;
+        public string EmailLabel => _enforceStrictRequiredFields ? L.T("Epic account email *") : L.T("Epic account email");
         public bool IsEmailRequired => _enforceStrictRequiredFields;
-        public string DialogTitle => _enforceStrictRequiredFields ? "ADD ACCOUNT" : "EDIT ACCOUNT";
-        public string SaveButtonText => _enforceStrictRequiredFields ? "SAVE ACCOUNT" : "SAVE CHANGES";
+        public string DialogTitle => _enforceStrictRequiredFields ? L.T("ADD ACCOUNT") : L.T("EDIT ACCOUNT");
+        public string SaveButtonText => _enforceStrictRequiredFields ? L.T("SAVE ACCOUNT") : L.T("SAVE CHANGES");
 
         public CaptureAccountWindow(string name, string desc, string email, string image, string pass, string targetId = null, bool enforceStrictRequiredFields = false, bool blankIdentityInputs = false)
         {
@@ -55,14 +60,20 @@ namespace Epic_Games_Account_Switcher_Client
             try { _otherAccounts = AccountService.GetAccounts().Where(a => a.Id != _targetAccountId).ToList(); }
             catch (Exception ex) { Globals.WriteToLog("Could not read saved accounts for name checks", ex); _otherAccounts = new List<Account>(); }
             AccountName = blankIdentityInputs ? "" : NormalizeDetectedField(name);
-            AccountDescription = desc;
+            AccountDescription = desc ?? "";
             AccountEmail = blankIdentityInputs ? "" : NormalizeDetectedField(email);
             ProfileImagePath = image;
             AccountPassword = pass;
 
-            AccountPasswordInput.Password = pass;
+            AccountPasswordInput.Password = pass ?? "";
             SetProfilePreview(ProfileImagePath);
+            _initialName = AccountName ?? "";
+            _initialEmail = AccountEmail ?? "";
+            _initialDescription = AccountDescription ?? "";
+            _initialPassword = pass ?? "";
+            _initialImage = ProfileImagePath ?? "";
             DataContext = this;
+            UpdatePasswordButtons();
             Loaded += (s, e) => FocusFirstField();
         }
 
@@ -102,6 +113,58 @@ namespace Epic_Games_Account_Switcher_Client
         }
 
         private void Dialog_DragMove(object sender, System.Windows.Input.MouseButtonEventArgs e) => DialogWindowHelper.DragMove(this, e);
+
+        #region Saved password (show / hide / copy)
+
+        private bool IsPasswordRevealed => AccountPasswordReveal.Visibility == Visibility.Visible;
+        private string CurrentPassword => IsPasswordRevealed ? AccountPasswordReveal.Text : AccountPasswordInput.Password;
+
+        private void Password_Changed(object sender, RoutedEventArgs e) => UpdatePasswordButtons();
+
+        private void UpdatePasswordButtons()
+        {
+            if (CopyPasswordButton == null) return;
+            CopyPasswordButton.IsEnabled = !string.IsNullOrEmpty(CurrentPassword);
+        }
+
+        private void TogglePassword_Click(object sender, RoutedEventArgs e)
+        {
+            var reveal = !IsPasswordRevealed;
+            if (reveal)
+            {
+                AccountPasswordReveal.Text = AccountPasswordInput.Password;
+                AccountPasswordReveal.Visibility = Visibility.Visible;
+                AccountPasswordInput.Visibility = Visibility.Collapsed;
+                AccountPasswordReveal.Focus();
+                AccountPasswordReveal.CaretIndex = AccountPasswordReveal.Text.Length;
+            }
+            else
+            {
+                AccountPasswordInput.Password = AccountPasswordReveal.Text;
+                AccountPasswordInput.Visibility = Visibility.Visible;
+                AccountPasswordReveal.Visibility = Visibility.Collapsed;
+                AccountPasswordReveal.Text = "";
+                AccountPasswordInput.Focus();
+            }
+            TogglePasswordButton.Content = reveal ? L.T("HIDE") : L.T("SHOW");
+            AutomationProperties.SetName(TogglePasswordButton, reveal ? L.T("Hide password") : L.T("Show password"));
+            UpdatePasswordButtons();
+        }
+
+        private void CopyPassword_Click(object sender, RoutedEventArgs e)
+        {
+            if (!ClipboardHelper.CopySensitive(CurrentPassword)) return;
+            CopyPasswordButton.Content = L.T("COPIED");
+            if (_copiedTimer == null)
+            {
+                _copiedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                _copiedTimer.Tick += (s, args) => { _copiedTimer.Stop(); CopyPasswordButton.Content = L.T("COPY"); };
+            }
+            _copiedTimer.Stop();
+            _copiedTimer.Start();
+        }
+
+        #endregion
 
         private void SelectImage_Click(object sender, RoutedEventArgs e)
         {
@@ -144,19 +207,19 @@ namespace Epic_Games_Account_Switcher_Client
         {
             if (columnName == nameof(AccountName))
             {
-                if (string.IsNullOrWhiteSpace(AccountName)) return "Enter a display name.";
+                if (string.IsNullOrWhiteSpace(AccountName)) return L.T("Enter a display name.");
                 var name = AccountName.Trim();
                 if (_otherAccounts.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)))
-                    return "Another saved account already uses this name.";
+                    return L.T("Another saved account already uses this name.");
             }
             else if (columnName == nameof(AccountEmail))
             {
-                if (_enforceStrictRequiredFields && string.IsNullOrWhiteSpace(AccountEmail)) return "Enter the account's email address.";
+                if (_enforceStrictRequiredFields && string.IsNullOrWhiteSpace(AccountEmail)) return L.T("Enter the account's email address.");
                 if (!string.IsNullOrWhiteSpace(AccountEmail))
                 {
                     var email = AccountEmail.Trim();
                     if (_otherAccounts.Any(a => string.Equals(a.Email, email, StringComparison.OrdinalIgnoreCase)))
-                        return "Another saved account already uses this email.";
+                        return L.T("Another saved account already uses this email.");
                 }
             }
             return null;
@@ -167,7 +230,7 @@ namespace Epic_Games_Account_Switcher_Client
 
         private void Capture_Click(object sender, RoutedEventArgs e)
         {
-            if (_isClosing) return;
+            if (_saved) return;
             AccountNameInput.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
             AccountEmailInput.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
             AccountDescriptionInput.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
@@ -190,17 +253,30 @@ namespace Epic_Games_Account_Switcher_Client
                 return;
             }
 
-            AccountPassword = AccountPasswordInput.Password;
-            _isClosing = true;
+            AccountPassword = CurrentPassword;
+            _saved = true;
             DialogResult = true;
-            Close();
         }
-        private void Cancel_Click(object sender, RoutedEventArgs e) 
-        { 
-            if (_isClosing) return;
-            _isClosing = true;
-            DialogResult = false; 
-            Close(); 
+
+        private bool HasUnsavedChanges()
+        {
+            return !string.Equals((AccountNameInput.Text ?? "").Trim(), _initialName, StringComparison.Ordinal)
+                || !string.Equals((AccountEmailInput.Text ?? "").Trim(), _initialEmail, StringComparison.Ordinal)
+                || !string.Equals(AccountDescriptionInput.Text ?? "", _initialDescription, StringComparison.Ordinal)
+                || !string.Equals(CurrentPassword ?? "", _initialPassword, StringComparison.Ordinal)
+                || !string.Equals(ProfileImagePath ?? "", _initialImage, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Esc, CANCEL and Alt+F4 all end here: typed changes are never thrown away without asking.</summary>
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            base.OnClosing(e);
+            if (e.Cancel || _saved || !HasUnsavedChanges()) return;
+            var box = new CustomMessageBox(L.T("Discard Changes?"),
+                L.T("You changed this account's details but haven't saved them.\n\nDiscard the changes, or keep editing?"),
+                L.T("Discard Changes"), L.T("Keep Editing"), null, MessageBoxVisualStyle.Danger);
+            box.ShowDialog();
+            if (box.Result != CustomDialogResult.Primary) e.Cancel = true;
         }
     }
 }

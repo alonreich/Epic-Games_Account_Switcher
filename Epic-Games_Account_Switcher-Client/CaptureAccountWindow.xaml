@@ -1,12 +1,14 @@
 <Window x:Class="Epic_Games_Account_Switcher_Client.CaptureAccountWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="{Binding DialogTitle}" MinWidth="550"
+        xmlns:local="clr-namespace:Epic_Games_Account_Switcher_Client"
+        Title="{Binding DialogTitle}"
         SizeToContent="WidthAndHeight"
         Background="{DynamicResource MainBackground}" WindowStyle="None" AllowsTransparency="True"
         ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
     <Border BorderBrush="{DynamicResource IconFill}" BorderThickness="1" CornerRadius="12" Background="{DynamicResource MainBackground}" MouseLeftButtonDown="Dialog_DragMove">
-        <Grid Margin="30">
+        <!-- Fixed form width: the dialog must not grow or shrink with the length of the text typed into it. -->
+        <Grid Margin="30" Width="500">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -19,13 +21,13 @@
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel>
             <Grid HorizontalAlignment="Center" Margin="0,0,0,30">
-                <Ellipse Width="150" Height="150" Stroke="{DynamicResource IconFill}" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality" Cursor="Hand" MouseLeftButtonDown="SelectImage_Click" ToolTip="Choose an avatar">
+                <Ellipse Width="150" Height="150" Stroke="{DynamicResource IconFill}" StrokeThickness="2" RenderOptions.BitmapScalingMode="HighQuality" Cursor="Hand" MouseLeftButtonDown="SelectImage_Click" ToolTip="{local:T 'Choose an avatar'}">
                     <Ellipse.Fill>
                         <ImageBrush x:Name="ProfileImageBrush" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Ellipse.Fill>
                 </Ellipse>
 
-                <Button Click="SelectImage_Click" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="35" Height="35" Background="{DynamicResource IconFill}" BorderThickness="0" Cursor="Hand" ToolTip="Choose an avatar" AutomationProperties.Name="Choose an avatar">
+                <Button Click="SelectImage_Click" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="35" Height="35" Background="{DynamicResource IconFill}" BorderThickness="0" Cursor="Hand" ToolTip="{local:T 'Choose an avatar'}" AutomationProperties.Name="{local:T 'Choose an avatar'}">
                     <Button.Resources>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="18"/>
@@ -35,58 +37,72 @@
                 </Button>
             </Grid>
 
+            <!-- No tooltips on the validated fields: a tooltip opens right where the inline error is shown and would hide it. -->
             <StackPanel VerticalAlignment="Top">
-                <TextBlock x:Name="NameLabel" Text="Display name *" Foreground="{DynamicResource SubTextForeground}" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
+                <TextBlock x:Name="NameLabel" Text="{local:T 'Display name *'}" Foreground="{DynamicResource SubTextForeground}" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
                 <TextBox x:Name="AccountNameInput"
                          Style="{StaticResource WatermarkTextBoxStyle}"
-                         Tag="e.g., Main Account / Alt 1"
+                         Tag="{local:T 'e.g., Main Account / Alt 1'}"
                          Text="{Binding AccountName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"
                          Validation.ErrorTemplate="{StaticResource InlineErrorTemplate}"
-                         Margin="0,0,0,24"
+                         Margin="0,0,0,26"
                          MaxLength="64"
                          MouseDoubleClick="TextBox_MouseDoubleClick"
                          LostKeyboardFocus="Field_LostKeyboardFocus"
                          AutomationProperties.LabeledBy="{Binding ElementName=NameLabel}"
                          AutomationProperties.IsRequiredForForm="True"
-                         AutomationProperties.HelpText="{Binding (Validation.Errors)/ErrorContent, RelativeSource={RelativeSource Self}}"
-                         ToolTip="Required. The name shown on this account's card."/>
+                         AutomationProperties.HelpText="{Binding (Validation.Errors)/ErrorContent, RelativeSource={RelativeSource Self}}"/>
 
                 <TextBlock x:Name="EmailLabelText" Text="{Binding EmailLabel}" Foreground="{DynamicResource SubTextForeground}" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
                 <TextBox x:Name="AccountEmailInput"
                          Style="{StaticResource WatermarkTextBoxStyle}"
-                         Tag="e.g., user@domain.com"
+                         Tag="{local:T 'e.g., user@domain.com'}"
                          Text="{Binding AccountEmail, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"
                          Validation.ErrorTemplate="{StaticResource InlineErrorTemplate}"
-                         Margin="0,0,0,24"
+                         Margin="0,0,0,26"
                          MaxLength="254"
                          MouseDoubleClick="TextBox_MouseDoubleClick"
                          LostKeyboardFocus="Field_LostKeyboardFocus"
                          AutomationProperties.LabeledBy="{Binding ElementName=EmailLabelText}"
                          AutomationProperties.IsRequiredForForm="{Binding IsEmailRequired}"
-                         AutomationProperties.HelpText="{Binding (Validation.Errors)/ErrorContent, RelativeSource={RelativeSource Self}}"
-                         ToolTip="The email address of this Epic Games account."/>
+                         AutomationProperties.HelpText="{Binding (Validation.Errors)/ErrorContent, RelativeSource={RelativeSource Self}}"/>
 
-                <TextBlock x:Name="PasswordLabel" Text="Saved password (optional, encrypted for your Windows user)" Foreground="{DynamicResource SubTextForeground}" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
-                <PasswordBox x:Name="AccountPasswordInput" Margin="0,0,0,18"
-                             ToolTip="Optional. Stored encrypted so only your Windows account can read it. It is included, still encrypted, in backups."
+                <TextBlock x:Name="PasswordLabel" Text="{local:T 'Saved password (optional)'}" Foreground="{DynamicResource SubTextForeground}" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <PasswordBox x:Name="AccountPasswordInput" PasswordChanged="Password_Changed"
+                                 AutomationProperties.LabeledBy="{Binding ElementName=PasswordLabel}" MouseDoubleClick="TextBox_MouseDoubleClick"/>
+                    <TextBox x:Name="AccountPasswordReveal" Style="{StaticResource WatermarkTextBoxStyle}" Visibility="Collapsed" TextChanged="Password_Changed"
                              AutomationProperties.LabeledBy="{Binding ElementName=PasswordLabel}" MouseDoubleClick="TextBox_MouseDoubleClick"/>
+                    <Button x:Name="TogglePasswordButton" Grid.Column="1" Content="{local:T 'SHOW'}" Click="TogglePassword_Click" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Stretch" MinWidth="64" Padding="12,0" Margin="8,0,0,0" FontSize="11"
+                            ToolTip="{local:T 'Show or hide the saved password.'}" AutomationProperties.Name="{local:T 'Show password'}"/>
+                    <Button x:Name="CopyPasswordButton" Grid.Column="2" Content="{local:T 'COPY'}" Click="CopyPassword_Click" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Stretch" MinWidth="64" Padding="12,0" Margin="8,0,0,0" FontSize="11" IsEnabled="False"
+                            ToolTip="{local:T 'Copy the password. It is removed from the clipboard again after 30 seconds.'}" AutomationProperties.Name="{local:T 'Copy password'}"/>
+                </Grid>
+                <TextBlock Text="{local:T 'Kept encrypted for your Windows account on this PC, so you can copy it when Epic Games asks you to sign in again. It can\'t be read on another PC.'}"
+                           Foreground="{DynamicResource SubTextForeground}" FontSize="11" TextWrapping="Wrap" Margin="2,5,0,18"/>
 
-                <TextBlock x:Name="NotesLabel" Text="Notes (optional)" Foreground="{DynamicResource SubTextForeground}" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
+                <TextBlock x:Name="NotesLabel" Text="{local:T 'Notes (optional)'}" Foreground="{DynamicResource SubTextForeground}" Margin="0,0,0,5" FontSize="12" FontWeight="SemiBold"/>
                 <TextBox x:Name="AccountDescriptionInput"
                          Style="{StaticResource WatermarkTextBoxStyle}"
-                         Tag="Add optional notes about ranks, games, or login details..."
+                         Tag="{local:T 'Ranks, games, anything worth remembering…'}"
                          Text="{Binding AccountDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          Height="100" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                         MaxLength="500"
                          MouseDoubleClick="TextBox_MouseDoubleClick"
-                         AutomationProperties.LabeledBy="{Binding ElementName=NotesLabel}"
-                         ToolTip="Optional notes shown under the account's card."/>
+                         AutomationProperties.LabeledBy="{Binding ElementName=NotesLabel}"/>
             </StackPanel>
             </StackPanel>
             </ScrollViewer>
 
+            <!-- CANCEL closes through IsCancel (also Esc); unsaved changes are confirmed in OnClosing. -->
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,25,0,0">
-                <Button Content="CANCEL" Click="Cancel_Click" Width="120" Height="40" Margin="0,0,20,0" Style="{StaticResource CancelButton}" Padding="10,8" IsCancel="True" ToolTip="Close without saving (Esc)"/>
-                <Button Content="{Binding SaveButtonText}" Click="Capture_Click" MinWidth="180" Height="40" Style="{StaticResource OkButton}" Padding="20,8" IsDefault="True" ToolTip="Check the details and save (Enter)"/>
+                <Button Content="{local:T 'CANCEL'}" Width="120" Height="40" Margin="0,0,20,0" Style="{StaticResource CancelButton}" Padding="10,8" IsCancel="True" ToolTip="{local:T 'Close without saving (Esc)'}"/>
+                <Button Content="{Binding SaveButtonText}" Click="Capture_Click" MinWidth="180" Height="40" Style="{StaticResource OkButton}" Padding="20,8" IsDefault="True" ToolTip="{local:T 'Check the details and save (Enter)'}"/>
             </StackPanel>
         </Grid>
     </Border>

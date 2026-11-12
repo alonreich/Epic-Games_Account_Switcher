@@ -51,6 +51,12 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public bool ExperimentalLauncherFrame { get; set; } = false;
 
+        /// <summary>
+        /// On: after a switch Epic Games Launcher reopens with the window size and position it had just before the switch,
+        /// for every account. Off: each account brings back its own saved launcher window size and position.
+        /// </summary>
+        public bool KeepLauncherWindowPlacement { get; set; } = true;
+
         public List<string> DismissedUnsavedLoginIds { get; set; } = new List<string>();
 
         public int WindowWidth { get; set; } = 1250;
@@ -60,6 +66,7 @@ namespace Epic_Games_Account_Switcher_Globals
         public int WindowRelativeLeft { get; set; } = -1;
         public int WindowRelativeTop { get; set; } = -1;
         public string WindowMonitorDeviceName { get; set; } = "";
+        public bool WindowMaximized { get; set; } = false;
         public double ZoomFactor { get; set; } = 1.0;
 
         public static void LoadSettings()

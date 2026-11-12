@@ -13,7 +13,13 @@ namespace Epic_Games_Account_Switcher_Client
     {
         private bool _isClosing;
         public string SelectedSkinPath { get; set; }
-        public class SkinItem { public string Name { get; set; } public string FullPath { get; set; } }
+        public class SkinItem
+        {
+            public string Name { get; set; }
+            public string FullPath { get; set; }
+            public string AccessibleName => L.T("Avatar {0}", Name);
+            public override string ToString() => Name ?? "";
+        }
         public SkinPickerWindow(string currentPath = null)
         {
             InitializeComponent();

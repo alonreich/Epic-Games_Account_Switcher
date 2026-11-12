@@ -1,6 +1,7 @@
 <Window x:Class="Epic_Games_Account_Switcher_Client.CustomMessageBox"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Epic_Games_Account_Switcher_Client"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
@@ -8,7 +9,8 @@
         MinHeight="200" MinWidth="550" MaxWidth="720"
         SizeToContent="WidthAndHeight"
         Background="{DynamicResource MainBackground}"
-        Topmost="True" WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" ShowInTaskbar="True">
+        Topmost="True" WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" ShowInTaskbar="True"
+        PreviewKeyDown="Window_PreviewKeyDown">
     <Border BorderBrush="{DynamicResource BtnBorder}" BorderThickness="1">
         <Grid>
             <Grid.RowDefinitions>
@@ -20,7 +22,7 @@
                 <Grid>
                     <Label Name="HeaderInstruction" Content="ALERT" HorizontalAlignment="Center" Style="{StaticResource HeaderbarLabel}" FontSize="12"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button x:Name="BtnClose" Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Click="BtnExit" Style="{StaticResource BtnClose}" ToolTip="Close" AutomationProperties.Name="Close message" IsTabStop="False"/>
+                        <Button x:Name="BtnClose" Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" Width="32" Height="32" Click="BtnExit" Style="{StaticResource BtnClose}" ToolTip="{local:T 'Close'}" AutomationProperties.Name="{local:T 'Close message'}" IsTabStop="False"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -30,13 +32,18 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Name="IconGlyph" Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="40" Foreground="{DynamicResource IconFill}" HorizontalAlignment="Center" VerticalAlignment="Top"/>
-                <TextBlock Name="Message" Grid.Column="1" Style="{StaticResource ErrorMessageBox}" Margin="10,0,0,0"/>
+                <!-- Read-only text box instead of a text block, so paths and error text can be selected and copied (Ctrl+C copies everything). -->
+                <TextBox Name="Message" Grid.Column="1" IsReadOnly="True" IsTabStop="False" TextWrapping="Wrap" AcceptsReturn="True"
+                         Background="Transparent" BorderThickness="0" Padding="0" Margin="8,0,0,0" VerticalAlignment="Center"
+                         Foreground="{DynamicResource PrimaryTextForeground}" FontSize="14"
+                         SelectionBrush="{DynamicResource IconFill}" CaretBrush="Transparent" FocusVisualStyle="{x:Null}"
+                         AutomationProperties.Name="{local:T 'Message'}"/>
             </Grid>
             <Border Grid.Row="2" Background="{DynamicResource DialogBottomBackground}" BorderBrush="{DynamicResource BtnBorder}" BorderThickness="0,1,0,0">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0">
-                    <Button Name="ButtonOk" Content="OK" Style="{StaticResource OkButton}" Click="ButtonOk_OnClick" MinWidth="120" Height="35" Margin="10,0,0,0" Padding="20,8" IsDefault="True"/>
-                    <Button Name="ButtonNo" Content="NO" Style="{StaticResource SecondaryButton}" Click="ButtonNo_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0" Padding="20,8"/>
-                    <Button Name="ButtonCancel" Content="CANCEL" Style="{StaticResource CancelButton}" Click="ButtonCancel_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0" Padding="20,8"/>
+                    <Button Name="ButtonOk" Content="{local:T 'OK'}" Style="{StaticResource OkButton}" Click="ButtonOk_OnClick" MinWidth="120" Height="35" Margin="10,0,0,0" Padding="20,8" IsDefault="True"/>
+                    <Button Name="ButtonNo" Content="{local:T 'NO'}" Style="{StaticResource SecondaryButton}" Click="ButtonNo_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0" Padding="20,8"/>
+                    <Button Name="ButtonCancel" Content="{local:T 'CANCEL'}" Style="{StaticResource CancelButton}" Click="ButtonCancel_OnClick" Visibility="Collapsed" MinWidth="120" Height="35" Margin="10,0,0,0" Padding="20,8"/>
                 </StackPanel>
             </Border>
         </Grid>

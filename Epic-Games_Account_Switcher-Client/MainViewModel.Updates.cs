@@ -56,8 +56,16 @@ namespace Epic_Games_Account_Switcher_Client
         public double UpdateDownloadProgress
         {
             get => _updateDownloadProgress;
-            set { _updateDownloadProgress = value; OnPropertyChanged(); }
+            set
+            {
+                _updateDownloadProgress = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(UpdateDownloadLabel));
+                OnPropertyChanged(nameof(UpdateDownloadShortLabel));
+            }
         }
+        public string UpdateDownloadLabel => L.T("Downloading and verifying… {0:0}%", UpdateDownloadProgress);
+        public string UpdateDownloadShortLabel => L.T("DOWNLOADING… {0:0}%", UpdateDownloadProgress);
 
         public bool AutoCheckForUpdatesSetting
         {
@@ -94,7 +102,7 @@ namespace Epic_Games_Account_Switcher_Client
             CommandManager.InvalidateRequerySuggested();
             try
             {
-                if (userInitiated) ShowToast("Checking for updates...");
+                if (userInitiated) ShowToast(L.T("Checking for updates…"));
                 var result = await UpdateService.CheckAsync();
                 if (result.Status == UpdateCheckStatus.UpToDate || result.Status == UpdateCheckStatus.UpdateAvailable)
                 {
@@ -125,7 +133,7 @@ namespace Epic_Games_Account_Switcher_Client
         private void ShowUpdateBanner(UpdateInfo info)
         {
             _availableUpdate = info;
-            UpdateBannerTitle = "Version " + info.Version + " is available  (you have " + Globals.Version + ")";
+            UpdateBannerTitle = L.T("Version {0} is available  (you have {1})", info.Version, Globals.Version);
             UpdateBannerNotes = SummarizeReleaseNotes(info.ReleaseNotes);
             UpdateDownloadProgress = 0;
             IsUpdateBannerVisible = true;
@@ -134,7 +142,7 @@ namespace Epic_Games_Account_Switcher_Client
 
         private static string SummarizeReleaseNotes(string markdown)
         {
-            if (string.IsNullOrWhiteSpace(markdown)) return "Improvements and fixes.";
+            if (string.IsNullOrWhiteSpace(markdown)) return L.T("Improvements and fixes.");
             var lines = markdown.Replace("\r", "").Split('\n')
                 .Select(l => l.Trim())
                 .Where(l => l.Length > 0 && !l.StartsWith("#") && !l.StartsWith("---") && !l.StartsWith("<!--"))
@@ -143,7 +151,7 @@ namespace Epic_Games_Account_Switcher_Client
                 .Take(3)
                 .Select(l => "• " + (l.Length > 110 ? l.Substring(0, 107) + "..." : l));
             var text = string.Join("\n", lines);
-            return string.IsNullOrWhiteSpace(text) ? "Improvements and fixes." : text;
+            return string.IsNullOrWhiteSpace(text) ? L.T("Improvements and fixes.") : text;
         }
 
         private void RemindLater()
@@ -151,7 +159,7 @@ namespace Epic_Games_Account_Switcher_Client
             AppSettings.Instance.UpdateRemindAfterUtc = DateTime.UtcNow.Add(AutoCheckInterval);
             AppSettings.SaveSettings();
             IsUpdateBannerVisible = false;
-            ShowToast("OK, we'll remind you tomorrow.");
+            ShowToast(L.T("OK, we'll remind you tomorrow."));
         }
 
         private void SkipThisVersion()
@@ -160,7 +168,7 @@ namespace Epic_Games_Account_Switcher_Client
             AppSettings.Instance.SkippedUpdateVersion = _availableUpdate.Version;
             AppSettings.SaveSettings();
             IsUpdateBannerVisible = false;
-            ShowToast("Version " + _availableUpdate.Version + " skipped. You can still update from Settings.");
+            ShowToast(L.T("Version {0} skipped. You can still update from Settings.", _availableUpdate.Version));
         }
 
         private void OpenReleaseNotes()
@@ -185,7 +193,7 @@ namespace Epic_Games_Account_Switcher_Client
             }
             catch (OperationCanceledException)
             {
-                ShowToast("Update download cancelled.");
+                ShowToast(L.T("Update download cancelled."));
                 return;
             }
             catch (Exception ex)
@@ -194,8 +202,8 @@ namespace Epic_Games_Account_Switcher_Client
                 // UpdateService throws these with messages written for users; anything else is shown generically.
                 var reason = ex is System.IO.IOException || ex is System.Security.Cryptography.CryptographicException || ex is InvalidOperationException || ex is System.IO.InvalidDataException
                     ? ex.Message
-                    : "The update could not be downloaded. Check your internet connection.";
-                new CustomMessageBox("Update Not Installed", reason + "\n\nYour current version keeps working. Try again later, or click WHAT'S NEW to download the update from the release page.", MessageBoxVisualStyle.Error).ShowDialog();
+                    : L.T("The update could not be downloaded. Check your internet connection.");
+                new CustomMessageBox(L.T("Update Not Installed"), reason + "\n\n" + L.T("Your current version keeps working. Try again later, or click WHAT'S NEW to download the update from the release page."), MessageBoxVisualStyle.Error).ShowDialog();
                 return;
             }
             finally
@@ -205,18 +213,18 @@ namespace Epic_Games_Account_Switcher_Client
                 _updateDownloadCts = null;
             }
 
-            var confirm = new CustomMessageBox("Update Ready",
-                "Version " + info.Version + " is downloaded and verified.\n\nThe app will close, install the update and reopen by itself. Your saved accounts are kept.",
-                "Install & Restart Now", "Later", null, MessageBoxVisualStyle.Success);
+            var confirm = new CustomMessageBox(L.T("Update Ready"),
+                L.T("Version {0} is downloaded and verified.\n\nThe app will close, install the update and reopen by itself. Your saved accounts are kept.", info.Version),
+                L.T("Install & Restart Now"), L.T("Later"), null, MessageBoxVisualStyle.Success);
             confirm.ShowDialog();
             if (confirm.Result != CustomDialogResult.Primary)
             {
-                ShowToast("The update is saved. Click UPDATE NOW whenever you're ready.");
+                ShowToast(L.T("The update is saved. Click UPDATE NOW whenever you're ready."));
                 return;
             }
             if (IsBusy)
             {
-                ShowToast("Please wait for the current operation to finish, then click UPDATE NOW again.");
+                ShowToast(L.T("Please wait for the current operation to finish, then click UPDATE NOW again."));
                 return;
             }
             try
@@ -228,7 +236,7 @@ namespace Epic_Games_Account_Switcher_Client
             catch (Exception ex)
             {
                 Globals.WriteToLog("[UPDATE] Could not start installer", ex);
-                new CustomMessageBox("Update Not Installed", "The downloaded installer could not be started. Your current version keeps working.\n\nTry UPDATE NOW again, or download the update from the release page (WHAT'S NEW).", MessageBoxVisualStyle.Error).ShowDialog();
+                new CustomMessageBox(L.T("Update Not Installed"), L.T("The downloaded installer could not be started. Your current version keeps working.\n\nTry UPDATE NOW again, or download the update from the release page (WHAT'S NEW)."), MessageBoxVisualStyle.Error).ShowDialog();
             }
         }
     }

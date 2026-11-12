@@ -27,6 +27,8 @@ namespace Epic_Games_Account_Switcher_Client
         private const double MinLauncherHeight = 300;
         private static readonly TimeSpan EnterDelay = TimeSpan.FromMilliseconds(300);
         private static readonly TimeSpan ExitDelay = TimeSpan.FromSeconds(4);
+        // Longest time the frame waits for the launcher to come back during an account switch.
+        private static readonly TimeSpan SwitchHold = TimeSpan.FromSeconds(120);
         private static readonly TimeSpan FadeOutDuration = TimeSpan.FromMilliseconds(160);
 
         private readonly MainWindow _window;
@@ -188,6 +190,9 @@ namespace Epic_Games_Account_Switcher_Client
                 }
                 else if (_active && !usable && now - _missingSince >= ExitDelay)
                 {
+                    // An account switch closes the launcher and reopens it: keep the frame in place for it (the busy overlay
+                    // covers the gap) instead of collapsing to the normal layout and wrapping again seconds later.
+                    if (_window.IsLauncherRestartExpected && now - _missingSince < SwitchHold) return;
                     Exit(true);
                 }
             }

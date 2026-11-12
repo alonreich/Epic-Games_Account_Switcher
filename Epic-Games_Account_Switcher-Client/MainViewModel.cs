@@ -99,6 +99,7 @@ namespace Epic_Games_Account_Switcher_Client
                 OnPropertyChanged(nameof(UnsavedLoginName));
                 OnPropertyChanged(nameof(UnsavedLoginEmail));
                 OnPropertyChanged(nameof(UnsavedLoginHint));
+                OnPropertyChanged(nameof(UnsavedLoginToolTip));
                 OnPropertyChanged(nameof(EmptyStateTitle));
                 OnPropertyChanged(nameof(EmptyStateSubtitle));
                 OnPropertyChanged(nameof(UsageTrackerSummary));
@@ -110,9 +111,10 @@ namespace Epic_Games_Account_Switcher_Client
         public bool HasNoUnsavedLoginSuggestion => UnsavedLoginSuggestion == null;
         /// <summary>The banner is only shown next to existing accounts; with no accounts the empty state offers the same action.</summary>
         public bool ShowUnsavedLoginBanner => HasUnsavedLoginSuggestion && !IsAccountsEmpty;
-        public string UnsavedLoginName => DetectedValue(UnsavedLoginSuggestion?.Name) ?? "Signed-in Epic account";
-        public string UnsavedLoginEmail => DetectedValue(UnsavedLoginSuggestion?.Email) ?? "Email not detected yet";
-        public string UnsavedLoginHint => "Save it once, then switch to it with one click.";
+        public string UnsavedLoginName => DetectedValue(UnsavedLoginSuggestion?.Name) ?? L.T("Signed-in Epic account");
+        public string UnsavedLoginEmail => DetectedValue(UnsavedLoginSuggestion?.Email) ?? L.T("Email not detected yet");
+        public string UnsavedLoginHint => L.T("Save it once, then switch to it with one click.");
+        public string UnsavedLoginToolTip => L.T("{0} is signed in to Epic Games Launcher but not saved here yet.", UnsavedLoginName);
 
         /// <summary>Detection reports unknown values as empty or "N/A"; never show those to the user.</summary>
         private static string DetectedValue(string value)
@@ -122,17 +124,17 @@ namespace Epic_Games_Account_Switcher_Client
             return string.Equals(trimmed, "N/A", StringComparison.OrdinalIgnoreCase) ? null : trimmed;
         }
 
-        public string EmptyStateTitle => HasUnsavedLoginSuggestion ? "Save your signed-in Epic account" : "No saved accounts yet";
+        public string EmptyStateTitle => HasUnsavedLoginSuggestion ? L.T("Save your signed-in Epic account") : L.T("No saved accounts yet");
         public string EmptyStateSubtitle
         {
             get
             {
                 if (!HasUnsavedLoginSuggestion)
-                    return "Sign in to Epic Games Launcher, then click ADD SIGNED-IN ACCOUNT to save that account. Repeat for every account you want to switch between.";
+                    return L.T("Sign in to Epic Games Launcher, then click ADD SIGNED-IN ACCOUNT to save that account. Repeat for every account you want to switch between.");
                 var name = DetectedValue(UnsavedLoginSuggestion.Name);
                 var email = DetectedValue(UnsavedLoginSuggestion.Email);
-                var who = name != null && email != null ? name + " (" + email + ")" : name ?? email ?? "An Epic account";
-                return who + " is signed in to Epic Games Launcher. Save it once, then switch to it with one click.";
+                var who = name != null && email != null ? name + " (" + email + ")" : name ?? email ?? L.T("An Epic account");
+                return L.T("{0} is signed in to Epic Games Launcher. Save it once, then switch to it with one click.", who);
             }
         }
 
@@ -141,7 +143,7 @@ namespace Epic_Games_Account_Switcher_Client
             get
             {
                 if (Accounts == null || Accounts.Count == 0)
-                    return HasUnsavedLoginSuggestion ? "An Epic account is signed in but not saved yet." : "No accounts saved yet.";
+                    return HasUnsavedLoginSuggestion ? L.T("An Epic account is signed in but not saved yet.") : L.T("No accounts saved yet.");
 
                 var totalUses = Accounts.Sum(a => Math.Max(0, a.UsageCount));
                 var recent = Accounts
@@ -149,17 +151,18 @@ namespace Epic_Games_Account_Switcher_Client
                     .OrderByDescending(a => a.LastPlayed)
                     .FirstOrDefault();
 
-                var countText = Accounts.Count == 1 ? "1 saved account" : Accounts.Count + " saved accounts";
+                var countText = Accounts.Count == 1 ? L.T("1 saved account") : L.T("{0} saved accounts", Accounts.Count);
                 if (recent == null)
-                    return countText + ". Click an account to switch to it.";
+                    return L.T("{0}. Click an account to switch to it.", countText);
 
-                return countText + " · " + totalUses + (totalUses == 1 ? " switch" : " switches") + " · Last used: " + recent.Name + " (" + recent.LastPlayedDisplay + ")";
+                var usesText = totalUses == 1 ? L.T("1 switch") : L.T("{0} switches", totalUses);
+                return L.T("{0} · {1} · Last used: {2} ({3})", countText, usesText, recent.Name, recent.LastPlayedDisplay);
             }
         }
 
         public bool HasAccounts => !IsAccountsEmpty;
 
-        public string CloseButtonToolTip => AppSettings.Instance.MinimizeToTray ? "Close (keeps running in the notification area)" : "Close";
+        public string CloseButtonToolTip => AppSettings.Instance.MinimizeToTray ? L.T("Close (keeps running in the notification area)") : L.T("Close");
 
         /// <summary>Set by the view while the pointer or keyboard focus is on the toast, so it stays visible.</summary>
         public bool IsToastHeld { get; set; }
@@ -207,10 +210,21 @@ namespace Epic_Games_Account_Switcher_Client
 
 
 
-        // Above 175% the header and toolbar no longer fit the minimum window size.
+        public bool KeepLauncherWindowPlacementSetting
+        {
+            get => AppSettings.Instance.KeepLauncherWindowPlacement;
+            set { AppSettings.Instance.KeepLauncherWindowPlacement = value; AppSettings.SaveSettings(); OnPropertyChanged(); }
+        }
+
+        public string BackupToolTip => HasAccounts
+            ? L.T("Save all your accounts to a password-protected backup file.")
+            : L.T("Nothing to back up yet. Add an account first.");
+
         private const double MinZoom = 0.5;
         private const double MaxZoom = 1.75;
+        private const double ZoomStep = 0.05;
 
+        /// <summary>The zoom the user chose. What is shown is <see cref="EffectiveZoom"/>, which also respects the window size.</summary>
         public double ZoomFactor
         {
             get => Math.Max(MinZoom, Math.Min(MaxZoom, AppSettings.Instance.ZoomFactor));
@@ -220,12 +234,66 @@ namespace Epic_Games_Account_Switcher_Client
                 if (Math.Abs(AppSettings.Instance.ZoomFactor - clamped) < 0.001) return;
                 AppSettings.Instance.ZoomFactor = clamped;
                 AppSettings.SaveSettings();
+                DialogWindowHelper.UiZoom = clamped;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(ZoomDisplayLabel));
+                NotifyZoomChanged();
             }
         }
 
-        public string ZoomDisplayLabel => Math.Round(ZoomFactor * 100) + "%";
+        private double _zoomFitLimit = MaxZoom;
+        /// <summary>
+        /// Largest zoom at which the dashboard still fits the current window (set by the view whenever the window is resized).
+        /// A zoomed layout that no longer fits would push every control, including the zoom buttons, out of view.
+        /// </summary>
+        public double ZoomFitLimit
+        {
+            get => _zoomFitLimit;
+            set
+            {
+                var limit = Math.Max(MinZoom, value);
+                if (Math.Abs(limit - _zoomFitLimit) < 0.005) return;
+                _zoomFitLimit = limit;
+                OnPropertyChanged();
+                NotifyZoomChanged();
+            }
+        }
+
+        /// <summary>The zoom actually applied to the dashboard: the user's choice, reduced while the window is too small for it.</summary>
+        public double EffectiveZoom => Math.Max(MinZoom, Math.Min(ZoomFactor, ZoomFitLimit));
+
+        /// <summary>Zoom of the Settings popup (same rule as dialogs and menus: follows the zoom, never below 100%).</summary>
+        public double PopupZoom => DialogWindowHelper.PopupZoom;
+
+        public string ZoomDisplayLabel => Math.Round(EffectiveZoom * 100) + "%";
+
+        private bool CanZoomIn => EffectiveZoom + ZoomStep <= Math.Min(MaxZoom, ZoomFitLimit) + 0.001;
+
+        public string ZoomInToolTip => CanZoomIn || EffectiveZoom >= MaxZoom - 0.001
+            ? L.T("Zoom in (Ctrl + Plus, or Ctrl + mouse wheel up)")
+            : L.T("Make the window larger to zoom in further.");
+
+        private void NotifyZoomChanged()
+        {
+            OnPropertyChanged(nameof(EffectiveZoom));
+            OnPropertyChanged(nameof(PopupZoom));
+            OnPropertyChanged(nameof(ZoomDisplayLabel));
+            OnPropertyChanged(nameof(ZoomInToolTip));
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        private void ZoomIn()
+        {
+            if (EffectiveZoom >= MaxZoom - 0.001) return;
+            if (!CanZoomIn)
+            {
+                ShowToast(L.T("Make the window larger to zoom in further."));
+                return;
+            }
+            ZoomFactor = Math.Round(EffectiveZoom + ZoomStep, 2);
+        }
+
+        // Steps down from what is shown, so the first click is visible even while the window size limits the zoom.
+        private void ZoomOut() => ZoomFactor = Math.Round(EffectiveZoom - ZoomStep, 2);
 
         public event Action OnAccountsChanged;
 
@@ -246,6 +314,8 @@ namespace Epic_Games_Account_Switcher_Client
         public ICommand ZoomInCommand { get; }
         public ICommand ZoomOutCommand { get; }
         public ICommand ZoomResetCommand { get; }
+        public ICommand CopyPasswordCommand { get; }
+        public ICommand ReloadSignInCommand { get; }
 
         public bool IsAccountsEmpty => Accounts == null || Accounts.Count == 0;
         private List<Account> _undoAccountOrder;
@@ -262,15 +332,35 @@ namespace Epic_Games_Account_Switcher_Client
             SaveCurrentProfileCommand = new AsyncRelayCommand<Account>(RecaptureAccount, acc => acc != null && !IsBusy);
             MoveAccountEarlierCommand = new RelayCommand<Account>(MoveAccountEarlier, acc => CanMoveAccount(acc, -1));
             MoveAccountLaterCommand = new RelayCommand<Account>(MoveAccountLater, acc => CanMoveAccount(acc, 1));
-            BackupCommand = new AsyncRelayCommand(PerformBackup, () => !IsBusy);
+            BackupCommand = new AsyncRelayCommand(PerformBackup, () => !IsBusy && HasAccounts);
             RestoreCommand = new AsyncRelayCommand(PerformRestore, () => !IsBusy);
             CancelBusyCommand = new RelayCommand(() => CancelCurrentOperation(), () => IsBusy && _operationCancellation != null && !_operationCancellation.IsCancellationRequested);
             UndoReorderCommand = new RelayCommand(UndoAccountOrder, () => CanUndoReorder && !IsBusy);
             CaptureUnsavedLoginCommand = new AsyncRelayCommand(CaptureSuggestedLogin, () => HasUnsavedLoginSuggestion && !IsBusy);
             DismissUnsavedLoginCommand = new RelayCommand(DismissSuggestedLogin, () => HasUnsavedLoginSuggestion && !IsBusy);
-            ZoomInCommand = new RelayCommand(() => ZoomFactor += 0.05);
-            ZoomOutCommand = new RelayCommand(() => ZoomFactor -= 0.05);
+            ZoomInCommand = new RelayCommand(ZoomIn, () => CanZoomIn);
+            ZoomOutCommand = new RelayCommand(ZoomOut, () => EffectiveZoom > MinZoom + 0.001);
             ZoomResetCommand = new RelayCommand(() => ZoomFactor = 1.0);
+            CopyPasswordCommand = new RelayCommand<Account>(CopyPassword, acc => acc != null && acc.HasSavedPassword);
+            ReloadSignInCommand = new AsyncRelayCommand<Account>(ReloadSignIn, acc => acc != null && !IsBusy);
+            DialogWindowHelper.UiZoom = ZoomFactor;
+        }
+
+        /// <summary>Copies an account's saved password so it can be pasted when Epic Games asks to sign in again.</summary>
+        private void CopyPassword(Account acc)
+        {
+            if (acc == null) return;
+            var password = acc.Password;
+            if (string.IsNullOrEmpty(password))
+            {
+                ShowToast(acc.HasSavedPassword
+                    ? L.T("The saved password of '{0}' can't be read on this PC. Enter it again with EDIT.", acc.Name)
+                    : L.T("No password is saved for '{0}'. Add one with EDIT.", acc.Name));
+                return;
+            }
+            ShowToast(ClipboardHelper.CopySensitive(password)
+                ? L.T("Password of '{0}' copied. It is removed from the clipboard after 30 seconds.", acc.Name)
+                : L.T("The password could not be copied. Try again."));
         }
 
         /// <summary>Called every minute by the window so relative times on cards and in the summary stay current.</summary>
@@ -304,7 +394,7 @@ namespace Epic_Games_Account_Switcher_Client
                         if (reportFailure)
                         {
                             Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
-                                new CustomMessageBox("Changes Not Saved", "Your latest account changes could not be saved. Check that the drive has free space, then try again.\n\nUse SHOW LOGS for details.", MessageBoxVisualStyle.Error).ShowDialog()));
+                                new CustomMessageBox(L.T("Changes Not Saved"), L.T("Your latest account changes could not be saved. Check that the drive has free space, then try again.\n\nUse SHOW LOGS for details."), MessageBoxVisualStyle.Error).ShowDialog()));
                         }
                         return false;
                     }
@@ -329,6 +419,7 @@ namespace Epic_Games_Account_Switcher_Client
             }
             OnPropertyChanged(nameof(IsAccountsEmpty));
             OnPropertyChanged(nameof(HasAccounts));
+            OnPropertyChanged(nameof(BackupToolTip));
             OnPropertyChanged(nameof(ShowUnsavedLoginBanner));
             OnPropertyChanged(nameof(UsageTrackerSummary));
             OnPropertyChanged(nameof(EmptyStateTitle));
@@ -367,7 +458,7 @@ namespace Epic_Games_Account_Switcher_Client
             {
                 if (_operationCancellation != null && !_operationCancellation.IsCancellationRequested)
                 {
-                    BusyStatus = "Cancelling...";
+                    BusyStatus = L.T("Cancelling…");
                     _operationCancellation.Cancel();
                     CommandManager.InvalidateRequerySuggested();
                 }
@@ -412,12 +503,11 @@ namespace Epic_Games_Account_Switcher_Client
         private void ShowAccountsLoadProblem(string preservedCopy)
         {
             var kept = string.IsNullOrEmpty(preservedCopy)
-                ? "The file was left untouched, and changes can't be saved until it can be read or you restore a backup."
-                : "A copy of the file was kept here:\n" + preservedCopy;
-            var box = new CustomMessageBox("Saved Accounts Couldn't Be Read",
-                "Your saved account list could not be read, so no accounts are shown. " + kept +
-                "\n\nRestore a backup to get your accounts back. Setup also keeps automatic backups in your Downloads folder.",
-                "Restore Backup", "Close", null, MessageBoxVisualStyle.Error);
+                ? L.T("The file was left untouched, and changes can't be saved until it can be read or you restore a backup.")
+                : L.T("A copy of the file was kept here:\n{0}", preservedCopy);
+            var box = new CustomMessageBox(L.T("Saved Accounts Couldn't Be Read"),
+                L.T("Your saved account list could not be read, so no accounts are shown. {0}\n\nRestore a backup to get your accounts back. Setup also keeps automatic backups in your Downloads folder.", kept),
+                L.T("Restore Backup"), L.T("Close"), null, MessageBoxVisualStyle.Error);
             box.ShowDialog();
             if (box.Result == CustomDialogResult.Primary && RestoreCommand.CanExecute(null)) RestoreCommand.Execute(null);
         }
@@ -495,7 +585,7 @@ namespace Epic_Games_Account_Switcher_Client
             catch (Exception ex)
             {
                 Globals.WriteToLog("Failed to capture suggested login", ex);
-                new CustomMessageBox("Account Not Saved", "The signed-in account could not be saved. Make sure Epic Games Launcher is still signed in, then try again.\n\nUse SHOW LOGS for details.", MessageBoxVisualStyle.Error).ShowDialog();
+                new CustomMessageBox(L.T("Account Not Saved"), L.T("The signed-in account could not be saved. Make sure Epic Games Launcher is still signed in, then try again.\n\nUse SHOW LOGS for details."), MessageBoxVisualStyle.Error).ShowDialog();
             }
         }
 
@@ -512,7 +602,7 @@ namespace Epic_Games_Account_Switcher_Client
                 }
             }
             UnsavedLoginSuggestion = null;
-            ShowToast("OK, we won't offer to save that account again. Use ADD SIGNED-IN ACCOUNT any time.");
+            ShowToast(L.T("OK, we won't offer to save that account again. Use ADD SIGNED-IN ACCOUNT any time."));
         }
 
         private static bool IsDismissedLoginId(string accountId)
@@ -531,16 +621,54 @@ namespace Epic_Games_Account_Switcher_Client
             if (removed > 0) AppSettings.SaveSettings();
         }
 
+        /// <summary>
+        /// Card / tray click. The account that is already signed in must not cost a launcher restart: it only brings the
+        /// launcher up. The full restore stays available on the active card's menu (RELOAD SAVED SIGN-IN).
+        /// </summary>
         private async Task SwitchToAccount(Account account)
         {
             if (account == null || IsBusy) return;
-            var cancellationToken = BeginBusyOperation("Switching to " + account.Name + "...");
+            string liveId = null;
+            try { liveId = await Task.Run(() => AccountService.GetCurrentAccountId()); }
+            catch (Exception ex) { Globals.WriteToLog("Could not read the signed-in account before switching", ex); }
+
+            if (!string.IsNullOrWhiteSpace(liveId) && string.Equals(liveId, account.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                if (IsBusy) return;
+                if (Globals.IsProcessRunning("EpicGamesLauncher"))
+                {
+                    ShowToast(L.T("'{0}' is already the active account in Epic Games Launcher.", account.Name));
+                    return;
+                }
+                ShowToast(L.T("'{0}' is already the active account. Opening Epic Games Launcher…", account.Name));
+                var opened = await Task.Run(() => AccountService.AutoLaunchEpicLauncher(false));
+                if (!opened) ShowToast(L.T("Epic Games Launcher could not be opened. Open it yourself, then try again."));
+                return;
+            }
+
+            await SwitchToAccountCore(account);
+        }
+
+        private async Task ReloadSignIn(Account acc)
+        {
+            if (acc == null || IsBusy) return;
+            var choice = new CustomMessageBox(L.T("Reload Saved Sign-In?"),
+                L.T("This closes Epic Games Launcher and restores the saved sign-in of '{0}' again.\n\nUse it when the launcher asks you to sign in although this account is shown as active.", acc.Name),
+                L.T("Reload Sign-In"), L.T("Cancel"));
+            if (choice.ShowDialog() != true || IsBusy) return;
+            await SwitchToAccountCore(acc);
+        }
+
+        private async Task SwitchToAccountCore(Account account)
+        {
+            if (account == null || IsBusy) return;
+            var cancellationToken = BeginBusyOperation(L.T("Switching to {0}…", account.Name));
             var switched = false;
             try
             {
                 if (await AccountService.SwitchToAccount(account.Id, (s) => Application.Current.Dispatcher.Invoke(new Action(() => BusyStatus = s)), cancellationToken))
                 {
-                    BusyStatus = "Verifying Epic sign-in...";
+                    BusyStatus = L.T("Verifying Epic sign-in…");
                     bool verified = false;
                     try
                     {
@@ -549,7 +677,7 @@ namespace Epic_Games_Account_Switcher_Client
                     catch (OperationCanceledException)
                     {
                         await LoadAccountsAsync();
-                        ShowToast("Switched to " + account.Name + ". The sign-in check was skipped, so confirm the account in Epic Games Launcher.");
+                        ShowToast(L.T("Switched to {0}. The sign-in check was skipped, so confirm the account in Epic Games Launcher.", account.Name));
                         SwitchCompleted?.Invoke(account, true);
                         return;
                     }
@@ -558,7 +686,7 @@ namespace Epic_Games_Account_Switcher_Client
                     if (!verified)
                     {
                         SwitchCompleted?.Invoke(account, false);
-                        new CustomMessageBox("Switch Not Confirmed", "The saved sign-in for '" + account.Name + "' was restored, but Epic Games Launcher didn't confirm that account within 45 seconds.\n\nCheck which account Epic Games Launcher shows. The app stays open so you can switch again if needed.").ShowDialog();
+                        new CustomMessageBox(L.T("Switch Not Confirmed"), L.T("The saved sign-in for '{0}' was restored, but Epic Games Launcher didn't confirm that account within 45 seconds.\n\nCheck which account Epic Games Launcher shows. The app stays open so you can switch again if needed.", account.Name)).ShowDialog();
                         return;
                     }
 
@@ -569,18 +697,20 @@ namespace Epic_Games_Account_Switcher_Client
                 {
                     var detail = AccountService.LastSwitchFailureMessage;
                     SwitchCompleted?.Invoke(account, false);
-                    new CustomMessageBox("Switch Failed", "Couldn't switch to '" + account.Name + "'." + (string.IsNullOrWhiteSpace(detail) ? "" : "\n\nReason: " + detail) + "\n\nTry again. If it keeps failing, use SHOW LOGS and include the log when reporting the problem.", MessageBoxVisualStyle.Error).ShowDialog();
+                    new CustomMessageBox(L.T("Switch Failed"), (string.IsNullOrWhiteSpace(detail)
+                        ? L.T("Couldn't switch to '{0}'.\n\nTry again. If it keeps failing, use SHOW LOGS and include the log when reporting the problem.", account.Name)
+                        : L.T("Couldn't switch to '{0}'.\n\nReason: {1}\n\nTry again. If it keeps failing, use SHOW LOGS and include the log when reporting the problem.", account.Name, detail)), MessageBoxVisualStyle.Error).ShowDialog();
                 }
             }
             catch (OperationCanceledException)
             {
-                ShowToast("Switch cancelled.");
+                ShowToast(L.T("Switch cancelled."));
             }
             catch (Exception ex)
             {
                 Globals.WriteToLog("CRITICAL UI SWITCH ERROR", ex);
                 SwitchCompleted?.Invoke(account, false);
-                new CustomMessageBox("Switch Failed", "Something unexpected stopped the switch to '" + account.Name + "'.\n\nTry again. If it keeps happening, use SHOW LOGS for details.", MessageBoxVisualStyle.Error).ShowDialog();
+                new CustomMessageBox(L.T("Switch Failed"), L.T("Something unexpected stopped the switch to '{0}'.\n\nTry again. If it keeps happening, use SHOW LOGS for details.", account.Name), MessageBoxVisualStyle.Error).ShowDialog();
             }
             finally
             {
@@ -589,12 +719,13 @@ namespace Epic_Games_Account_Switcher_Client
 
             if (!switched) return;
             // Show the result before the window gets out of the way, so the user knows the switch worked.
-            ShowToast("Switched to " + account.Name + ". Epic Games Launcher is signed in.");
+            ShowToast(L.T("Switched to {0}. Epic Games Launcher is signed in.", account.Name));
             await Task.Delay(1500);
             if (IsBusy) return;
             var mainWindow = Application.Current.MainWindow;
             if (mainWindow == null) return;
-            if (mainWindow.IsVisible) mainWindow.WindowState = WindowState.Minimized;
+            // In frame mode the window stays: it is the frame around the launcher that is about to reopen.
+            if (mainWindow.IsVisible && !AppSettings.Instance.ExperimentalLauncherFrame) mainWindow.WindowState = WindowState.Minimized;
             if (AppSettings.Instance.CloseOnceLaunched) mainWindow.Close();
         }
 
@@ -606,7 +737,7 @@ namespace Epic_Games_Account_Switcher_Client
                 if (loginWin.ShowDialog() == true)
                 {
                     _ = LoadAccountsAsync();
-                    ShowToast("Account saved. Click its card to switch to it.");
+                    ShowToast(L.T("Account saved. Click its card to switch to it."));
                 }
             });
         }
@@ -620,7 +751,7 @@ namespace Epic_Games_Account_Switcher_Client
                 return;
             }
 
-            var cancellationToken = BeginBusyOperation("Looking for the account signed in to Epic Games Launcher…");
+            var cancellationToken = BeginBusyOperation(L.T("Looking for the account signed in to Epic Games Launcher…"));
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -628,9 +759,9 @@ namespace Epic_Games_Account_Switcher_Client
                 if (detected == null || string.IsNullOrWhiteSpace(detected.Item1))
                 {
                     EndBusyOperation();
-                    var choice = new CustomMessageBox("No Signed-In Account Found",
-                        "No account is signed in to Epic Games Launcher right now.\n\nSign in here in a secure window, or open Epic Games Launcher, sign in there, and click ADD SIGNED-IN ACCOUNT again.",
-                        "Sign In Here", "Open Epic Games Launcher", "Cancel");
+                    var choice = new CustomMessageBox(L.T("No Signed-In Account Found"),
+                        L.T("No account is signed in to Epic Games Launcher right now.\n\nSign in here in a secure window, or open Epic Games Launcher, sign in there, and click ADD SIGNED-IN ACCOUNT again."),
+                        L.T("Sign In Here"), L.T("Open Epic Games Launcher"), L.T("Cancel"));
                     choice.ShowDialog();
                     if (choice.Result == CustomDialogResult.Primary)
                     {
@@ -639,7 +770,7 @@ namespace Epic_Games_Account_Switcher_Client
                     else if (choice.Result == CustomDialogResult.Secondary)
                     {
                         var opened = await Task.Run(() => AccountService.AutoLaunchEpicLauncher(false));
-                        ShowToast(opened ? "Sign in to Epic Games Launcher, then click ADD SIGNED-IN ACCOUNT." : "Epic Games Launcher could not be opened. Open it yourself, then try again.");
+                        ShowToast(opened ? L.T("Sign in to Epic Games Launcher, then click ADD SIGNED-IN ACCOUNT.") : L.T("Epic Games Launcher could not be opened. Open it yourself, then try again."));
                     }
                     return;
                 }
@@ -653,7 +784,7 @@ namespace Epic_Games_Account_Switcher_Client
             }
             catch (OperationCanceledException)
             {
-                ShowToast("Operation cancelled.");
+                ShowToast(L.T("Operation cancelled."));
             }
             finally
             {
@@ -671,15 +802,15 @@ namespace Epic_Games_Account_Switcher_Client
                 if (detected != null) signedIn = string.IsNullOrWhiteSpace(detected.Item2) ? detected.Item3 : detected.Item2;
             }
             catch (Exception ex) { Globals.WriteToLog("Could not detect the signed-in account before replacing a saved sign-in", ex); }
-            var source = string.IsNullOrWhiteSpace(signedIn)
-                ? "the account currently signed in to Epic Games Launcher"
-                : "'" + signedIn + "' (currently signed in to Epic Games Launcher)";
-            var choice = new CustomMessageBox("Replace Saved Sign-In",
-                "Replace the saved sign-in of '" + acc.Name + "' with " + source + "?\n\nThe old saved sign-in of '" + acc.Name + "' is overwritten and can't be brought back. Its name, avatar and notes are kept.",
-                "Replace", "Cancel", null, MessageBoxVisualStyle.Danger).ShowDialog();
+            var question = string.IsNullOrWhiteSpace(signedIn)
+                ? L.T("Replace the saved sign-in of '{0}' with the account currently signed in to Epic Games Launcher?", acc.Name)
+                : L.T("Replace the saved sign-in of '{0}' with '{1}' (currently signed in to Epic Games Launcher)?", acc.Name, signedIn);
+            var choice = new CustomMessageBox(L.T("Replace Saved Sign-In"),
+                question + "\n\n" + L.T("The old saved sign-in of '{0}' is overwritten and can't be brought back. Its name, avatar and notes are kept.", acc.Name),
+                L.T("Replace"), L.T("Cancel"), null, MessageBoxVisualStyle.Danger).ShowDialog();
             if (choice != true || IsBusy) return;
 
-            var cancellationToken = BeginBusyOperation("Replacing the saved sign-in of " + acc.Name + "…");
+            var cancellationToken = BeginBusyOperation(L.T("Replacing the saved sign-in of {0}…", acc.Name));
             try
             {
                 var result = await AccountService.CaptureCurrentAccount(
@@ -689,17 +820,17 @@ namespace Epic_Games_Account_Switcher_Client
 
                 if (result.Item1)
                 {
-                    ShowToast("Saved sign-in of '" + acc.Name + "' replaced.");
+                    ShowToast(L.T("Saved sign-in of '{0}' replaced.", acc.Name));
                     await LoadAccountsAsync();
                 }
                 else if (result.Item2 != null)
                 {
-                    Application.Current.Dispatcher.Invoke(() => new CustomMessageBox("Sign-In Not Replaced", result.Item2, MessageBoxVisualStyle.Error).ShowDialog());
+                    Application.Current.Dispatcher.Invoke(() => new CustomMessageBox(L.T("Sign-In Not Replaced"), result.Item2, MessageBoxVisualStyle.Error).ShowDialog());
                 }
             }
             catch (OperationCanceledException)
             {
-                ShowToast("Cancelled. The saved sign-in was not changed.");
+                ShowToast(L.T("Cancelled. The saved sign-in was not changed."));
             }
             finally
             {
@@ -723,7 +854,7 @@ namespace Epic_Games_Account_Switcher_Client
             // Only confirm once the file is really written; on failure the card shows the stored values again.
             if (await QueueAccountWrite(() => AccountService.SaveAccounts(snapshot), false))
             {
-                ShowToast("Changes to '" + acc.Name + "' saved.");
+                ShowToast(L.T("Changes to '{0}' saved.", acc.Name));
                 return;
             }
             acc.Name = before.Name;
@@ -731,29 +862,29 @@ namespace Epic_Games_Account_Switcher_Client
             acc.Email = before.Email;
             acc.ProfileImagePath = before.ProfileImagePath;
             acc.Password = before.Password;
-            new CustomMessageBox("Changes Not Saved", "Your changes to '" + win.AccountName + "' could not be saved, so the previous details were kept. Check that the drive has free space, then try again.\n\nUse SHOW LOGS for details.", MessageBoxVisualStyle.Error).ShowDialog();
+            new CustomMessageBox(L.T("Changes Not Saved"), L.T("Your changes to '{0}' could not be saved, so the previous details were kept. Check that the drive has free space, then try again.\n\nUse SHOW LOGS for details.", win.AccountName), MessageBoxVisualStyle.Error).ShowDialog();
         }
 
         private async Task DeleteAccount(Account acc)
         {
             if (acc == null || IsBusy) return;
-            var confirm = new CustomMessageBox("Delete Account",
-                "Delete '" + acc.Name + "'?\n\nThis permanently removes the account and its saved Epic sign-in from this PC. Your Epic Games account itself is not affected.\n\nThis can't be undone unless you restore a backup.",
-                "Delete", "Cancel", null, MessageBoxVisualStyle.Danger);
+            var confirm = new CustomMessageBox(L.T("Delete Account"),
+                L.T("Delete '{0}'?\n\nThis permanently removes the account and its saved Epic sign-in from this PC. Your Epic Games account itself is not affected.\n\nThis can't be undone unless you restore a backup.", acc.Name),
+                L.T("Delete"), L.T("Cancel"), null, MessageBoxVisualStyle.Danger);
             if (confirm.ShowDialog() != true || IsBusy) return;
 
-            BeginBusyOperation("Deleting " + acc.Name + "…", false);
+            BeginBusyOperation(L.T("Deleting {0}…", acc.Name), false);
             try
             {
                 var id = acc.Id;
                 if (await QueueAccountWrite(() => AccountService.DeleteAccount(id), false))
                 {
                     Accounts.Remove(acc);
-                    ShowToast("'" + acc.Name + "' deleted.");
+                    ShowToast(L.T("'{0}' deleted.", acc.Name));
                 }
                 else
                 {
-                    new CustomMessageBox("Delete Failed", "'" + acc.Name + "' could not be deleted. Close any program that might be using its files, then try again.\n\nUse SHOW LOGS for details.", MessageBoxVisualStyle.Error).ShowDialog();
+                    new CustomMessageBox(L.T("Delete Failed"), L.T("'{0}' could not be deleted. Close any program that might be using its files, then try again.\n\nUse SHOW LOGS for details.", acc.Name), MessageBoxVisualStyle.Error).ShowDialog();
                 }
             }
             finally
@@ -789,7 +920,7 @@ namespace Epic_Games_Account_Switcher_Client
 
             _undoAccountOrder = previousOrder == null ? null : previousOrder.ToList();
             QueueAccountWrite(() => AccountService.SaveAccounts(currentOrder));
-            ShowToast("Account order updated.", _undoAccountOrder != null);
+            ShowToast(L.T("Account order updated."), _undoAccountOrder != null);
             return true;
         }
 
@@ -801,7 +932,7 @@ namespace Epic_Games_Account_Switcher_Client
             foreach (var account in restoreOrder) Accounts.Add(account);
             QueueSaveAccounts();
             _undoAccountOrder = null;
-            ShowToast("Account order restored.");
+            ShowToast(L.T("Account order restored."));
         }
 
         private static bool HasAccountOrderChanged(IList<Account> previousOrder, IList<Account> currentOrder)
@@ -839,19 +970,26 @@ namespace Epic_Games_Account_Switcher_Client
         /// <summary>Plain-language reason for a backup/restore failure (technical details go to the log).</summary>
         private static string DescribeBackupError(Exception ex)
         {
-            if (ex is AccountService.BackupPasswordInvalidException) return "The password is not correct for this backup. Passwords are case-sensitive.";
-            if (ex is System.IO.FileNotFoundException) return "The backup file could not be found. It may have been moved or deleted.";
-            if (ex is System.IO.InvalidDataException) return "This file is not a valid Epic Switcher backup, or it is damaged.";
-            if (ex is UnauthorizedAccessException) return "Windows denied access to the file or folder. Choose a folder you can write to, such as Documents or Downloads.";
-            if (ex is System.IO.IOException) return "The file could not be read or written. Make sure it isn't open in another program and that the drive has free space.";
-            return "Something unexpected went wrong.";
+            if (ex is AccountService.BackupPasswordInvalidException) return L.T("The password is not correct for this backup. Passwords are case-sensitive.");
+            if (ex is System.IO.FileNotFoundException) return L.T("The backup file could not be found. It may have been moved or deleted.");
+            if (ex is System.IO.InvalidDataException) return L.T("This file is not a valid Epic Switcher backup, or it is damaged.");
+            if (ex is UnauthorizedAccessException) return L.T("Windows denied access to the file or folder. Choose a folder you can write to, such as Documents or Downloads.");
+            if (ex is System.IO.IOException) return L.T("The file could not be read or written. Make sure it isn't open in another program and that the drive has free space.");
+            return L.T("Something unexpected went wrong.");
         }
 
         private async Task PerformBackup()
         {
+            // An empty backup would wipe the account list if it were restored later.
+            if (!HasAccounts)
+            {
+                ShowToast(L.T("Nothing to back up yet. Add an account first."));
+                return;
+            }
+
             var sfd = new Microsoft.Win32.SaveFileDialog
             {
-                Filter = "Encrypted Epic Switcher Backup (*.egbackup)|*.egbackup",
+                Filter = L.T("Encrypted Epic Switcher Backup") + " (*.egbackup)|*.egbackup",
                 FileName = "Epic_Accounts_Backup_" + DateTime.Now.ToString("yyyyMMdd") + ".egbackup",
                 InitialDirectory = GetBackupStartFolder()
             };
@@ -860,13 +998,13 @@ namespace Epic_Games_Account_Switcher_Client
             {
                 RememberBackupFolder(sfd.FileName);
                 var passwordWindow = new PasswordPromptWindow(
-                    "Encrypt Backup",
-                    "Choose a password for this backup (at least 8 characters). You'll need it to restore these accounts on any PC, and it can't be recovered if you forget it.",
+                    L.T("Encrypt Backup"),
+                    L.T("Choose a password for this backup (at least 8 characters). You'll need it to restore these accounts on any PC, and it can't be recovered if you forget it."),
                     true,
                     8) { Owner = Application.Current.MainWindow };
                 if (passwordWindow.ShowDialog() != true) return;
 
-                var cancellationToken = BeginBusyOperation("Creating backup…");
+                var cancellationToken = BeginBusyOperation(L.T("Creating backup…"));
                 var succeeded = false;
                 try
                 {
@@ -875,12 +1013,12 @@ namespace Epic_Games_Account_Switcher_Client
                 }
                 catch (OperationCanceledException)
                 {
-                    ShowToast("Backup cancelled.");
+                    ShowToast(L.T("Backup cancelled."));
                 }
                 catch (Exception ex)
                 {
                     Globals.WriteToLog("Backup failed", ex);
-                    new CustomMessageBox("Backup Failed", "The backup could not be created. " + DescribeBackupError(ex) + "\n\nUse SHOW LOGS for details.", MessageBoxVisualStyle.Error).ShowDialog();
+                    new CustomMessageBox(L.T("Backup Failed"), L.T("The backup could not be created. {0}\n\nUse SHOW LOGS for details.", DescribeBackupError(ex)), MessageBoxVisualStyle.Error).ShowDialog();
                 }
                 finally
                 {
@@ -889,9 +1027,11 @@ namespace Epic_Games_Account_Switcher_Client
 
                 if (!succeeded) return;
                 var count = Accounts == null ? 0 : Accounts.Count;
-                var done = new CustomMessageBox("Backup Saved",
-                    (count == 1 ? "1 account was" : count + " accounts were") + " saved to:\n" + sfd.FileName + "\n\nKeep the password somewhere safe. Without it this backup can't be restored.",
-                    "Open Folder", "Close", null, MessageBoxVisualStyle.Success);
+                var done = new CustomMessageBox(L.T("Backup Saved"),
+                    (count == 1
+                        ? L.T("1 account was saved to:\n{0}\n\nKeep the password somewhere safe. Without it this backup can't be restored.", sfd.FileName)
+                        : L.T("{0} accounts were saved to:\n{1}\n\nKeep the password somewhere safe. Without it this backup can't be restored.", count, sfd.FileName)),
+                    L.T("Open Folder"), L.T("Close"), null, MessageBoxVisualStyle.Success);
                 done.ShowDialog();
                 if (done.Result == CustomDialogResult.Primary)
                 {
@@ -905,7 +1045,7 @@ namespace Epic_Games_Account_Switcher_Client
         {
             var ofd = new Microsoft.Win32.OpenFileDialog
             {
-                Filter = "Epic Switcher Backup (*.egbackup;*.zip)|*.egbackup;*.zip|All Files (*.*)|*.*",
+                Filter = L.T("Epic Switcher Backup") + " (*.egbackup;*.zip)|*.egbackup;*.zip|" + L.T("All Files") + " (*.*)|*.*",
                 InitialDirectory = GetBackupStartFolder()
             };
 
@@ -915,14 +1055,14 @@ namespace Epic_Games_Account_Switcher_Client
             var currentCount = Accounts == null ? 0 : Accounts.Count;
             if (currentCount > 0)
             {
-                var confirm = new CustomMessageBox("Replace Saved Accounts?",
-                    "Restoring replaces all " + (currentCount == 1 ? "1 saved account" : currentCount + " saved accounts") + " on this PC with the accounts in:\n" + System.IO.Path.GetFileName(ofd.FileName) +
-                    "\n\nAccounts you added or changed after this backup was made will be lost. Click BACKUP first if you want to keep them.",
-                    "Replace My Accounts", "Cancel", null, MessageBoxVisualStyle.Danger);
+                var savedText = currentCount == 1 ? L.T("1 saved account") : L.T("{0} saved accounts", currentCount);
+                var confirm = new CustomMessageBox(L.T("Replace Saved Accounts?"),
+                    L.T("Restoring replaces all your accounts on this PC ({0}) with the accounts in:\n{1}\n\nAccounts you added or changed after this backup was made will be lost. Click BACKUP first if you want to keep them.", savedText, System.IO.Path.GetFileName(ofd.FileName)),
+                    L.T("Replace My Accounts"), L.T("Cancel"), null, MessageBoxVisualStyle.Danger);
                 if (confirm.ShowDialog() != true) return;
             }
 
-            var cancellationToken = BeginBusyOperation("Restoring backup…");
+            var cancellationToken = BeginBusyOperation(L.T("Restoring backup…"));
             try
             {
                 try
@@ -931,10 +1071,10 @@ namespace Epic_Games_Account_Switcher_Client
                 }
                 catch (AccountService.BackupPasswordRequiredException)
                 {
-                    var message = "This backup is password-protected. Enter the password that was chosen when it was created.";
+                    var message = L.T("This backup is password-protected. Enter the password that was chosen when it was created.");
                     while (true)
                     {
-                        var passwordWindow = new PasswordPromptWindow("Restore Backup", message, false, 1) { Owner = Application.Current.MainWindow };
+                        var passwordWindow = new PasswordPromptWindow(L.T("Restore Backup"), message, false, 1) { Owner = Application.Current.MainWindow };
                         if (passwordWindow.ShowDialog() != true) throw new OperationCanceledException();
                         try
                         {
@@ -943,22 +1083,22 @@ namespace Epic_Games_Account_Switcher_Client
                         }
                         catch (AccountService.BackupPasswordInvalidException)
                         {
-                            message = "That password is not correct for this backup (passwords are case-sensitive). Try again, or cancel.";
+                            message = L.T("That password is not correct for this backup (passwords are case-sensitive). Try again, or cancel.");
                         }
                     }
                 }
                 await LoadAccountsAsync();
                 var restored = Accounts == null ? 0 : Accounts.Count;
-                ShowToast("Restore complete: " + (restored == 1 ? "1 account" : restored + " accounts") + " restored.");
+                ShowToast(restored == 1 ? L.T("Restore complete: 1 account restored.") : L.T("Restore complete: {0} accounts restored.", restored));
             }
             catch (OperationCanceledException)
             {
-                ShowToast("Restore cancelled. Your saved accounts were not changed.");
+                ShowToast(L.T("Restore cancelled. Your saved accounts were not changed."));
             }
             catch (Exception ex)
             {
                 Globals.WriteToLog("Restore failed", ex);
-                new CustomMessageBox("Restore Failed", "The backup could not be restored. " + DescribeBackupError(ex) + "\n\nUse SHOW LOGS for details.", MessageBoxVisualStyle.Error).ShowDialog();
+                new CustomMessageBox(L.T("Restore Failed"), L.T("The backup could not be restored. {0}\n\nUse SHOW LOGS for details.", DescribeBackupError(ex)), MessageBoxVisualStyle.Error).ShowDialog();
             }
             finally
             {
@@ -1024,7 +1164,7 @@ namespace Epic_Games_Account_Switcher_Client
 
     public class AsyncRelayCommand : ICommand
     {
-        internal const string CommandErrorMessage = "That action couldn't be completed because of an unexpected problem. Try again. If it keeps happening, use SHOW LOGS for details.";
+        internal static string CommandErrorMessage => L.T("That action couldn't be completed because of an unexpected problem. Try again. If it keeps happening, use SHOW LOGS for details.");
 
         private readonly Func<Task> _execute;
         private readonly Func<bool> _canExecute;
@@ -1052,7 +1192,7 @@ namespace Epic_Games_Account_Switcher_Client
                 Globals.WriteToLog("Unhandled async command error", ex);
                 if (Application.Current?.Dispatcher != null)
                 {
-                    Application.Current.Dispatcher.Invoke(() => new CustomMessageBox("Action Failed", AsyncRelayCommand.CommandErrorMessage, MessageBoxVisualStyle.Error).ShowDialog());
+                    Application.Current.Dispatcher.Invoke(() => new CustomMessageBox(L.T("Action Failed"), AsyncRelayCommand.CommandErrorMessage, MessageBoxVisualStyle.Error).ShowDialog());
                 }
             }
             finally
@@ -1097,7 +1237,7 @@ namespace Epic_Games_Account_Switcher_Client
                 Globals.WriteToLog("Unhandled async command error", ex);
                 if (Application.Current?.Dispatcher != null)
                 {
-                    Application.Current.Dispatcher.Invoke(() => new CustomMessageBox("Action Failed", AsyncRelayCommand.CommandErrorMessage, MessageBoxVisualStyle.Error).ShowDialog());
+                    Application.Current.Dispatcher.Invoke(() => new CustomMessageBox(L.T("Action Failed"), AsyncRelayCommand.CommandErrorMessage, MessageBoxVisualStyle.Error).ShowDialog());
                 }
             }
             finally

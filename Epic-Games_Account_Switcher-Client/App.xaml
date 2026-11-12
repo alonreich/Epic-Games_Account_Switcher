@@ -16,6 +16,9 @@
         <SolidColorBrush x:Key="BtnForeground" Color="White" />
         <SolidColorBrush x:Key="BtnBorder" Color="#414868" />
         <SolidColorBrush x:Key="BtnBorderHover" Color="#7AA2F7" />
+        <!-- Outline of unchecked boxes and text fields: at least 3:1 against every surface it sits on (WCAG 1.4.11). -->
+        <SolidColorBrush x:Key="InputBorder" Color="#737AA2" />
+        <SolidColorBrush x:Key="ChromeHoverForeground" Color="White" />
         <SolidColorBrush x:Key="MinBackground" Color="Transparent" />
         <SolidColorBrush x:Key="MinBackgroundHover" Color="#2D2D30" />
         <SolidColorBrush x:Key="MinBackgroundActive" Color="#3E3E42" />
@@ -58,7 +61,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextForeground}" />
+                                <Setter Property="Foreground" Value="{DynamicResource ChromeHoverForeground}" />
                                 <Setter Property="Background" Value="{DynamicResource CloseBackgroundHover}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
@@ -90,6 +93,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource ChromeHoverForeground}" />
                                 <Setter Property="Background" Value="{DynamicResource MinBackgroundHover}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
@@ -236,7 +240,7 @@
         <Style x:Key="WatermarkTextBoxStyle" TargetType="TextBox">
             <Setter Property="Background" Value="{DynamicResource BtnBackgroundActive}"/>
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextForeground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BtnBorder}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -262,6 +266,10 @@
                                 <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource IconFill}"/>
                                 <Setter TargetName="border" Property="BorderThickness" Value="2"/>
                             </Trigger>
+                            <Trigger Property="Validation.HasError" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource WarningForeground}"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                            </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.55"/>
                             </Trigger>
@@ -275,7 +283,7 @@
         <ControlTemplate x:Key="InlineErrorTemplate">
             <StackPanel>
                 <AdornedElementPlaceholder/>
-                <TextBlock Text="{Binding [0].ErrorContent}" Foreground="{DynamicResource WarningForeground}" FontSize="11" Margin="2,4,0,0" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding [0].ErrorContent}" Foreground="{DynamicResource WarningForeground}" FontSize="12" Margin="2,4,0,0" FontWeight="SemiBold"/>
             </StackPanel>
         </ControlTemplate>
 
@@ -283,7 +291,7 @@
         <Style TargetType="PasswordBox">
             <Setter Property="Background" Value="{DynamicResource BtnBackgroundActive}"/>
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextForeground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BtnBorder}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12"/>
             <Setter Property="FontSize" Value="14"/>
@@ -325,7 +333,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Border x:Name="Box" Width="18" Height="18" CornerRadius="4" BorderThickness="1" Margin="0,1,0,0" VerticalAlignment="Top"
-                                    BorderBrush="{DynamicResource BtnBorder}" Background="{DynamicResource BtnBackgroundActive}">
+                                    BorderBrush="{DynamicResource InputBorder}" Background="{DynamicResource BtnBackgroundActive}">
                                 <Path x:Name="Check" Data="M 3,8 L 7,12 L 14,4" Stroke="{DynamicResource OnAccentForeground}" StrokeThickness="2" Visibility="Collapsed"/>
                             </Border>
                             <ContentPresenter Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>

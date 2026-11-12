@@ -1,0 +1,1381 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="&quot;{0}&quot; is still running.&#xA;&#xA;Closing now could leave Epic Games Launcher half-switched. Wait for it to finish, or cancel it and close once it has stopped safely." xml:space="preserve">
+    <value>"{0}" is still running.
+
+Closing now could leave Epic Games Launcher half-switched. Wait for it to finish, or cancel it and close once it has stopped safely.</value>
+  </data>
+  <data name="'{0}' could not be deleted. Close any program that might be using its files, then try again.&#xA;&#xA;Use SHOW LOGS for details." xml:space="preserve">
+    <value>'{0}' could not be deleted. Close any program that might be using its files, then try again.
+
+Use SHOW LOGS for details.</value>
+  </data>
+  <data name="'{0}' deleted." xml:space="preserve">
+    <value>'{0}' deleted.</value>
+  </data>
+  <data name="'{0}' is already saved for this Epic account.&#xA;&#xA;Replace its saved sign-in and details with the current login? The old saved sign-in can't be brought back." xml:space="preserve">
+    <value>'{0}' is already saved for this Epic account.
+
+Replace its saved sign-in and details with the current login? The old saved sign-in can't be brought back.</value>
+  </data>
+  <data name="'{0}' is already the active account in Epic Games Launcher." xml:space="preserve">
+    <value>'{0}' is already the active account in Epic Games Launcher.</value>
+  </data>
+  <data name="'{0}' is already the active account. Opening Epic Games Launcher…" xml:space="preserve">
+    <value>'{0}' is already the active account. Opening Epic Games Launcher…</value>
+  </data>
+  <data name="+ ADD SIGNED-IN ACCOUNT" xml:space="preserve">
+    <value>+ ADD SIGNED-IN ACCOUNT</value>
+  </data>
+  <data name="+ SAVE SIGNED-IN ACCOUNT" xml:space="preserve">
+    <value>+ SAVE SIGNED-IN ACCOUNT</value>
+  </data>
+  <data name="1 account was saved to:&#xA;{0}&#xA;&#xA;Keep the password somewhere safe. Without it this backup can't be restored." xml:space="preserve">
+    <value>1 account was saved to:
+{0}
+
+Keep the password somewhere safe. Without it this backup can't be restored.</value>
+  </data>
+  <data name="1 saved account" xml:space="preserve">
+    <value>1 saved account</value>
+  </data>
+  <data name="1 switch" xml:space="preserve">
+    <value>1 switch</value>
+  </data>
+  <data name="A backup of your accounts was saved to:&#xA;{0}" xml:space="preserve">
+    <value>A backup of your accounts was saved to:
+{0}</value>
+  </data>
+  <data name="A copy of the file was kept here:&#xA;{0}" xml:space="preserve">
+    <value>A copy of the file was kept here:
+{0}</value>
+  </data>
+  <data name="A different account is signed in to Epic Games Launcher. Sign in to the account you want to save, then try again." xml:space="preserve">
+    <value>A different account is signed in to Epic Games Launcher. Sign in to the account you want to save, then try again.</value>
+  </data>
+  <data name="ACTIVE NOW" xml:space="preserve">
+    <value>ACTIVE NOW</value>
+  </data>
+  <data name="ADD ACCOUNT" xml:space="preserve">
+    <value>ADD ACCOUNT</value>
+  </data>
+  <data name="Account '{0}' saved." xml:space="preserve">
+    <value>Account '{0}' saved.</value>
+  </data>
+  <data name="Account Not Saved" xml:space="preserve">
+    <value>Account Not Saved</value>
+  </data>
+  <data name="Account order restored." xml:space="preserve">
+    <value>Account order restored.</value>
+  </data>
+  <data name="Account order updated." xml:space="preserve">
+    <value>Account order updated.</value>
+  </data>
+  <data name="Account saved. Click its card to switch to it." xml:space="preserve">
+    <value>Account saved. Click its card to switch to it.</value>
+  </data>
+  <data name="Action Failed" xml:space="preserve">
+    <value>Action Failed</value>
+  </data>
+  <data name="Add the account signed in to Epic Games Launcher" xml:space="preserve">
+    <value>Add the account signed in to Epic Games Launcher</value>
+  </data>
+  <data name="Administrator Required" xml:space="preserve">
+    <value>Administrator Required</value>
+  </data>
+  <data name="After a switch the launcher reopens with the size and position it had just before. Turn off to let every account bring back its own launcher window size and position." xml:space="preserve">
+    <value>After a switch the launcher reopens with the size and position it had just before. Turn off to let every account bring back its own launcher window size and position.</value>
+  </data>
+  <data name="All Files" xml:space="preserve">
+    <value>All Files</value>
+  </data>
+  <data name="Already Running" xml:space="preserve">
+    <value>Already Running</value>
+  </data>
+  <data name="An Epic account" xml:space="preserve">
+    <value>An Epic account</value>
+  </data>
+  <data name="An Epic account is signed in but not saved yet." xml:space="preserve">
+    <value>An Epic account is signed in but not saved yet.</value>
+  </data>
+  <data name="An operation" xml:space="preserve">
+    <value>An operation</value>
+  </data>
+  <data name="Another installation is already in progress. Please wait for it to finish." xml:space="preserve">
+    <value>Another installation is already in progress. Please wait for it to finish.</value>
+  </data>
+  <data name="Another operation is still running. Try again when it has finished." xml:space="preserve">
+    <value>Another operation is still running. Try again when it has finished.</value>
+  </data>
+  <data name="Another saved account already uses this email." xml:space="preserve">
+    <value>Another saved account already uses this email.</value>
+  </data>
+  <data name="Another saved account already uses this name." xml:space="preserve">
+    <value>Another saved account already uses this name.</value>
+  </data>
+  <data name="Avatar {0}" xml:space="preserve">
+    <value>Avatar {0}</value>
+  </data>
+  <data name="Avatars" xml:space="preserve">
+    <value>Avatars</value>
+  </data>
+  <data name="BACKUP" xml:space="preserve">
+    <value>BACKUP</value>
+  </data>
+  <data name="Backup Failed" xml:space="preserve">
+    <value>Backup Failed</value>
+  </data>
+  <data name="Backup Password" xml:space="preserve">
+    <value>Backup Password</value>
+  </data>
+  <data name="Backup Saved" xml:space="preserve">
+    <value>Backup Saved</value>
+  </data>
+  <data name="Backup cancelled." xml:space="preserve">
+    <value>Backup cancelled.</value>
+  </data>
+  <data name="CANCEL DOWNLOAD" xml:space="preserve">
+    <value>CANCEL DOWNLOAD</value>
+  </data>
+  <data name="CONTINUE" xml:space="preserve">
+    <value>CONTINUE</value>
+  </data>
+  <data name="COPIED" xml:space="preserve">
+    <value>COPIED</value>
+  </data>
+  <data name="COPY" xml:space="preserve">
+    <value>COPY</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Cancel It and Close" xml:space="preserve">
+    <value>Cancel It and Close</value>
+  </data>
+  <data name="Cancel Setup" xml:space="preserve">
+    <value>Cancel Setup</value>
+  </data>
+  <data name="Cancel current operation" xml:space="preserve">
+    <value>Cancel current operation</value>
+  </data>
+  <data name="Cancel the current operation." xml:space="preserve">
+    <value>Cancel the current operation.</value>
+  </data>
+  <data name="Cancel update download" xml:space="preserve">
+    <value>Cancel update download</value>
+  </data>
+  <data name="Cancelled. The account was not saved." xml:space="preserve">
+    <value>Cancelled. The account was not saved.</value>
+  </data>
+  <data name="Cancelled. The saved sign-in was not changed." xml:space="preserve">
+    <value>Cancelled. The saved sign-in was not changed.</value>
+  </data>
+  <data name="Cancelling…" xml:space="preserve">
+    <value>Cancelling…</value>
+  </data>
+  <data name="Capturing session..." xml:space="preserve">
+    <value>Capturing session...</value>
+  </data>
+  <data name="Change this account's name, email, avatar, saved password or notes." xml:space="preserve">
+    <value>Change this account's name, email, avatar, saved password or notes.</value>
+  </data>
+  <data name="Changes Not Saved" xml:space="preserve">
+    <value>Changes Not Saved</value>
+  </data>
+  <data name="Changes to '{0}' saved." xml:space="preserve">
+    <value>Changes to '{0}' saved.</value>
+  </data>
+  <data name="Check GitHub for a newer version right now." xml:space="preserve">
+    <value>Check GitHub for a newer version right now.</value>
+  </data>
+  <data name="Check for updates automatically" xml:space="preserve">
+    <value>Check for updates automatically</value>
+  </data>
+  <data name="Check for updates automatically (once a day)" xml:space="preserve">
+    <value>Check for updates automatically (once a day)</value>
+  </data>
+  <data name="Check for updates now" xml:space="preserve">
+    <value>Check for updates now</value>
+  </data>
+  <data name="Check the details and save (Enter)" xml:space="preserve">
+    <value>Check the details and save (Enter)</value>
+  </data>
+  <data name="Checking for updates…" xml:space="preserve">
+    <value>Checking for updates…</value>
+  </data>
+  <data name="Checks GitHub for a newer version at most once a day. Nothing is downloaded or installed without your click." xml:space="preserve">
+    <value>Checks GitHub for a newer version at most once a day. Nothing is downloaded or installed without your click.</value>
+  </data>
+  <data name="Choose Avatar" xml:space="preserve">
+    <value>Choose Avatar</value>
+  </data>
+  <data name="Choose a password for this backup (at least 8 characters). You'll need it to restore these accounts on any PC, and it can't be recovered if you forget it." xml:space="preserve">
+    <value>Choose a password for this backup (at least 8 characters). You'll need it to restore these accounts on any PC, and it can't be recovered if you forget it.</value>
+  </data>
+  <data name="Choose an avatar" xml:space="preserve">
+    <value>Choose an avatar</value>
+  </data>
+  <data name="Clean Install" xml:space="preserve">
+    <value>Clean Install</value>
+  </data>
+  <data name="Click an avatar to select it, or double-click to use it right away." xml:space="preserve">
+    <value>Click an avatar to select it, or double-click to use it right away.</value>
+  </data>
+  <data name="Click to switch. Right-click, the ⋯ button or the Menu key opens edit, reorder and delete. Arrow keys move between accounts." xml:space="preserve">
+    <value>Click to switch. Right-click, the ⋯ button or the Menu key opens edit, reorder and delete. Arrow keys move between accounts.</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Close (keeps running in the notification area)" xml:space="preserve">
+    <value>Close (keeps running in the notification area)</value>
+  </data>
+  <data name="Close message" xml:space="preserve">
+    <value>Close message</value>
+  </data>
+  <data name="Close the app completely, even when it is set to keep running in the notification area." xml:space="preserve">
+    <value>Close the app completely, even when it is set to keep running in the notification area.</value>
+  </data>
+  <data name="Close this app after switching" xml:space="preserve">
+    <value>Close this app after switching</value>
+  </data>
+  <data name="Close window" xml:space="preserve">
+    <value>Close window</value>
+  </data>
+  <data name="Close without adding an account (Esc)" xml:space="preserve">
+    <value>Close without adding an account (Esc)</value>
+  </data>
+  <data name="Close without saving (Esc)" xml:space="preserve">
+    <value>Close without saving (Esc)</value>
+  </data>
+  <data name="Closes Epic Games Launcher and restores this account's saved sign-in again. Use it when the launcher asks you to sign in." xml:space="preserve">
+    <value>Closes Epic Games Launcher and restores this account's saved sign-in again. Use it when the launcher asks you to sign in.</value>
+  </data>
+  <data name="Closing Epic Games..." xml:space="preserve">
+    <value>Closing Epic Games...</value>
+  </data>
+  <data name="Closing or minimizing hides the window to the notification area (next to the clock), where you can switch accounts from the icon's menu." xml:space="preserve">
+    <value>Closing or minimizing hides the window to the notification area (next to the clock), where you can switch accounts from the icon's menu.</value>
+  </data>
+  <data name="Confirm password" xml:space="preserve">
+    <value>Confirm password</value>
+  </data>
+  <data name="Copies this account's saved password so you can paste it when Epic Games asks you to sign in. It is removed from the clipboard after 30 seconds." xml:space="preserve">
+    <value>Copies this account's saved password so you can paste it when Epic Games asks you to sign in. It is removed from the clipboard after 30 seconds.</value>
+  </data>
+  <data name="Copy password" xml:space="preserve">
+    <value>Copy password</value>
+  </data>
+  <data name="Copy the password. It is removed from the clipboard again after 30 seconds." xml:space="preserve">
+    <value>Copy the password. It is removed from the clipboard again after 30 seconds.</value>
+  </data>
+  <data name="Could not reach the update server." xml:space="preserve">
+    <value>Could not reach the update server.</value>
+  </data>
+  <data name="Could not switch to {0}. Open the app for details." xml:space="preserve">
+    <value>Could not switch to {0}. Open the app for details.</value>
+  </data>
+  <data name="Couldn't switch to '{0}'.&#xA;&#xA;Reason: {1}&#xA;&#xA;Try again. If it keeps failing, use SHOW LOGS and include the log when reporting the problem." xml:space="preserve">
+    <value>Couldn't switch to '{0}'.
+
+Reason: {1}
+
+Try again. If it keeps failing, use SHOW LOGS and include the log when reporting the problem.</value>
+  </data>
+  <data name="Couldn't switch to '{0}'.&#xA;&#xA;Try again. If it keeps failing, use SHOW LOGS and include the log when reporting the problem." xml:space="preserve">
+    <value>Couldn't switch to '{0}'.
+
+Try again. If it keeps failing, use SHOW LOGS and include the log when reporting the problem.</value>
+  </data>
+  <data name="Create backup" xml:space="preserve">
+    <value>Create backup</value>
+  </data>
+  <data name="Creating backup…" xml:space="preserve">
+    <value>Creating backup…</value>
+  </data>
+  <data name="DELETE…" xml:space="preserve">
+    <value>DELETE…</value>
+  </data>
+  <data name="DISMISS" xml:space="preserve">
+    <value>DISMISS</value>
+  </data>
+  <data name="DOWNLOADING… {0:0}%" xml:space="preserve">
+    <value>DOWNLOADING… {0:0}%</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Delete '{0}'?&#xA;&#xA;This permanently removes the account and its saved Epic sign-in from this PC. Your Epic Games account itself is not affected.&#xA;&#xA;This can't be undone unless you restore a backup." xml:space="preserve">
+    <value>Delete '{0}'?
+
+This permanently removes the account and its saved Epic sign-in from this PC. Your Epic Games account itself is not affected.
+
+This can't be undone unless you restore a backup.</value>
+  </data>
+  <data name="Delete Account" xml:space="preserve">
+    <value>Delete Account</value>
+  </data>
+  <data name="Delete All Accounts?" xml:space="preserve">
+    <value>Delete All Accounts?</value>
+  </data>
+  <data name="Delete Everything" xml:space="preserve">
+    <value>Delete Everything</value>
+  </data>
+  <data name="Delete Failed" xml:space="preserve">
+    <value>Delete Failed</value>
+  </data>
+  <data name="Delete My Accounts Permanently" xml:space="preserve">
+    <value>Delete My Accounts Permanently</value>
+  </data>
+  <data name="Delete Permanently" xml:space="preserve">
+    <value>Delete Permanently</value>
+  </data>
+  <data name="Deleting {0}…" xml:space="preserve">
+    <value>Deleting {0}…</value>
+  </data>
+  <data name="Discard Changes" xml:space="preserve">
+    <value>Discard Changes</value>
+  </data>
+  <data name="Discard Changes?" xml:space="preserve">
+    <value>Discard Changes?</value>
+  </data>
+  <data name="Dismiss signed-in account suggestion" xml:space="preserve">
+    <value>Dismiss signed-in account suggestion</value>
+  </data>
+  <data name="Display name *" xml:space="preserve">
+    <value>Display name *</value>
+  </data>
+  <data name="Don't offer to save this account again." xml:space="preserve">
+    <value>Don't offer to save this account again.</value>
+  </data>
+  <data name="Don't remind me about this version again." xml:space="preserve">
+    <value>Don't remind me about this version again.</value>
+  </data>
+  <data name="Download and verify the update. You confirm before anything is installed." xml:space="preserve">
+    <value>Download and verify the update. You confirm before anything is installed.</value>
+  </data>
+  <data name="Downloading and verifying… {0:0}%" xml:space="preserve">
+    <value>Downloading and verifying… {0:0}%</value>
+  </data>
+  <data name="EDIT ACCOUNT" xml:space="preserve">
+    <value>EDIT ACCOUNT</value>
+  </data>
+  <data name="EDIT…" xml:space="preserve">
+    <value>EDIT…</value>
+  </data>
+  <data name="EPIC GAMES LAUNCHER" xml:space="preserve">
+    <value>EPIC GAMES LAUNCHER</value>
+  </data>
+  <data name="EXIT APP" xml:space="preserve">
+    <value>EXIT APP</value>
+  </data>
+  <data name="EXPERIMENTAL: when Epic Games Launcher is open, this window wraps around it like a frame with smaller account cards on both sides." xml:space="preserve">
+    <value>EXPERIMENTAL: when Epic Games Launcher is open, this window wraps around it like a frame with smaller account cards on both sides.</value>
+  </data>
+  <data name="Email not detected yet" xml:space="preserve">
+    <value>Email not detected yet</value>
+  </data>
+  <data name="Encrypt Backup" xml:space="preserve">
+    <value>Encrypt Backup</value>
+  </data>
+  <data name="Encrypted Epic Switcher Backup" xml:space="preserve">
+    <value>Encrypted Epic Switcher Backup</value>
+  </data>
+  <data name="Enter a display name." xml:space="preserve">
+    <value>Enter a display name.</value>
+  </data>
+  <data name="Enter the account's email address." xml:space="preserve">
+    <value>Enter the account's email address.</value>
+  </data>
+  <data name="Enter the password." xml:space="preserve">
+    <value>Enter the password.</value>
+  </data>
+  <data name="Epic Account Switcher - {0}" xml:space="preserve">
+    <value>Epic Account Switcher - {0}</value>
+  </data>
+  <data name="Epic Games Account Switcher - Setup" xml:space="preserve">
+    <value>Epic Games Account Switcher - Setup</value>
+  </data>
+  <data name="Epic Games Account Switcher is already running." xml:space="preserve">
+    <value>Epic Games Account Switcher is already running.</value>
+  </data>
+  <data name="Epic Games Account Switcher keeps running here. Click the icon to open it, or right-click and choose Exit to quit." xml:space="preserve">
+    <value>Epic Games Account Switcher keeps running here. Click the icon to open it, or right-click and choose Exit to quit.</value>
+  </data>
+  <data name="Epic Games Account Switcher was removed." xml:space="preserve">
+    <value>Epic Games Account Switcher was removed.</value>
+  </data>
+  <data name="Epic Games Launcher could not be closed. Close it yourself (also from the notification area), then try again." xml:space="preserve">
+    <value>Epic Games Launcher could not be closed. Close it yourself (also from the notification area), then try again.</value>
+  </data>
+  <data name="Epic Games Launcher could not be opened. Open it yourself, then try again." xml:space="preserve">
+    <value>Epic Games Launcher could not be opened. Open it yourself, then try again.</value>
+  </data>
+  <data name="Epic Games Launcher did not finish signing in within 45 seconds. Check your internet connection, then try again." xml:space="preserve">
+    <value>Epic Games Launcher did not finish signing in within 45 seconds. Check your internet connection, then try again.</value>
+  </data>
+  <data name="Epic Games Launcher is now signed in as {0}." xml:space="preserve">
+    <value>Epic Games Launcher is now signed in as {0}.</value>
+  </data>
+  <data name="Epic Games Launcher or one of its helper processes could not be closed." xml:space="preserve">
+    <value>Epic Games Launcher or one of its helper processes could not be closed.</value>
+  </data>
+  <data name="Epic Games Launcher was not found on this PC. Install it, then try again." xml:space="preserve">
+    <value>Epic Games Launcher was not found on this PC. Install it, then try again.</value>
+  </data>
+  <data name="Epic Games Launcher's sign-in looks incomplete or expired. Open Epic Games Launcher, sign in again (tick &quot;Remember me&quot;), then try again." xml:space="preserve">
+    <value>Epic Games Launcher's sign-in looks incomplete or expired. Open Epic Games Launcher, sign in again (tick "Remember me"), then try again.</value>
+  </data>
+  <data name="Epic Switcher Backup" xml:space="preserve">
+    <value>Epic Switcher Backup</value>
+  </data>
+  <data name="Epic account email" xml:space="preserve">
+    <value>Epic account email</value>
+  </data>
+  <data name="Epic account email *" xml:space="preserve">
+    <value>Epic account email *</value>
+  </data>
+  <data name="Existing Installation Detected" xml:space="preserve">
+    <value>Existing Installation Detected</value>
+  </data>
+  <data name="Exit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="Exit Account Switcher once Epic Games Launcher confirms the new account." xml:space="preserve">
+    <value>Exit Account Switcher once Epic Games Launcher confirms the new account.</value>
+  </data>
+  <data name="Exit frame mode" xml:space="preserve">
+    <value>Exit frame mode</value>
+  </data>
+  <data name="Exit the app" xml:space="preserve">
+    <value>Exit the app</value>
+  </data>
+  <data name="GENERAL" xml:space="preserve">
+    <value>GENERAL</value>
+  </data>
+  <data name="HIDE" xml:space="preserve">
+    <value>HIDE</value>
+  </data>
+  <data name="Helps detect the signed-in account, but may show that account as online to friends." xml:space="preserve">
+    <value>Helps detect the signed-in account, but may show that account as online to friends.</value>
+  </data>
+  <data name="Hide password" xml:space="preserve">
+    <value>Hide password</value>
+  </data>
+  <data name="Hide until tomorrow." xml:space="preserve">
+    <value>Hide until tomorrow.</value>
+  </data>
+  <data name="Improvements and fixes." xml:space="preserve">
+    <value>Improvements and fixes.</value>
+  </data>
+  <data name="Install &amp; Restart Now" xml:space="preserve">
+    <value>Install &amp; Restart Now</value>
+  </data>
+  <data name="Install Older {0} Anyway" xml:space="preserve">
+    <value>Install Older {0} Anyway</value>
+  </data>
+  <data name="Installed version" xml:space="preserve">
+    <value>Installed version</value>
+  </data>
+  <data name="Installed version: {0}&#xA;This setup: {1}" xml:space="preserve">
+    <value>Installed version: {0}
+This setup: {1}</value>
+  </data>
+  <data name="Installer Busy" xml:space="preserve">
+    <value>Installer Busy</value>
+  </data>
+  <data name="Just now" xml:space="preserve">
+    <value>Just now</value>
+  </data>
+  <data name="Keep Editing" xml:space="preserve">
+    <value>Keep Editing</value>
+  </data>
+  <data name="Keep Epic Games Launcher in the same place for every account" xml:space="preserve">
+    <value>Keep Epic Games Launcher in the same place for every account</value>
+  </data>
+  <data name="Keep My Accounts" xml:space="preserve">
+    <value>Keep My Accounts</value>
+  </data>
+  <data name="Keep Version {0}" xml:space="preserve">
+    <value>Keep Version {0}</value>
+  </data>
+  <data name="Keep Waiting" xml:space="preserve">
+    <value>Keep Waiting</value>
+  </data>
+  <data name="Keep running in the notification area when closed or minimized" xml:space="preserve">
+    <value>Keep running in the notification area when closed or minimized</value>
+  </data>
+  <data name="Keep the current avatar (Esc)" xml:space="preserve">
+    <value>Keep the current avatar (Esc)</value>
+  </data>
+  <data name="Kept encrypted for your Windows account on this PC, so you can copy it when Epic Games asks you to sign in again. It can't be read on another PC." xml:space="preserve">
+    <value>Kept encrypted for your Windows account on this PC, so you can copy it when Epic Games asks you to sign in again. It can't be read on another PC.</value>
+  </data>
+  <data name="Last used: {0}" xml:space="preserve">
+    <value>Last used: {0}</value>
+  </data>
+  <data name="Later" xml:space="preserve">
+    <value>Later</value>
+  </data>
+  <data name="Launching Epic Games..." xml:space="preserve">
+    <value>Launching Epic Games...</value>
+  </data>
+  <data name="Loading accounts…" xml:space="preserve">
+    <value>Loading accounts…</value>
+  </data>
+  <data name="Log File Unavailable" xml:space="preserve">
+    <value>Log File Unavailable</value>
+  </data>
+  <data name="Looking for the account signed in to Epic Games Launcher…" xml:space="preserve">
+    <value>Looking for the account signed in to Epic Games Launcher…</value>
+  </data>
+  <data name="MOVE EARLIER" xml:space="preserve">
+    <value>MOVE EARLIER</value>
+  </data>
+  <data name="MOVE LATER" xml:space="preserve">
+    <value>MOVE LATER</value>
+  </data>
+  <data name="Make the window larger to zoom in further." xml:space="preserve">
+    <value>Make the window larger to zoom in further.</value>
+  </data>
+  <data name="Maximize" xml:space="preserve">
+    <value>Maximize</value>
+  </data>
+  <data name="Maximize window" xml:space="preserve">
+    <value>Maximize window</value>
+  </data>
+  <data name="Message" xml:space="preserve">
+    <value>Message</value>
+  </data>
+  <data name="Minimize" xml:space="preserve">
+    <value>Minimize</value>
+  </data>
+  <data name="Minimize window" xml:space="preserve">
+    <value>Minimize window</value>
+  </data>
+  <data name="More options (edit, reorder, delete)" xml:space="preserve">
+    <value>More options (edit, reorder, delete)</value>
+  </data>
+  <data name="More options for {0}" xml:space="preserve">
+    <value>More options for {0}</value>
+  </data>
+  <data name="Move this account one position earlier. You can also drag cards to reorder them." xml:space="preserve">
+    <value>Move this account one position earlier. You can also drag cards to reorder them.</value>
+  </data>
+  <data name="Move this account one position later. You can also drag cards to reorder them." xml:space="preserve">
+    <value>Move this account one position later. You can also drag cards to reorder them.</value>
+  </data>
+  <data name="NEW" xml:space="preserve">
+    <value>NEW</value>
+  </data>
+  <data name="NO" xml:space="preserve">
+    <value>NO</value>
+  </data>
+  <data name="Never used" xml:space="preserve">
+    <value>Never used</value>
+  </data>
+  <data name="Newer Version Already Installed" xml:space="preserve">
+    <value>Newer Version Already Installed</value>
+  </data>
+  <data name="No Signed-In Account Found" xml:space="preserve">
+    <value>No Signed-In Account Found</value>
+  </data>
+  <data name="No account is signed in to Epic Games Launcher right now.&#xA;&#xA;Sign in here in a secure window, or open Epic Games Launcher, sign in there, and click ADD SIGNED-IN ACCOUNT again." xml:space="preserve">
+    <value>No account is signed in to Epic Games Launcher right now.
+
+Sign in here in a secure window, or open Epic Games Launcher, sign in there, and click ADD SIGNED-IN ACCOUNT again.</value>
+  </data>
+  <data name="No account is signed in to Epic Games Launcher. Sign in there first, then try again." xml:space="preserve">
+    <value>No account is signed in to Epic Games Launcher. Sign in there first, then try again.</value>
+  </data>
+  <data name="No accounts saved yet" xml:space="preserve">
+    <value>No accounts saved yet</value>
+  </data>
+  <data name="No accounts saved yet." xml:space="preserve">
+    <value>No accounts saved yet.</value>
+  </data>
+  <data name="No password is saved for '{0}'. Add one with EDIT." xml:space="preserve">
+    <value>No password is saved for '{0}'. Add one with EDIT.</value>
+  </data>
+  <data name="No published releases yet." xml:space="preserve">
+    <value>No published releases yet.</value>
+  </data>
+  <data name="No saved accounts yet" xml:space="preserve">
+    <value>No saved accounts yet</value>
+  </data>
+  <data name="Not enough free disk space on {0} to download the update. Free up at least {1} MB and try again." xml:space="preserve">
+    <value>Not enough free disk space on {0} to download the update. Free up at least {1} MB and try again.</value>
+  </data>
+  <data name="Not switched to yet" xml:space="preserve">
+    <value>Not switched to yet</value>
+  </data>
+  <data name="Not used yet" xml:space="preserve">
+    <value>Not used yet</value>
+  </data>
+  <data name="Notes (optional)" xml:space="preserve">
+    <value>Notes (optional)</value>
+  </data>
+  <data name="Nothing to back up yet. Add an account first." xml:space="preserve">
+    <value>Nothing to back up yet. Add an account first.</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="OK, we won't offer to save that account again. Use ADD SIGNED-IN ACCOUNT any time." xml:space="preserve">
+    <value>OK, we won't offer to save that account again. Use ADD SIGNED-IN ACCOUNT any time.</value>
+  </data>
+  <data name="OK, we'll remind you tomorrow." xml:space="preserve">
+    <value>OK, we'll remind you tomorrow.</value>
+  </data>
+  <data name="Offer to save a signed-in account that is not saved yet" xml:space="preserve">
+    <value>Offer to save a signed-in account that is not saved yet</value>
+  </data>
+  <data name="Offer to save a signed-in account that isn't saved yet" xml:space="preserve">
+    <value>Offer to save a signed-in account that isn't saved yet</value>
+  </data>
+  <data name="Open Account Switcher" xml:space="preserve">
+    <value>Open Account Switcher</value>
+  </data>
+  <data name="Open Epic Games Launcher" xml:space="preserve">
+    <value>Open Epic Games Launcher</value>
+  </data>
+  <data name="Open Epic Games Launcher when this app starts" xml:space="preserve">
+    <value>Open Epic Games Launcher when this app starts</value>
+  </data>
+  <data name="Open Epic Games Launcher when this app starts (detects the signed-in account more reliably)" xml:space="preserve">
+    <value>Open Epic Games Launcher when this app starts (detects the signed-in account more reliably)</value>
+  </data>
+  <data name="Open Folder" xml:space="preserve">
+    <value>Open Folder</value>
+  </data>
+  <data name="Open app log file" xml:space="preserve">
+    <value>Open app log file</value>
+  </data>
+  <data name="Open the app's log file, useful when reporting a problem." xml:space="preserve">
+    <value>Open the app's log file, useful when reporting a problem.</value>
+  </data>
+  <data name="Open the full release notes." xml:space="preserve">
+    <value>Open the full release notes.</value>
+  </data>
+  <data name="Opening the Epic Games sign-in page…" xml:space="preserve">
+    <value>Opening the Epic Games sign-in page…</value>
+  </data>
+  <data name="Operation In Progress" xml:space="preserve">
+    <value>Operation In Progress</value>
+  </data>
+  <data name="Operation cancelled." xml:space="preserve">
+    <value>Operation cancelled.</value>
+  </data>
+  <data name="Or sign in to another Epic account…" xml:space="preserve">
+    <value>Or sign in to another Epic account…</value>
+  </data>
+  <data name="Overwrites this account's saved sign-in with the account currently signed in to Epic Games Launcher." xml:space="preserve">
+    <value>Overwrites this account's saved sign-in with the account currently signed in to Epic Games Launcher.</value>
+  </data>
+  <data name="Password" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="Password (at least {0} characters)" xml:space="preserve">
+    <value>Password (at least {0} characters)</value>
+  </data>
+  <data name="Password of '{0}' copied. It is removed from the clipboard after 30 seconds." xml:space="preserve">
+    <value>Password of '{0}' copied. It is removed from the clipboard after 30 seconds.</value>
+  </data>
+  <data name="Permanently removes this account and its saved sign-in from this PC." xml:space="preserve">
+    <value>Permanently removes this account and its saved sign-in from this PC.</value>
+  </data>
+  <data name="Please wait" xml:space="preserve">
+    <value>Please wait</value>
+  </data>
+  <data name="Please wait for the current operation to finish, then click UPDATE NOW again." xml:space="preserve">
+    <value>Please wait for the current operation to finish, then click UPDATE NOW again.</value>
+  </data>
+  <data name="Preparing session..." xml:space="preserve">
+    <value>Preparing session...</value>
+  </data>
+  <data name="Processing login..." xml:space="preserve">
+    <value>Processing login...</value>
+  </data>
+  <data name="RECENT" xml:space="preserve">
+    <value>RECENT</value>
+  </data>
+  <data name="RELOAD SAVED SIGN-IN…" xml:space="preserve">
+    <value>RELOAD SAVED SIGN-IN…</value>
+  </data>
+  <data name="REPLACE WITH CURRENT EPIC LOGIN…" xml:space="preserve">
+    <value>REPLACE WITH CURRENT EPIC LOGIN…</value>
+  </data>
+  <data name="RESTORE" xml:space="preserve">
+    <value>RESTORE</value>
+  </data>
+  <data name="Ranks, games, anything worth remembering…" xml:space="preserve">
+    <value>Ranks, games, anything worth remembering…</value>
+  </data>
+  <data name="Reload Saved Sign-In?" xml:space="preserve">
+    <value>Reload Saved Sign-In?</value>
+  </data>
+  <data name="Reload Sign-In" xml:space="preserve">
+    <value>Reload Sign-In</value>
+  </data>
+  <data name="Remind me later" xml:space="preserve">
+    <value>Remind me later</value>
+  </data>
+  <data name="Remove App and All Accounts" xml:space="preserve">
+    <value>Remove App and All Accounts</value>
+  </data>
+  <data name="Remove App, Keep My Accounts" xml:space="preserve">
+    <value>Remove App, Keep My Accounts</value>
+  </data>
+  <data name="Replace" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="Replace My Accounts" xml:space="preserve">
+    <value>Replace My Accounts</value>
+  </data>
+  <data name="Replace Saved Account?" xml:space="preserve">
+    <value>Replace Saved Account?</value>
+  </data>
+  <data name="Replace Saved Accounts?" xml:space="preserve">
+    <value>Replace Saved Accounts?</value>
+  </data>
+  <data name="Replace Saved Sign-In" xml:space="preserve">
+    <value>Replace Saved Sign-In</value>
+  </data>
+  <data name="Replace the saved sign-in of '{0}' with '{1}' (currently signed in to Epic Games Launcher)?" xml:space="preserve">
+    <value>Replace the saved sign-in of '{0}' with '{1}' (currently signed in to Epic Games Launcher)?</value>
+  </data>
+  <data name="Replace the saved sign-in of '{0}' with the account currently signed in to Epic Games Launcher?" xml:space="preserve">
+    <value>Replace the saved sign-in of '{0}' with the account currently signed in to Epic Games Launcher?</value>
+  </data>
+  <data name="Replace your saved accounts with the ones in a backup file." xml:space="preserve">
+    <value>Replace your saved accounts with the ones in a backup file.</value>
+  </data>
+  <data name="Replacing the saved sign-in of {0}…" xml:space="preserve">
+    <value>Replacing the saved sign-in of {0}…</value>
+  </data>
+  <data name="Reset zoom to 100 percent" xml:space="preserve">
+    <value>Reset zoom to 100 percent</value>
+  </data>
+  <data name="Reset zoom to 100% (Ctrl + 0)" xml:space="preserve">
+    <value>Reset zoom to 100% (Ctrl + 0)</value>
+  </data>
+  <data name="Restore Backup" xml:space="preserve">
+    <value>Restore Backup</value>
+  </data>
+  <data name="Restore Failed" xml:space="preserve">
+    <value>Restore Failed</value>
+  </data>
+  <data name="Restore cancelled. Your saved accounts were not changed." xml:space="preserve">
+    <value>Restore cancelled. Your saved accounts were not changed.</value>
+  </data>
+  <data name="Restore complete: 1 account restored." xml:space="preserve">
+    <value>Restore complete: 1 account restored.</value>
+  </data>
+  <data name="Restore complete: {0} accounts restored." xml:space="preserve">
+    <value>Restore complete: {0} accounts restored.</value>
+  </data>
+  <data name="Restore down" xml:space="preserve">
+    <value>Restore down</value>
+  </data>
+  <data name="Restore the previous account order (Ctrl+Z)." xml:space="preserve">
+    <value>Restore the previous account order (Ctrl+Z).</value>
+  </data>
+  <data name="Restore window" xml:space="preserve">
+    <value>Restore window</value>
+  </data>
+  <data name="Restoring backup…" xml:space="preserve">
+    <value>Restoring backup…</value>
+  </data>
+  <data name="Restoring replaces all your accounts on this PC ({0}) with the accounts in:&#xA;{1}&#xA;&#xA;Accounts you added or changed after this backup was made will be lost. Click BACKUP first if you want to keep them." xml:space="preserve">
+    <value>Restoring replaces all your accounts on this PC ({0}) with the accounts in:
+{1}
+
+Accounts you added or changed after this backup was made will be lost. Click BACKUP first if you want to keep them.</value>
+  </data>
+  <data name="SAVE ACCOUNT" xml:space="preserve">
+    <value>SAVE ACCOUNT</value>
+  </data>
+  <data name="SAVE CHANGES" xml:space="preserve">
+    <value>SAVE CHANGES</value>
+  </data>
+  <data name="SETUP" xml:space="preserve">
+    <value>SETUP</value>
+  </data>
+  <data name="SHOW" xml:space="preserve">
+    <value>SHOW</value>
+  </data>
+  <data name="SHOW DETAILS" xml:space="preserve">
+    <value>SHOW DETAILS</value>
+  </data>
+  <data name="SHOW LOGS" xml:space="preserve">
+    <value>SHOW LOGS</value>
+  </data>
+  <data name="SIGN IN TO ADD…" xml:space="preserve">
+    <value>SIGN IN TO ADD…</value>
+  </data>
+  <data name="SKIP VERSION" xml:space="preserve">
+    <value>SKIP VERSION</value>
+  </data>
+  <data name="Safety Backup Failed" xml:space="preserve">
+    <value>Safety Backup Failed</value>
+  </data>
+  <data name="Save all your accounts to a password-protected backup file." xml:space="preserve">
+    <value>Save all your accounts to a password-protected backup file.</value>
+  </data>
+  <data name="Save it once, then switch to it with one click." xml:space="preserve">
+    <value>Save it once, then switch to it with one click.</value>
+  </data>
+  <data name="Save signed-in account" xml:space="preserve">
+    <value>Save signed-in account</value>
+  </data>
+  <data name="Save the account currently signed in to Epic Games Launcher." xml:space="preserve">
+    <value>Save the account currently signed in to Epic Games Launcher.</value>
+  </data>
+  <data name="Save this signed-in account so you can switch to it later." xml:space="preserve">
+    <value>Save this signed-in account so you can switch to it later.</value>
+  </data>
+  <data name="Save your signed-in Epic account" xml:space="preserve">
+    <value>Save your signed-in Epic account</value>
+  </data>
+  <data name="Saved Accounts Couldn't Be Read" xml:space="preserve">
+    <value>Saved Accounts Couldn't Be Read</value>
+  </data>
+  <data name="Saved account session folder is missing." xml:space="preserve">
+    <value>Saved account session folder is missing.</value>
+  </data>
+  <data name="Saved accounts" xml:space="preserve">
+    <value>Saved accounts</value>
+  </data>
+  <data name="Saved password (optional)" xml:space="preserve">
+    <value>Saved password (optional)</value>
+  </data>
+  <data name="Saved sign-in of '{0}' replaced." xml:space="preserve">
+    <value>Saved sign-in of '{0}' replaced.</value>
+  </data>
+  <data name="Saving current session..." xml:space="preserve">
+    <value>Saving current session...</value>
+  </data>
+  <data name="Saving the signed-in account…" xml:space="preserve">
+    <value>Saving the signed-in account…</value>
+  </data>
+  <data name="Select an account" xml:space="preserve">
+    <value>Select an account</value>
+  </data>
+  <data name="Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Setup Failed" xml:space="preserve">
+    <value>Setup Failed</value>
+  </data>
+  <data name="Setup could not finish installing the new version. Your previous installation was kept (or restored) and your saved accounts were not touched.&#xA;&#xA;Please try again. If it keeps failing, check the setup log in your Temp folder (Epic_Setup_*.log)." xml:space="preserve">
+    <value>Setup could not finish installing the new version. Your previous installation was kept (or restored) and your saved accounts were not touched.
+
+Please try again. If it keeps failing, check the setup log in your Temp folder (Epic_Setup_*.log).</value>
+  </data>
+  <data name="Setup could not get administrator permission, so nothing was changed." xml:space="preserve">
+    <value>Setup could not get administrator permission, so nothing was changed.</value>
+  </data>
+  <data name="Setup details" xml:space="preserve">
+    <value>Setup details</value>
+  </data>
+  <data name="Setup log: {0}" xml:space="preserve">
+    <value>Setup log: {0}</value>
+  </data>
+  <data name="Setup progress" xml:space="preserve">
+    <value>Setup progress</value>
+  </data>
+  <data name="Show or hide the saved password." xml:space="preserve">
+    <value>Show or hide the saved password.</value>
+  </data>
+  <data name="Show password" xml:space="preserve">
+    <value>Show password</value>
+  </data>
+  <data name="Show settings" xml:space="preserve">
+    <value>Show settings</value>
+  </data>
+  <data name="Shows a banner when the account signed in to Epic Games Launcher is not saved here yet." xml:space="preserve">
+    <value>Shows a banner when the account signed in to Epic Games Launcher is not saved here yet.</value>
+  </data>
+  <data name="Sign In Here" xml:space="preserve">
+    <value>Sign In Here</value>
+  </data>
+  <data name="Sign In to Add an Account - Epic Games Account Switcher" xml:space="preserve">
+    <value>Sign In to Add an Account - Epic Games Account Switcher</value>
+  </data>
+  <data name="Sign in to Epic Games Launcher, then click ADD SIGNED-IN ACCOUNT to save that account. Repeat for every account you want to switch between." xml:space="preserve">
+    <value>Sign in to Epic Games Launcher, then click ADD SIGNED-IN ACCOUNT to save that account. Repeat for every account you want to switch between.</value>
+  </data>
+  <data name="Sign in to Epic Games Launcher, then click ADD SIGNED-IN ACCOUNT." xml:space="preserve">
+    <value>Sign in to Epic Games Launcher, then click ADD SIGNED-IN ACCOUNT.</value>
+  </data>
+  <data name="Sign in to add an account" xml:space="preserve">
+    <value>Sign in to add an account</value>
+  </data>
+  <data name="Sign in to an Epic account in a secure window and save it, without opening Epic Games Launcher." xml:space="preserve">
+    <value>Sign in to an Epic account in a secure window and save it, without opening Epic Games Launcher.</value>
+  </data>
+  <data name="Sign in to the Epic Games account you want to add. Security checks and two-factor codes work as usual. Close this window to cancel." xml:space="preserve">
+    <value>Sign in to the Epic Games account you want to add. Security checks and two-factor codes work as usual. Close this window to cancel.</value>
+  </data>
+  <data name="Sign-In Not Replaced" xml:space="preserve">
+    <value>Sign-In Not Replaced</value>
+  </data>
+  <data name="Sign-In Window Unavailable" xml:space="preserve">
+    <value>Sign-In Window Unavailable</value>
+  </data>
+  <data name="Signed in. Saving your account… Please wait." xml:space="preserve">
+    <value>Signed in. Saving your account… Please wait.</value>
+  </data>
+  <data name="Signed-in Epic account" xml:space="preserve">
+    <value>Signed-in Epic account</value>
+  </data>
+  <data name="Signed-in account not saved yet" xml:space="preserve">
+    <value>Signed-in account not saved yet</value>
+  </data>
+  <data name="Skip this version" xml:space="preserve">
+    <value>Skip this version</value>
+  </data>
+  <data name="Something unexpected stopped the account from being saved. Please try again.&#xA;&#xA;If it keeps happening, use SHOW LOGS for details." xml:space="preserve">
+    <value>Something unexpected stopped the account from being saved. Please try again.
+
+If it keeps happening, use SHOW LOGS for details.</value>
+  </data>
+  <data name="Something unexpected stopped the account from being saved. Try again. If it keeps happening, use SHOW LOGS for details." xml:space="preserve">
+    <value>Something unexpected stopped the account from being saved. Try again. If it keeps happening, use SHOW LOGS for details.</value>
+  </data>
+  <data name="Something unexpected stopped the switch to '{0}'.&#xA;&#xA;Try again. If it keeps happening, use SHOW LOGS for details." xml:space="preserve">
+    <value>Something unexpected stopped the switch to '{0}'.
+
+Try again. If it keeps happening, use SHOW LOGS for details.</value>
+  </data>
+  <data name="Something unexpected went wrong." xml:space="preserve">
+    <value>Something unexpected went wrong.</value>
+  </data>
+  <data name="Starting…" xml:space="preserve">
+    <value>Starting…</value>
+  </data>
+  <data name="Still running" xml:space="preserve">
+    <value>Still running</value>
+  </data>
+  <data name="Switch Failed" xml:space="preserve">
+    <value>Switch Failed</value>
+  </data>
+  <data name="Switch Not Confirmed" xml:space="preserve">
+    <value>Switch Not Confirmed</value>
+  </data>
+  <data name="Switch account" xml:space="preserve">
+    <value>Switch account</value>
+  </data>
+  <data name="Switch cancelled." xml:space="preserve">
+    <value>Switch cancelled.</value>
+  </data>
+  <data name="Switch to {0}" xml:space="preserve">
+    <value>Switch to {0}</value>
+  </data>
+  <data name="Switch was cancelled." xml:space="preserve">
+    <value>Switch was cancelled.</value>
+  </data>
+  <data name="Switched account" xml:space="preserve">
+    <value>Switched account</value>
+  </data>
+  <data name="Switched to once" xml:space="preserve">
+    <value>Switched to once</value>
+  </data>
+  <data name="Switched to {0} times" xml:space="preserve">
+    <value>Switched to {0} times</value>
+  </data>
+  <data name="Switched to {0}. Epic Games Launcher is signed in." xml:space="preserve">
+    <value>Switched to {0}. Epic Games Launcher is signed in.</value>
+  </data>
+  <data name="Switched to {0}. The sign-in check was skipped, so confirm the account in Epic Games Launcher." xml:space="preserve">
+    <value>Switched to {0}. The sign-in check was skipped, so confirm the account in Epic Games Launcher.</value>
+  </data>
+  <data name="Switching Epic Games Launcher to {0}…" xml:space="preserve">
+    <value>Switching Epic Games Launcher to {0}…</value>
+  </data>
+  <data name="Switching account" xml:space="preserve">
+    <value>Switching account</value>
+  </data>
+  <data name="Switching to {0}…" xml:space="preserve">
+    <value>Switching to {0}…</value>
+  </data>
+  <data name="System Busy" xml:space="preserve">
+    <value>System Busy</value>
+  </data>
+  <data name="Target account is not saved." xml:space="preserve">
+    <value>Target account is not saved.</value>
+  </data>
+  <data name="That action couldn't be completed because of an unexpected problem. Try again. If it keeps happening, use SHOW LOGS for details." xml:space="preserve">
+    <value>That action couldn't be completed because of an unexpected problem. Try again. If it keeps happening, use SHOW LOGS for details.</value>
+  </data>
+  <data name="That password is not correct for this backup (passwords are case-sensitive). Try again, or cancel." xml:space="preserve">
+    <value>That password is not correct for this backup (passwords are case-sensitive). Try again, or cancel.</value>
+  </data>
+  <data name="The Epic Games sign-in page couldn't be loaded. Check your internet connection, then try again." xml:space="preserve">
+    <value>The Epic Games sign-in page couldn't be loaded. Check your internet connection, then try again.</value>
+  </data>
+  <data name="The backup could not be created. {0}&#xA;&#xA;Use SHOW LOGS for details." xml:space="preserve">
+    <value>The backup could not be created. {0}
+
+Use SHOW LOGS for details.</value>
+  </data>
+  <data name="The backup could not be restored. {0}&#xA;&#xA;Use SHOW LOGS for details." xml:space="preserve">
+    <value>The backup could not be restored. {0}
+
+Use SHOW LOGS for details.</value>
+  </data>
+  <data name="The backup file could not be found. It may have been moved or deleted." xml:space="preserve">
+    <value>The backup file could not be found. It may have been moved or deleted.</value>
+  </data>
+  <data name="The downloaded installer could not be started. Your current version keeps working.&#xA;&#xA;Try UPDATE NOW again, or download the update from the release page (WHAT'S NEW)." xml:space="preserve">
+    <value>The downloaded installer could not be started. Your current version keeps working.
+
+Try UPDATE NOW again, or download the update from the release page (WHAT'S NEW).</value>
+  </data>
+  <data name="The downloaded update failed its digital signature check ({0}). Nothing was installed." xml:space="preserve">
+    <value>The downloaded update failed its digital signature check ({0}). Nothing was installed.</value>
+  </data>
+  <data name="The downloaded update is corrupted or was tampered with (checksum mismatch). Nothing was installed." xml:space="preserve">
+    <value>The downloaded update is corrupted or was tampered with (checksum mismatch). Nothing was installed.</value>
+  </data>
+  <data name="The file could not be read or written. Make sure it isn't open in another program and that the drive has free space." xml:space="preserve">
+    <value>The file could not be read or written. Make sure it isn't open in another program and that the drive has free space.</value>
+  </data>
+  <data name="The file was left untouched, and changes can't be saved until it can be read or you restore a backup." xml:space="preserve">
+    <value>The file was left untouched, and changes can't be saved until it can be read or you restore a backup.</value>
+  </data>
+  <data name="The latest release has a version number this app does not understand ({0})." xml:space="preserve">
+    <value>The latest release has a version number this app does not understand ({0}).</value>
+  </data>
+  <data name="The log file could not be opened automatically." xml:space="preserve">
+    <value>The log file could not be opened automatically.</value>
+  </data>
+  <data name="The log file could not be opened automatically.&#xA;&#xA;You can open it yourself in Notepad:&#xA;{0}" xml:space="preserve">
+    <value>The log file could not be opened automatically.
+
+You can open it yourself in Notepad:
+{0}</value>
+  </data>
+  <data name="The old saved sign-in of '{0}' is overwritten and can't be brought back. Its name, avatar and notes are kept." xml:space="preserve">
+    <value>The old saved sign-in of '{0}' is overwritten and can't be brought back. Its name, avatar and notes are kept.</value>
+  </data>
+  <data name="The password could not be copied. Try again." xml:space="preserve">
+    <value>The password could not be copied. Try again.</value>
+  </data>
+  <data name="The password is not correct for this backup. Passwords are case-sensitive." xml:space="preserve">
+    <value>The password is not correct for this backup. Passwords are case-sensitive.</value>
+  </data>
+  <data name="The program files could not be removed. Your accounts were not touched." xml:space="preserve">
+    <value>The program files could not be removed. Your accounts were not touched.</value>
+  </data>
+  <data name="The release checksum file is not valid." xml:space="preserve">
+    <value>The release checksum file is not valid.</value>
+  </data>
+  <data name="The safety backup could NOT be created:&#xA;{0}&#xA;&#xA;Deleting now would permanently remove your saved accounts." xml:space="preserve">
+    <value>The safety backup could NOT be created:
+{0}
+
+Deleting now would permanently remove your saved accounts.</value>
+  </data>
+  <data name="The safety backup of your saved accounts could NOT be created:&#xA;{0}&#xA;&#xA;A Clean Install now would permanently delete your saved accounts with no way to get them back." xml:space="preserve">
+    <value>The safety backup of your saved accounts could NOT be created:
+{0}
+
+A Clean Install now would permanently delete your saved accounts with no way to get them back.</value>
+  </data>
+  <data name="The saved password of '{0}' can't be read on this PC. Enter it again with EDIT." xml:space="preserve">
+    <value>The saved password of '{0}' can't be read on this PC. Enter it again with EDIT.</value>
+  </data>
+  <data name="The saved sign-in for '{0}' was restored, but Epic Games Launcher didn't confirm that account within 45 seconds.&#xA;&#xA;Check which account Epic Games Launcher shows. The app stays open so you can switch again if needed." xml:space="preserve">
+    <value>The saved sign-in for '{0}' was restored, but Epic Games Launcher didn't confirm that account within 45 seconds.
+
+Check which account Epic Games Launcher shows. The app stays open so you can switch again if needed.</value>
+  </data>
+  <data name="The saved sign-in of this account is no longer valid: {0}" xml:space="preserve">
+    <value>The saved sign-in of this account is no longer valid: {0}</value>
+  </data>
+  <data name="The sign-in could not be copied completely. Open Epic Games Launcher, make sure you are signed in, then try again." xml:space="preserve">
+    <value>The sign-in could not be copied completely. Open Epic Games Launcher, make sure you are signed in, then try again.</value>
+  </data>
+  <data name="The sign-in window needs the Microsoft Edge WebView2 Runtime, which could not be started.&#xA;&#xA;Install or repair &quot;Microsoft Edge WebView2 Runtime&quot; from Microsoft, then try again. You can still use ADD SIGNED-IN ACCOUNT with Epic Games Launcher." xml:space="preserve">
+    <value>The sign-in window needs the Microsoft Edge WebView2 Runtime, which could not be started.
+
+Install or repair "Microsoft Edge WebView2 Runtime" from Microsoft, then try again. You can still use ADD SIGNED-IN ACCOUNT with Epic Games Launcher.</value>
+  </data>
+  <data name="The signed-in account could not be saved. Make sure Epic Games Launcher is still signed in, then try again.&#xA;&#xA;Use SHOW LOGS for details." xml:space="preserve">
+    <value>The signed-in account could not be saved. Make sure Epic Games Launcher is still signed in, then try again.
+
+Use SHOW LOGS for details.</value>
+  </data>
+  <data name="The switch could not start: {0}" xml:space="preserve">
+    <value>The switch could not start: {0}</value>
+  </data>
+  <data name="The switch failed while restoring the account, and the previous sign-in was put back: {0}" xml:space="preserve">
+    <value>The switch failed while restoring the account, and the previous sign-in was put back: {0}</value>
+  </data>
+  <data name="The two passwords don't match. Type the same password in both fields." xml:space="preserve">
+    <value>The two passwords don't match. Type the same password in both fields.</value>
+  </data>
+  <data name="The update check failed. Please try again later." xml:space="preserve">
+    <value>The update check failed. Please try again later.</value>
+  </data>
+  <data name="The update could not be downloaded. Check your internet connection." xml:space="preserve">
+    <value>The update could not be downloaded. Check your internet connection.</value>
+  </data>
+  <data name="The update is saved. Click UPDATE NOW whenever you're ready." xml:space="preserve">
+    <value>The update is saved. Click UPDATE NOW whenever you're ready.</value>
+  </data>
+  <data name="The update server did not respond in time." xml:space="preserve">
+    <value>The update server did not respond in time.</value>
+  </data>
+  <data name="The update server is not available right now (code {0}). Try again later." xml:space="preserve">
+    <value>The update server is not available right now (code {0}). Try again later.</value>
+  </data>
+  <data name="This backup is password-protected. Enter the password that was chosen when it was created." xml:space="preserve">
+    <value>This backup is password-protected. Enter the password that was chosen when it was created.</value>
+  </data>
+  <data name="This closes Epic Games Launcher and restores the saved sign-in of '{0}' again.&#xA;&#xA;Use it when the launcher asks you to sign in although this account is shown as active." xml:space="preserve">
+    <value>This closes Epic Games Launcher and restores the saved sign-in of '{0}' again.
+
+Use it when the launcher asks you to sign in although this account is shown as active.</value>
+  </data>
+  <data name="This file is not a valid Epic Switcher backup, or it is damaged." xml:space="preserve">
+    <value>This file is not a valid Epic Switcher backup, or it is damaged.</value>
+  </data>
+  <data name="This permanently deletes every saved account from this PC.&#xA;&#xA;A safety backup will be saved to your Downloads folder first, so you can bring them back later with RESTORE." xml:space="preserve">
+    <value>This permanently deletes every saved account from this PC.
+
+A safety backup will be saved to your Downloads folder first, so you can bring them back later with RESTORE.</value>
+  </data>
+  <data name="This release has no checksum file, so it cannot be verified. Please download it from the release page." xml:space="preserve">
+    <value>This release has no checksum file, so it cannot be verified. Please download it from the release page.</value>
+  </data>
+  <data name="This release has no installer attached. Please download it from the release page." xml:space="preserve">
+    <value>This release has no installer attached. Please download it from the release page.</value>
+  </data>
+  <data name="Today at {0}" xml:space="preserve">
+    <value>Today at {0}</value>
+  </data>
+  <data name="Try Again" xml:space="preserve">
+    <value>Try Again</value>
+  </data>
+  <data name="Turn off the experimental launcher frame." xml:space="preserve">
+    <value>Turn off the experimental launcher frame.</value>
+  </data>
+  <data name="UNDO" xml:space="preserve">
+    <value>UNDO</value>
+  </data>
+  <data name="UPDATES" xml:space="preserve">
+    <value>UPDATES</value>
+  </data>
+  <data name="USE AVATAR" xml:space="preserve">
+    <value>USE AVATAR</value>
+  </data>
+  <data name="Undo account order change" xml:space="preserve">
+    <value>Undo account order change</value>
+  </data>
+  <data name="Uninstall Complete" xml:space="preserve">
+    <value>Uninstall Complete</value>
+  </data>
+  <data name="Uninstall Epic Games Account Switcher" xml:space="preserve">
+    <value>Uninstall Epic Games Account Switcher</value>
+  </data>
+  <data name="Uninstall Failed" xml:space="preserve">
+    <value>Uninstall Failed</value>
+  </data>
+  <data name="Update Not Installed" xml:space="preserve">
+    <value>Update Not Installed</value>
+  </data>
+  <data name="Update Ready" xml:space="preserve">
+    <value>Update Ready</value>
+  </data>
+  <data name="Update available" xml:space="preserve">
+    <value>Update available</value>
+  </data>
+  <data name="Update available, update now" xml:space="preserve">
+    <value>Update available, update now</value>
+  </data>
+  <data name="Update download cancelled." xml:space="preserve">
+    <value>Update download cancelled.</value>
+  </data>
+  <data name="Update download progress" xml:space="preserve">
+    <value>Update download progress</value>
+  </data>
+  <data name="Update now" xml:space="preserve">
+    <value>Update now</value>
+  </data>
+  <data name="Upgrade &amp; Keep Accounts" xml:space="preserve">
+    <value>Upgrade &amp; Keep Accounts</value>
+  </data>
+  <data name="Upgrade &amp; Keep Accounts Instead" xml:space="preserve">
+    <value>Upgrade &amp; Keep Accounts Instead</value>
+  </data>
+  <data name="Use a password with at least {0} characters." xml:space="preserve">
+    <value>Use a password with at least {0} characters.</value>
+  </data>
+  <data name="Use the selected avatar (Enter)" xml:space="preserve">
+    <value>Use the selected avatar (Enter)</value>
+  </data>
+  <data name="Verifying Epic sign-in..." xml:space="preserve">
+    <value>Verifying Epic sign-in...</value>
+  </data>
+  <data name="Verifying Epic sign-in…" xml:space="preserve">
+    <value>Verifying Epic sign-in…</value>
+  </data>
+  <data name="Version {0} is already installed. This setup contains the OLDER version {1}.&#xA;&#xA;Going back to an older version can break features and data saved by the newer one. Keep the newer version unless you have a specific reason." xml:space="preserve">
+    <value>Version {0} is already installed. This setup contains the OLDER version {1}.
+
+Going back to an older version can break features and data saved by the newer one. Keep the newer version unless you have a specific reason.</value>
+  </data>
+  <data name="Version {0} is available  (you have {1})" xml:space="preserve">
+    <value>Version {0} is available  (you have {1})</value>
+  </data>
+  <data name="Version {0} is available." xml:space="preserve">
+    <value>Version {0} is available.</value>
+  </data>
+  <data name="Version {0} is downloaded and verified.&#xA;&#xA;The app will close, install the update and reopen by itself. Your saved accounts are kept." xml:space="preserve">
+    <value>Version {0} is downloaded and verified.
+
+The app will close, install the update and reopen by itself. Your saved accounts are kept.</value>
+  </data>
+  <data name="Version {0} skipped. You can still update from Settings." xml:space="preserve">
+    <value>Version {0} skipped. You can still update from Settings.</value>
+  </data>
+  <data name="View release notes" xml:space="preserve">
+    <value>View release notes</value>
+  </data>
+  <data name="WHAT'S NEW" xml:space="preserve">
+    <value>WHAT'S NEW</value>
+  </data>
+  <data name="Windows Installer is busy or a reboot is pending. Please wait and try again." xml:space="preserve">
+    <value>Windows Installer is busy or a reboot is pending. Please wait and try again.</value>
+  </data>
+  <data name="Windows denied access to the file or folder. Choose a folder you can write to, such as Documents or Downloads." xml:space="preserve">
+    <value>Windows denied access to the file or folder. Choose a folder you can write to, such as Documents or Downloads.</value>
+  </data>
+  <data name="Wrap around Epic Games Launcher (experimental)" xml:space="preserve">
+    <value>Wrap around Epic Games Launcher (experimental)</value>
+  </data>
+  <data name="Wrap around Epic Games Launcher when it is open (experimental)" xml:space="preserve">
+    <value>Wrap around Epic Games Launcher when it is open (experimental)</value>
+  </data>
+  <data name="Yesterday at {0}" xml:space="preserve">
+    <value>Yesterday at {0}</value>
+  </data>
+  <data name="You appear to be offline." xml:space="preserve">
+    <value>You appear to be offline.</value>
+  </data>
+  <data name="You changed this account's details but haven't saved them.&#xA;&#xA;Discard the changes, or keep editing?" xml:space="preserve">
+    <value>You changed this account's details but haven't saved them.
+
+Discard the changes, or keep editing?</value>
+  </data>
+  <data name="You have the latest version ({0})." xml:space="preserve">
+    <value>You have the latest version ({0}).</value>
+  </data>
+  <data name="You signed in, but the app couldn't read the result from Epic Games. Please sign in again." xml:space="preserve">
+    <value>You signed in, but the app couldn't read the result from Epic Games. Please sign in again.</value>
+  </data>
+  <data name="Your changes to '{0}' could not be saved, so the previous details were kept. Check that the drive has free space, then try again.&#xA;&#xA;Use SHOW LOGS for details." xml:space="preserve">
+    <value>Your changes to '{0}' could not be saved, so the previous details were kept. Check that the drive has free space, then try again.
+
+Use SHOW LOGS for details.</value>
+  </data>
+  <data name="Your current version keeps working. Try again later, or click WHAT'S NEW to download the update from the release page." xml:space="preserve">
+    <value>Your current version keeps working. Try again later, or click WHAT'S NEW to download the update from the release page.</value>
+  </data>
+  <data name="Your details are kept, so you can try again." xml:space="preserve">
+    <value>Your details are kept, so you can try again.</value>
+  </data>
+  <data name="Your latest account changes could not be saved. Check that the drive has free space, then try again.&#xA;&#xA;Use SHOW LOGS for details." xml:space="preserve">
+    <value>Your latest account changes could not be saved. Check that the drive has free space, then try again.
+
+Use SHOW LOGS for details.</value>
+  </data>
+  <data name="Your saved account list could not be read, so no accounts are shown. {0}&#xA;&#xA;Restore a backup to get your accounts back. Setup also keeps automatic backups in your Downloads folder." xml:space="preserve">
+    <value>Your saved account list could not be read, so no accounts are shown. {0}
+
+Restore a backup to get your accounts back. Setup also keeps automatic backups in your Downloads folder.</value>
+  </data>
+  <data name="Your saved accounts are KEPT by default, so reinstalling later brings everything back.&#xA;&#xA;What would you like to remove?" xml:space="preserve">
+    <value>Your saved accounts are KEPT by default, so reinstalling later brings everything back.
+
+What would you like to remove?</value>
+  </data>
+  <data name="Your saved accounts were kept. Reinstall at any time to get them back." xml:space="preserve">
+    <value>Your saved accounts were kept. Reinstall at any time to get them back.</value>
+  </data>
+  <data name="Zoom in" xml:space="preserve">
+    <value>Zoom in</value>
+  </data>
+  <data name="Zoom in (Ctrl + Plus, or Ctrl + mouse wheel up)" xml:space="preserve">
+    <value>Zoom in (Ctrl + Plus, or Ctrl + mouse wheel up)</value>
+  </data>
+  <data name="Zoom out" xml:space="preserve">
+    <value>Zoom out</value>
+  </data>
+  <data name="Zoom out (Ctrl + Minus, or Ctrl + mouse wheel down)" xml:space="preserve">
+    <value>Zoom out (Ctrl + Minus, or Ctrl + mouse wheel down)</value>
+  </data>
+  <data name="e.g., Main Account / Alt 1" xml:space="preserve">
+    <value>e.g., Main Account / Alt 1</value>
+  </data>
+  <data name="e.g., user@domain.com" xml:space="preserve">
+    <value>e.g., user@domain.com</value>
+  </data>
+  <data name="{0} (Active)" xml:space="preserve">
+    <value>{0} (Active)</value>
+  </data>
+  <data name="{0} accounts were saved to:&#xA;{1}&#xA;&#xA;Keep the password somewhere safe. Without it this backup can't be restored." xml:space="preserve">
+    <value>{0} accounts were saved to:
+{1}
+
+Keep the password somewhere safe. Without it this backup can't be restored.</value>
+  </data>
+  <data name="{0} days ago" xml:space="preserve">
+    <value>{0} days ago</value>
+  </data>
+  <data name="{0} is signed in to Epic Games Launcher but not saved here yet." xml:space="preserve">
+    <value>{0} is signed in to Epic Games Launcher but not saved here yet.</value>
+  </data>
+  <data name="{0} is signed in to Epic Games Launcher. Save it once, then switch to it with one click." xml:space="preserve">
+    <value>{0} is signed in to Epic Games Launcher. Save it once, then switch to it with one click.</value>
+  </data>
+  <data name="{0} min ago" xml:space="preserve">
+    <value>{0} min ago</value>
+  </data>
+  <data name="{0} saved accounts" xml:space="preserve">
+    <value>{0} saved accounts</value>
+  </data>
+  <data name="{0} switches" xml:space="preserve">
+    <value>{0} switches</value>
+  </data>
+  <data name="{0} · {1} · Last used: {2} ({3})" xml:space="preserve">
+    <value>{0} · {1} · Last used: {2} ({3})</value>
+  </data>
+  <data name="{0}, active account" xml:space="preserve">
+    <value>{0}, active account</value>
+  </data>
+  <data name="{0}, active now" xml:space="preserve">
+    <value>{0}, active now</value>
+  </data>
+  <data name="{0}. Click an account to switch to it." xml:space="preserve">
+    <value>{0}. Click an account to switch to it.</value>
+  </data>
+  <data name="• Upgrade keeps all your saved accounts and settings (recommended).&#xA;• Clean Install deletes the app AND all saved accounts, then installs fresh. A safety backup is saved to your Downloads folder first." xml:space="preserve">
+    <value>• Upgrade keeps all your saved accounts and settings (recommended).
+• Clean Install deletes the app AND all saved accounts, then installs fresh. A safety backup is saved to your Downloads folder first.</value>
+  </data>
+</root>
