@@ -15,8 +15,8 @@ namespace Epic_Games_Account_Switcher_Client
     /// launcher appears inside the switcher with compact profile cards on the left/right edges.
     /// The launcher is never re-parented. Its position is followed through Windows window events (no polling lag),
     /// and dragging or resizing the frame moves/resizes the launcher with it, so both behave as one window.
-    /// When it closes for longer than a few seconds (an account switch restarts it), the normal layout and the
-    /// previous window size are restored. Entering and leaving fade/slide unless Windows animations are turned off.
+    /// When it closes or minimizes, the normal layout and the previous window size are restored after a short debounce
+    /// (an account switch restart is held separately). Entering and leaving fade/slide unless Windows animations are turned off.
     /// </summary>
     internal sealed class LauncherFrameController : IDisposable
     {
@@ -25,14 +25,16 @@ namespace Epic_Games_Account_Switcher_Client
         public const double BottomBand = 62;
         private const double MinLauncherWidth = 400;
         private const double MinLauncherHeight = 300;
-        private static readonly TimeSpan EnterDelay = TimeSpan.FromMilliseconds(300);
-        private static readonly TimeSpan ExitDelay = TimeSpan.FromSeconds(4);
+        // Short debounces: long enough to ignore the launcher's own brief hide/show flicker, short enough to feel instant.
+        private static readonly TimeSpan EnterDelay = TimeSpan.FromMilliseconds(250);
+        private static readonly TimeSpan ExitDelay = TimeSpan.FromMilliseconds(600);
         // Longest time the frame waits for the launcher to come back during an account switch.
         private static readonly TimeSpan SwitchHold = TimeSpan.FromSeconds(120);
         private static readonly TimeSpan FadeOutDuration = TimeSpan.FromMilliseconds(160);
 
         private readonly MainWindow _window;
         private readonly DispatcherTimer _timer;
+        private readonly DispatcherTimer _deadline;
         private readonly WinEventProc _winEventProc;
         private IntPtr _showHook;
         private IntPtr _launcherHook;
@@ -58,6 +60,16 @@ namespace Epic_Games_Account_Switcher_Client
             // Fallback only: window events normally drive the frame instantly.
             _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
             _timer.Tick += (s, e) => Tick();
+            // One-shot check exactly when a pending enter/exit debounce ends, instead of waiting for the fallback timer.
+            _deadline = new DispatcherTimer(DispatcherPriority.Normal);
+            _deadline.Tick += (s, e) => { _deadline.Stop(); Tick(); };
+        }
+
+        private void CheckAgainIn(TimeSpan delay)
+        {
+            _deadline.Stop();
+            _deadline.Interval = delay < TimeSpan.FromMilliseconds(15) ? TimeSpan.FromMilliseconds(15) : delay;
+            _deadline.Start();
         }
 
         public void SetEnabled(bool enabled)
@@ -73,6 +85,7 @@ namespace Epic_Games_Account_Switcher_Client
             else
             {
                 _timer.Stop();
+                _deadline.Stop();
                 RemoveHooks();
                 Exit(true);
             }
@@ -86,6 +99,7 @@ namespace Epic_Games_Account_Switcher_Client
         public void Dispose()
         {
             _timer.Stop();
+            _deadline.Stop();
             RemoveHooks();
             Exit(false);
             if (_source != null) { _source.RemoveHook(WndProc); _source = null; }
@@ -184,11 +198,19 @@ namespace Epic_Games_Account_Switcher_Client
                     if (_missingSince == DateTime.MinValue) _missingSince = now;
                 }
 
-                if (usable && (_active || now - _seenSince >= EnterDelay))
+                if (usable && !_active && now - _seenSince < EnterDelay)
+                {
+                    CheckAgainIn(EnterDelay - (now - _seenSince));
+                }
+                else if (usable)
                 {
                     if (!Frame(hwnd, rect) && _active) Exit(true);
                 }
-                else if (_active && !usable && now - _missingSince >= ExitDelay)
+                else if (_active && now - _missingSince < ExitDelay)
+                {
+                    CheckAgainIn(ExitDelay - (now - _missingSince));
+                }
+                else if (_active)
                 {
                     // An account switch closes the launcher and reopens it: keep the frame in place for it (the busy overlay
                     // covers the gap) instead of collapsing to the normal layout and wrapping again seconds later.
@@ -200,6 +222,7 @@ namespace Epic_Games_Account_Switcher_Client
             {
                 Globals.WriteToLog("[FRAME] Tick failed; disabling frame for this session", ex);
                 _timer.Stop();
+                _deadline.Stop();
                 RemoveHooks();
                 Exit(false);
             }

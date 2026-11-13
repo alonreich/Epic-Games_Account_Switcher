@@ -53,6 +53,8 @@ AGENT / DEVELOPER RULES (mandatory, see project_structure.txt section 6)
   - Public: Frame mode now stays put while you switch accounts instead of collapsing and wrapping again.
 
 ### Fixed
+- Launcher frame reacted slowly: `LauncherFrameController` waited 4 s after the launcher closed/minimized before restoring the normal layout, and enter/exit checks waited for a 250 ms background timer. Exit debounce is now 600 ms, enter 250 ms, with a one-shot check at the exact deadline (account-switch hold unchanged).
+  - Public: The switcher now wraps around and releases the Epic Games Launcher almost instantly when it opens or closes.
 - Manual BACKUP said "Backup Saved" without reading the file back: `MainViewModel` now calls `AccountService.VerifyBackupFile` after `BackupAccounts` (a failed check shows "Backup Failed") and reports the verified profile count.
   - Public: The app now checks every backup you make before saying it was saved.
 - Restore copied avatars into the account data folder (`EG\Skin_Icons`) and each backup/restore cycle added another per-account copy of the chosen avatar (`<id>_<id>_X.jpg`). Copies of shipped avatars now map back to the shipped file (`SkinLibrary.FindBuiltInFor`) and restore keeps avatars out of the account folder.
