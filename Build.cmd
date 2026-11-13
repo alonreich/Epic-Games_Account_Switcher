@@ -1,6 +1,8 @@
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
+REM Windows PowerShell must see its own modules (a PowerShell 7 parent shell leaks its module path and hides Cert:, Get-FileHash, ...).
+set "PSModulePath=%ProgramFiles%\WindowsPowerShell\Modules;%SystemRoot%\system32\WindowsPowerShell\v1.0\Modules"
 REM ==========================================================================================
 REM  Build.cmd          Release build: clean, test, publish, sign, pack, sign, SHA-256 checksum.
 REM  Build.cmd --dev    Local build: same pipeline but keeps compiled\ and skips the tests.
@@ -24,7 +26,7 @@ echo.
 echo [0/7] !currentStage!...
 dotnet --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] .NET SDK not found. Please install the .NET 8 SDK.
+    echo [ERROR] .NET SDK not found. Please install the .NET 10 SDK.
     goto :error
 )
 for %%d in (Epic-Games_Account_Switcher-Client Epic-Games_Account_Switcher-Globals SingleFilePacker) do (
@@ -67,7 +69,7 @@ if /i "!MODE!"=="release" (
 set "currentStage=Compiling Client"
 echo.
 echo [3/7] !currentStage! (!BUILD_CONFIG!)...
-dotnet publish "Epic-Games_Account_Switcher-Client\Epic-Games_Account_Switcher-Client.csproj" -c !BUILD_CONFIG! -r win-x64 --self-contained false -o "Payload" -p:DebugType=none -p:DebugSymbols=false -v minimal
+dotnet publish "Epic-Games_Account_Switcher-Client\Epic-Games_Account_Switcher-Client.csproj" -c !BUILD_CONFIG! -r win-x64 --self-contained true -p:PublishReadyToRun=true -o "Payload" -p:DebugType=none -p:DebugSymbols=false -v minimal
 if errorlevel 1 goto :error
 if not exist "Payload\Epic-Games_Account_Switcher.exe" (
     echo [ERROR] Publish did not produce Payload\Epic-Games_Account_Switcher.exe

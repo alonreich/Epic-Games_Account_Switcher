@@ -59,7 +59,8 @@ namespace Epic_Games_Account_Switcher_Globals
 
         public static string UpdatesFolder => Path.Combine(Globals.UserDataFolder, "Updates");
 
-        public static string PinnedSigningThumbprint
+        /// <summary>Signer thumbprints pinned at build time (thumbprint.txt + optional trusted-thumbprints.txt). Empty = not pinned.</summary>
+        public static IReadOnlyList<string> PinnedSigningThumbprints
         {
             get
             {
@@ -67,16 +68,25 @@ namespace Epic_Games_Account_Switcher_Globals
                 {
                     var attr = typeof(UpdateService).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
                         .FirstOrDefault(a => string.Equals(a.Key, "SigningThumbprint", StringComparison.OrdinalIgnoreCase));
-                    var value = attr?.Value;
-                    return string.IsNullOrWhiteSpace(value) ? null : Regex.Replace(value, "[^0-9A-Fa-f]", "").ToUpperInvariant();
+                    return ParseThumbprints(attr?.Value);
                 }
-                catch { return null; }
+                catch { return Array.Empty<string>(); }
             }
+        }
+
+        /// <summary>Splits "A;B" (or whitespace-separated) into upper-case 40-hex-digit thumbprints; anything else is ignored.</summary>
+        public static IReadOnlyList<string> ParseThumbprints(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return Array.Empty<string>();
+            return value.Split(new[] { ';', ',', ' ', '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(t => Regex.Replace(t, "[^0-9A-Fa-f]", "").ToUpperInvariant())
+                .Where(t => t.Length == 40)
+                .Distinct()
+                .ToList();
         }
 
         private static HttpClient CreateClient(TimeSpan timeout)
         {
-            try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
             var client = new HttpClient { Timeout = timeout };
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Epic-Games-Account-Switcher/" + Globals.Version);
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
@@ -274,14 +284,14 @@ namespace Epic_Games_Account_Switcher_Globals
         private static void TryDelete(string path) { try { if (File.Exists(path)) File.Delete(path); } catch { } }
 
         /// <summary>
-        /// When a signing thumbprint is pinned, the file must carry an intact Authenticode signature from that exact certificate.
+        /// When signing thumbprints are pinned, the file must carry an intact Authenticode signature from one of those exact certificates.
         /// A self-signed (untrusted-root) chain is accepted because the certificate itself is pinned; a modified file is always rejected.
         /// </summary>
         public static bool VerifySignature(string path, out string problem)
         {
             problem = null;
-            var pinned = PinnedSigningThumbprint;
-            if (pinned == null)
+            var pinned = PinnedSigningThumbprints;
+            if (pinned.Count == 0)
             {
                 Globals.WriteToLog("[UPDATE] No signing thumbprint pinned in this build; relying on SHA-256 verification only.");
                 return true;
@@ -296,8 +306,10 @@ namespace Epic_Games_Account_Switcher_Globals
 
             try
             {
+#pragma warning disable SYSLIB0057 // X509CertificateLoader cannot read the Authenticode signer out of a signed EXE; this API still can.
                 var signer = new X509Certificate2(X509Certificate.CreateFromSignedFile(path));
-                if (!string.Equals(signer.Thumbprint, pinned, StringComparison.OrdinalIgnoreCase))
+#pragma warning restore SYSLIB0057
+                if (!pinned.Contains(signer.Thumbprint, StringComparer.OrdinalIgnoreCase))
                 {
                     problem = "signed by an unexpected certificate " + signer.Thumbprint;
                     return false;

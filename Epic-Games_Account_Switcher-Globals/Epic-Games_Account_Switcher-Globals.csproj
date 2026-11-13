@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>Epic_Games_Account_Switcher_Globals</RootNamespace>
     <Copyright>Copyright © Epic-Games_Account_Switcher Team 2019-2026</Copyright>
     <Authors>Epic-Games_Account_Switcher Team</Authors>
@@ -11,23 +11,18 @@
     <RepositoryUrl>https://github.com/alonreich/Epic-Games_Account_Switcher</RepositoryUrl>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
-    <LangVersion>7.3</LangVersion>
+    <LangVersion>14</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="System.Security" />
-    <Reference Include="System.Management" />
-    <Reference Include="System.ServiceProcess" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.IO.Compression" />
-    <Reference Include="System.IO.Compression.FileSystem" />
-    <Reference Include="System.Net.Http" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.10" />
   </ItemGroup>
 
 </Project>

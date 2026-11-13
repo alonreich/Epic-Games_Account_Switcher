@@ -1,6 +1,8 @@
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
+REM Windows PowerShell must see its own modules (a PowerShell 7 parent shell leaks its module path and hides Cert:, Get-FileHash, ...).
+set "PSModulePath=%ProgramFiles%\WindowsPowerShell\Modules;%SystemRoot%\system32\WindowsPowerShell\v1.0\Modules"
 REM ==========================================================================================
 REM  Release.cmd 3.0.1   Bump version to 3.0.1, build (tests + signing + checksum), promote release notes,
 REM                      commit, create annotated tag v3.0.1, push, and publish the GitHub release.

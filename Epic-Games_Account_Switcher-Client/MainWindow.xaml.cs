@@ -367,6 +367,14 @@ namespace Epic_Games_Account_Switcher_Client
             e.Handled = true;
         }
 
+        private void AddPhoto_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsPopup.IsOpen = false;
+            var saved = ImageCropWindow.PickCropAndSave(this);
+            if (saved != null && DataContext is MainViewModel vm)
+                vm.ShowToast(L.T("Photo added. Choose it from any profile's avatar picker."));
+        }
+
         private void ExitApp_Click(object sender, RoutedEventArgs e)
         {
             SettingsPopup.IsOpen = false;

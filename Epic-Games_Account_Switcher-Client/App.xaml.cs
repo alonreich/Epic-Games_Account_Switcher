@@ -111,6 +111,7 @@ namespace Epic_Games_Account_Switcher_Client
             StartShutdownListener(isDevMode);
             UpdateService.CleanupOldDownloads();
             System.Threading.Tasks.Task.Run(() => EmbeddedLoginWindow.CleanupLeftoverProfiles());
+            System.Threading.Tasks.Task.Run(() => AccountService.PruneSavedProfileCaches());
             if (AppSettings.Instance.OpenEpicLauncherOnStartup)
             {
                 AccountService.PrepareLauncherForInitialSync();

@@ -603,6 +603,11 @@
                         <TextBlock Text="{local:T 'Wrap around Epic Games Launcher when it is open (experimental)'}" TextWrapping="Wrap"/>
                     </CheckBox>
 
+                    <TextBlock Text="{local:T 'PROFILE PICTURES'}" Style="{StaticResource SettingsHeading}"/>
+                    <TextBlock Text="{local:T 'Add your own photos to the avatar collection. You choose how each photo fits the round frame. Backups include them.'}" TextWrapping="Wrap" Foreground="{DynamicResource SubTextForeground}" FontSize="12" Margin="0,0,0,8"/>
+                    <Button Content="{local:T 'ADD YOUR OWN PHOTO…'}" Click="AddPhoto_Click" Style="{StaticResource SecondaryButton}" Padding="16,6" FontSize="11" HorizontalAlignment="Left" Margin="0,0,0,14"
+                            ToolTip="{local:T 'Pick a picture, then move and zoom it to fit the circle. It then appears in every profile\'s avatar picker.'}" AutomationProperties.Name="{local:T 'Add your own photo'}"/>
+
                     <TextBlock Text="{local:T 'UPDATES'}" Style="{StaticResource SettingsHeading}"/>
                     <CheckBox IsChecked="{Binding AutoCheckForUpdatesSetting, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               Margin="0,0,0,8"

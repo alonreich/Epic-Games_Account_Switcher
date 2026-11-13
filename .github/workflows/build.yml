@@ -1,0 +1,70 @@
+# CI build: tests + unsigned installer artifact on every push/PR to main and on demand.
+# Free trusted signing (SignPath Foundation, see ssl-certificate/README.md): once the project is accepted, add the
+# repository secret SIGNPATH_API_TOKEN and the variables SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG and
+# SIGNPATH_SIGNING_POLICY_SLUG. The "Sign with SignPath" step then runs and uploads the signed installer.
+# Releases are still published from the release PC with Release.cmd until the updater trusts the SignPath certificate.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        run: dotnet test Epic-Games_Account_Switcher-Tests/Epic-Games_Account_Switcher-Tests.csproj -c Release -r win-x64 -v minimal
+
+      - name: Publish app (self-contained, ReadyToRun)
+        shell: pwsh
+        run: |
+          dotnet publish Epic-Games_Account_Switcher-Client/Epic-Games_Account_Switcher-Client.csproj -c Release -r win-x64 --self-contained true -p:PublishReadyToRun=true -o Payload -p:DebugType=none -p:DebugSymbols=false -v minimal
+          Copy-Item Skin_Icons Payload/Skin_Icons -Recurse -Force
+
+      - name: Pack installer (unsigned)
+        shell: pwsh
+        run: |
+          dotnet run --project SingleFilePacker/SingleFilePacker.csproj -- --pack
+          dotnet build SingleFilePacker/SingleFilePacker.csproj -c Release -r win-x64 -o compiled/_packer -p:RequirePayload=true -p:DebugType=none -p:DebugSymbols=false -v minimal
+          New-Item -ItemType Directory -Force compiled/installer | Out-Null
+          Move-Item compiled/_packer/SingleFilePacker.exe compiled/installer/Epic-Games_Account_Switcher.exe
+
+      - name: Upload unsigned installer
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: compiled/installer/Epic-Games_Account_Switcher.exe
+          if-no-files-found: error
+
+      - name: Sign with SignPath
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: compiled/signed
+
+      - name: Upload signed installer
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-signed
+          path: compiled/signed

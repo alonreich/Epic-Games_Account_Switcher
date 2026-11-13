@@ -2,19 +2,21 @@
 # (Mandatory onboarding file for humans and AI agents. Read fully before changing anything.)
 
 ## 1) PROJECT OVERVIEW
-Epic Games Account Switcher is a Windows (.NET Framework 4.8, WPF, x64) session manager for the Epic Games Launcher.
-Runtime prerequisites: .NET Framework 4.8; Microsoft Edge WebView2 Runtime (only for the in-app "Sign in to add" window).
-It switches accounts without login prompts by atomically swapping session tokens, web cache state and registry identifiers.
+Epic Games Account Switcher is a Windows (.NET 10, C# 14, WPF, x64) session manager for the Epic Games Launcher.
+The app ships self-contained + ReadyToRun (no .NET install needed). NativeAOT/trimming are NOT possible (WPF does not support them).
+The installer bootstrapper (SingleFilePacker) deliberately stays on .NET Framework 4.8, which every Windows 10/11 has.
+Runtime prerequisites: Microsoft Edge WebView2 Runtime (only for the in-app "Sign in to add" window). Build: .NET 10 SDK.
+It switches accounts without login prompts by atomically swapping session tokens, embedded-browser sign-in data (cookies/storage; disposable cache excluded) and registry identifiers.
 Distribution: one signed single-file installer EXE published on GitHub Releases; the app updates itself from there.
 
-## 2) PROJECT STATUS (2026-10-16, version 3.0.0)
+## 2) PROJECT STATUS (version: see Directory.Build.props)
 - Versioning: SemVer, single source of truth = Directory.Build.props (VersionPrefix). Legacy calendar versions (2026.x) compare as older.
 - Release pipeline: Build.cmd (tests, signing, payload hash, SHA-256) + Release.cmd (notes promotion, annotated tag, gh release).
 - Installer: two-phase, staged swap + rollback (details: docs\RELEASING.md section 5; rules: section 4 items 5-7).
 - Updates: in-app GitHub Releases updater (daily quiet check, Update/Later/Skip banner, SHA-256 + pinned signature verification).
 - Experimental: "launcher frame" mode (opt-in) wraps the window around the Epic Games Launcher.
 - Known limits: self-signed certificate does not remove SmartScreen/"Unknown publisher" for other users (see ssl-certificate\README.md).
-  No delta updates (installer is ~2 MB; a verified download is reused instead of downloaded again).
+  No delta updates (installer is ~68 MB because the .NET runtime is included; a verified download is reused instead of downloaded again).
 
 ## 3) AI AGENT MINIMAP (NAVIGATION & PURPOSE)
 | Path | Purpose / Role |
@@ -27,16 +29,18 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 | `.\docs\CHANGELOG.md` | PUBLIC "What's new" history (generated at release, never truncated). |
 | `.\docs\RELEASING.md` | Versioning, build, signing, release and update pipeline in detail. |
 | `.\Directory.Build.props` | SINGLE version source (VersionPrefix) + signing thumbprint pin for all projects. |
-| `.\Build.cmd` | Release build: pre-flight -> clean -> dotnet test -> publish (no pdb) -> sign -> pack (+payload SHA-256) -> installer -> sign -> .sha256. `--dev` skips tests/clean. No `pause` (10s timeout). |
+| `.\Build.cmd` | Release build pipeline (details: docs\RELEASING.md section 2). `--dev` skips tests/clean. No `pause` (10s timeout). Pins the Windows PowerShell module path (PowerShell 7 parents hide `Cert:`/`Get-FileHash`). |
 | `.\dev_build.cmd` | Wrapper for `Build.cmd --dev` (local installer build, never touches Git). |
 | `.\dev.cmd` | `dev.cmd` (watch) / `dev.cmd run` (single): Debug launch with isolated data (`--dev --user-data %TMP%\...`). Each launch wipes dev data + logs, force-stops dev instances from this repo, deletes Client/Globals bin+obj. Also `build`, `restore`, `clean`. Use this to test; never test against real profiles. |
-| `.\Release.cmd` | `Release.cmd X.Y.Z`: clean-tree/main checks, version bump, notes check, Build.cmd, notes promotion, commit, annotated tag, push, `gh release create`. |
+| `.\Release.cmd` | `Release.cmd X.Y.Z`: clean-tree/main checks, version bump, notes check, Build.cmd, notes promotion, commit, annotated tag, push, `gh release create`. Sets the Windows PowerShell module path like Build.cmd. |
 | `.\developer_tools\Set-Version.ps1` | Bumps VersionPrefix (must increase). |
 | `.\developer_tools\Release-Notes.ps1` | Validates/promotes docs\changes.md -> docs\CHANGELOG.md + GitHub release body. Enforces jargon-free Public lines and history growth. |
 | `.\developer_tools\SetConsoleFont.ps1` | Console cosmetics used at the end of Build.cmd. |
 | `.\developer_tools\Extract-Strings.ps1` | Regenerates `Globals\Strings.resx` from all `L.T("...")` / `{local:T '...'}` texts. `-Check` only verifies it is current. Run after adding or changing UI text. |
 | `.\developer_tools\*.py` | Maintenance helpers (code extraction / comment removal). |
-| `.\ssl-certificate\` | Free self-signed code signing: Create-CodeSigningCert.ps1 (one-time), Sign-File.ps1 (used by Build.cmd), public .cer + thumbprint.txt. `private\` is git-ignored. |
+| `.\ssl-certificate\` | Free self-signed code signing: Create-CodeSigningCert.ps1 (one-time), Sign-File.ps1 (used by Build.cmd), public .cer + thumbprint.txt (COMMITTED on purpose: every build embeds the update pin). Optional `trusted-thumbprints.txt` = extra trusted signers (one per line, e.g. SignPath). `private\` is git-ignored. |
+| `.\.github\workflows\build.yml` | CI (GitHub Actions, free): tests + unsigned installer artifact on push/PR to main; SignPath signing step runs once its secret/variables exist. Releases still come from Release.cmd. |
+| `.\LICENSE` | MIT (needed for free open-source signing). Epic's outfit artwork in `Skin_Icons\` is excluded. |
 | `Epic-Games_Account_Switcher-Client\` | **WPF UI Layer** (assembly `Epic-Games_Account_Switcher.exe`). |
 | `  - App.xaml.cs` | App lifecycle, single-instance mutex, named events `Local\EpicGamesAccountSwitcher.ShutdownRequest` (graceful exit) and `.ShowRequest` (second launch shows the window), INSTALLER (user phase + elevated machine phase) and UNINSTALLER. |
 | `  - MainViewModel.cs` | UI brain: accounts, commands, monitoring, zoom. `partial`: |
@@ -45,14 +49,21 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 | `  - LauncherFrameController.cs` | Wraps the main window around the Epic launcher: WinEvent hooks (timer fallback), one-call SetWindowPos placement, frame drag/resize moves the launcher, fade/slide transitions (off when Windows animations are off). |
 | `  - MainWindow.xaml(.cs)` | Dashboard: card grid (+ ⋯ card menu, arrow-key navigation), frame layout, update/unsaved banners, Settings popup (general, launcher, updates, exit), tray, zoom (capped to what fits the window), maximize inside the work area, off-screen recovery. |
 | `  - CaptureAccountWindow.xaml(.cs)` | Wizard for adding/editing profiles. |
+| `  - ImageCropWindow.xaml(.cs)` | Upload + crop an own photo (round mask, live previews, EXIF rotation) -> 512x512 JPEG in `Skin_Icons\Custom`. `PickCropAndSave` is used by the avatar picker and Settings. |
 | `  - EmbeddedLoginWindow.xaml(.cs)` | WebView2 direct Epic login (exchange code capture). |
 | `  - PasswordPromptWindow.xaml(.cs)` | Backup password prompt. |
 | `  - ProgressWindow.xaml(.cs)` | Setup/uninstall progress UI. |
-| `  - SkinPickerWindow.xaml(.cs)` | Avatar picker. |
+| `  - SkinPickerWindow.xaml(.cs)` | Avatar picker: shipped avatars + uploaded photos, UPLOAD PHOTO, remove an unused uploaded photo (right-click/Delete). |
 | `  - CustomMessageBox.xaml(.cs)` | Mandated UI for all user notifications (Primary/Secondary/Cancel); text is selectable, Ctrl+C copies it. Also `DialogWindowHelper` (FitToScreen, DragMove, dialog/popup zoom). |
 | `  - UiHelpers.cs` | `TExtension` (`{local:T '...'}` localized XAML text), `ThemeManager` (Windows contrast themes), `ClipboardHelper` (password copy that skips clipboard history and clears itself). |
 | `Epic-Games_Account_Switcher-Globals\` | **Core Logic Layer**. |
-| `  - AccountService.cs` | Critical engine: atomic directory moves, session clones, process kill polling, registry identity switching with rollback, streaming encrypted backups, `VerifyBackupFile`. `SessionOperationLock` serializes session work. |
+| `  - AccountService.cs` | Critical engine (partial class). This file: account list, avatar paths, shared paths/helpers, `PruneSavedProfileCaches`. `SessionOperationLock` serializes session work. |
+| `  - AccountService.Session.cs` | Session/token validation, launcher INI values, current-account detection. |
+| `  - AccountService.Switch.cs` | Epic process control, safe moves/copies, session capture, `SwitchToAccount` with rollback. |
+| `  - AccountService.Registry.cs` | Registry identity capture, switch and rollback. |
+| `  - AccountService.Backup.cs` | One-pass streaming encrypted backups (EGASBKP2), restore via staging-folder rename, `VerifyBackupFile`. |
+| `  - CacheFilter.cs` | Recognises disposable Chromium cache in Epic's embedded browsers; profiles and backups never carry it. |
+| `  - SkinLibrary.cs` | Avatar collection: shipped (`<install>\Skin_Icons`) + uploaded (`<user data>\Skin_Icons\Custom`), legacy per-account copy mapping. |
 | `  - AppVersion.cs` | Version read-back + SemVer/legacy comparison. |
 | `  - UpdateService.cs` | GitHub Releases check, download, SHA-256 + Authenticode/thumbprint verification, installer launch (`--installing --update`). |
 | `  - AppSettings.cs` | `appsettings.json` singleton (incl. update + experimental settings, `KeepLauncherWindowPlacement`, `WindowMaximized`). |
@@ -61,8 +72,8 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 | `  - Globals.cs` | I/O helpers, logging, install paths (`InstallDirectory`), shortcut creation, shell-folder probing. |
 | `  - AccountModel.cs`, `CredentialService.cs`, `Registry.cs`, `Windows.cs` | Account model + DPAPI, Credential Manager, registry helpers, Win32 interop. |
 | `SingleFilePacker\` | Installer bootstrapper (asInvoker): payload SHA-256 check, extraction (user %TEMP% or admin-only Program Files folder when elevated), waits for setup, cleans up. |
-| `Epic-Games_Account_Switcher-Tests\` | MSTest: backup encryption, restore safety, path traversal, auth validation, version comparison, localization lookup, launcher window value rewriting. Run by Build.cmd. |
-| `Skin_Icons\`, `Application_Icons\` | Default avatars and app icons. |
+| `Epic-Games_Account_Switcher-Tests\` | MSTest: backup encryption, restore safety, path traversal, cache filter, uploaded-photo backup round trip, auth validation, version comparison, localization lookup, launcher window value rewriting. Run by Build.cmd. |
+| `Skin_Icons\`, `Application_Icons\` | Shipped avatars (copied to `<install>\Skin_Icons`; 29 incl. 20 popular Fortnite outfits, 512x512 JPEG) and app icons. |
 | `Payload\`, `compiled\` | Build outputs (git-ignored). |
 
 ## 4) CORE ARCHITECTURAL PRINCIPLES
@@ -73,13 +84,16 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
 5. **Privilege Separation (installer)**: Elevated code runs ONLY from admin-only locations (Program Files). Never write scripts/executables to %TEMP% for elevated use. User data (backups, accounts, HKCU) is handled only in the non-elevated user phase and only after the machine phase succeeded.
 6. **Never lose user data**: Never say a backup exists without `AccountService.VerifyBackupFile`. Never delete accounts without explicit user choice; uninstall keeps accounts by default.
 7. **No surprise restarts**: The app never installs/restarts without explicit user confirmation. Setup asks the running app to exit gracefully (finishing any switch) before force-stopping it.
-8. **Low-RAM & Safe Diagnostics**: Streaming crypto for backups; copy-on-read for locked Epic logs/INIs.
+8. **Low-RAM & Safe Diagnostics**: Backups are written streaming (no temp copies); verify/restore decrypt in memory only up to 64 MB, larger files go to a delete-on-close temp file. Copy-on-read for locked Epic logs/INIs.
 9. **Localizable text**: Every text a user can see goes through `L.T("English text", args)` (C#) or `{local:T 'English text'}` (XAML). The first argument is ONE string literal with `{0}` placeholders (never `"a" + x + "b"`). Log lines and setup detail lines stay English.
 10. **Theme tokens only**: Colours come from the brush keys in `App.xaml` via `DynamicResource` (never literals), so `ThemeManager` can swap them for Windows contrast themes. Outlines of inputs use `InputBorder`.
 11. **Launcher window placement**: With `KeepLauncherWindowPlacement` (default) a switch keeps the launcher's live `[WindowSettings] MainLauncherWindow` value, corrected with the real window rectangle read just before the launcher is stopped, instead of restoring the account's saved one.
+12. **No browser cache in profiles or backups**: copies of Epic state go through `CacheFilter.IsDisposable`. Never drop sign-in data (Cookies, Local Storage, IndexedDB, Session Storage).
+13. **Avatars are portable**: shipped avatars are referenced by file name; uploaded photos live in `<user data>\Skin_Icons\Custom` and are always included in backups. Never write avatars into the `EG` account folder.
 
 ## 5) DATA MODEL
-- `%LOCALAPPDATA%\EpicAccountSwitcher\EG\accounts.json` and `EG\<Id>\{Saved,EOS_Data,Roaming_Data,ProgramData_Data}`: profiles.
+- `%LOCALAPPDATA%\EpicAccountSwitcher\EG\accounts.json` and `EG\<Id>\`: launcher Saved items at the root (`Config`, `Data`, `WebCaches`, …, auth files) + `EOS_Data\`, `Roaming_Data\`, `ProgramData_Data\Manifests\`: profiles.
+- `%LOCALAPPDATA%\EpicAccountSwitcher\Skin_Icons\Custom\`: photos the user uploaded (cropped 512x512 JPEG). Shipped avatars live in `<install>\Skin_Icons`.
 - `%LOCALAPPDATA%\EpicAccountSwitcher\appsettings.json`: settings (incl. AutoCheckForUpdates, SkippedUpdateVersion, ExperimentalLauncherFrame, KeepLauncherWindowPlacement, WindowMaximized, ZoomFactor).
 - `%LOCALAPPDATA%\EpicAccountSwitcher\Updates\<version>\`: verified update downloads (old ones cleaned at startup).
 - `EG\accounts.json.unreadable_<time>`: safety copy made when accounts.json can't be parsed (never auto-deleted).
@@ -96,7 +110,7 @@ Distribution: one signed single-file installer EXE published on GitHub Releases;
    rules at the top of that file). Never edit released sections or docs\CHANGELOG.md by hand.
 4. Keep this file current: new/removed/renamed files go into section 3, new rules into section 4.
 5. Never change the version by hand (Release.cmd owns it). Never rename release assets (updater contract, see docs\RELEASING.md).
-6. Never commit secrets: ssl-certificate\private\, *.pfx, passwords. Never commit Payload\ or compiled\.
+6. Never commit secrets: ssl-certificate\private\, *.pfx, passwords. Never commit Payload\ or compiled\. Do commit the public .cer and thumbprint.txt.
 7. All user-facing messages go through CustomMessageBox; never block the UI thread with network or disk work.
 8. Borderless dialogs call DialogWindowHelper.FitToScreen + DragMove (CustomMessageBox.xaml.cs) so they can be moved, never exceed the screen and follow the zoom.
 9. After adding or changing UI text run `developer_tools\Extract-Strings.ps1` and commit the regenerated `Strings.resx`.

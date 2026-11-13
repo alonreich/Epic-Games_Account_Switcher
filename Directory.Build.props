@@ -22,6 +22,13 @@
   <PropertyGroup Condition="'$(SigningThumbprint)' == '' And Exists('$(MSBuildThisFileDirectory)ssl-certificate\thumbprint.txt')">
     <SigningThumbprint>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)ssl-certificate\thumbprint.txt').Trim())</SigningThumbprint>
   </PropertyGroup>
+  <!--
+    Optional extra trusted signers (one thumbprint per line), e.g. a future SignPath Foundation certificate.
+    Ship a release that trusts BOTH signers before releases are signed with the new one, or old installs cannot auto-update.
+  -->
+  <PropertyGroup Condition="'$(SigningThumbprint)' != '' And Exists('$(MSBuildThisFileDirectory)ssl-certificate\trusted-thumbprints.txt')">
+    <SigningThumbprint>$(SigningThumbprint);$([System.Text.RegularExpressions.Regex]::Replace($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)ssl-certificate\trusted-thumbprints.txt').Trim()), '\s+', ';'))</SigningThumbprint>
+  </PropertyGroup>
   <ItemGroup Condition="'$(SigningThumbprint)' != ''">
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
       <_Parameter1>SigningThumbprint</_Parameter1>

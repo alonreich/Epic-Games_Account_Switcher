@@ -14,7 +14,6 @@ using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Drawing;
 using System.Collections.Concurrent;
 
 namespace Epic_Games_Account_Switcher_Globals
@@ -321,6 +320,29 @@ namespace Epic_Games_Account_Switcher_Globals
         }
         public static bool CopyFilesRecursive(string s, string d, bool ovr = true, List<string> ex = null)
         {
+            Func<string, bool> skip = null;
+            if (ex != null && ex.Count > 0)
+            {
+                var root = Path.GetFullPath(s).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                skip = p => { var rel = MakeRelative(root, p); return ex.Any(e => rel.IndexOf(e, StringComparison.OrdinalIgnoreCase) >= 0); };
+            }
+            return CopyFilesRecursive(s, d, ovr, skip);
+        }
+
+        private static string MakeRelative(string root, string path)
+        {
+            if (path.StartsWith(@"\\?\")) path = path.Substring(4);
+            return path.Length > root.Length ? path.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar) : "";
+        }
+
+        public static async Task<bool> CopyFilesRecursiveAsync(string s, string d, bool ovr, Func<string, bool> skip)
+        {
+            return await Task.Run(() => CopyFilesRecursive(s, d, ovr, skip));
+        }
+
+        /// <summary>Copies a folder tree. <paramref name="skip"/> gets each absolute source file/folder path and can leave it out.</summary>
+        public static bool CopyFilesRecursive(string s, string d, bool ovr, Func<string, bool> skip)
+        {
             try
             {
                 s = Path.GetFullPath(s).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -338,7 +360,7 @@ namespace Epic_Games_Account_Switcher_Globals
                 {
                     var currentDir = dirs.Pop();
                     string relDir = currentDir.Substring(sLong.Length).TrimStart(Path.DirectorySeparatorChar);
-                    if (ex != null && ex.Any(e => relDir.IndexOf(e, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
+                    if (skip != null && relDir.Length > 0 && skip(currentDir)) continue;
 
                     string targetSubDir = Path.Combine(dLong, relDir);
                     try { Directory.CreateDirectory(targetSubDir); } catch { }
@@ -352,7 +374,7 @@ namespace Epic_Games_Account_Switcher_Globals
                     foreach (var f in files)
                     {
                         string r = f.Substring(sLong.Length).TrimStart(Path.DirectorySeparatorChar);
-                        if (ex != null && ex.Any(e => r.IndexOf(e, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
+                        if (skip != null && skip(f)) continue;
                         string dest = Path.Combine(dLong, r);
                         if (ovr || !File.Exists(dest))
                         {

@@ -5,7 +5,7 @@
         Title="{local:T 'Choose Avatar'}" MinHeight="450" MinWidth="600"
         SizeToContent="WidthAndHeight"
         Background="{DynamicResource MainBackground}" WindowStyle="None" AllowsTransparency="True"
-        ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <Style x:Key="SkinTileButtonStyle" TargetType="Button">
             <Setter Property="OverridesDefaultStyle" Value="True"/>
@@ -67,11 +67,11 @@
 
             <StackPanel Grid.Row="0" Margin="0,0,0,20">
                 <TextBlock Text="{local:T 'CHOOSE AN AVATAR'}" Foreground="{DynamicResource PrimaryTextForeground}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock Text="{local:T 'Click an avatar to select it, or double-click to use it right away.'}" Foreground="{DynamicResource SubTextForeground}" FontSize="13" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                <TextBlock Text="{local:T 'Click an avatar to select it, or double-click to use it right away. Use UPLOAD PHOTO to add your own picture.'}" Foreground="{DynamicResource SubTextForeground}" FontSize="13" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="620" Margin="0,6,0,0"/>
             </StackPanel>
 
             <!-- Fixed width so the avatars wrap into rows (4 per row) and scroll, instead of one row wider than the screen. -->
-            <ListBox x:Name="SkinsList" Grid.Row="1" Width="640" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto" MouseDoubleClick="SkinsList_MouseDoubleClick" SelectionChanged="SkinsList_SelectionChanged" AutomationProperties.Name="{local:T 'Avatars'}">
+            <ListBox x:Name="SkinsList" Grid.Row="1" Width="640" MaxHeight="560" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto" MouseDoubleClick="SkinsList_MouseDoubleClick" SelectionChanged="SkinsList_SelectionChanged" AutomationProperties.Name="{local:T 'Avatars'}">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
                         <Setter Property="Cursor" Value="Hand"/>
@@ -92,13 +92,24 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Button Style="{StaticResource SkinTileButtonStyle}" Click="SkinTile_Click" MouseDoubleClick="SkinTile_MouseDoubleClick" ToolTip="{Binding Name}" AutomationProperties.Name="{Binding AccessibleName}">
+                        <Button Style="{StaticResource SkinTileButtonStyle}" Click="SkinTile_Click" MouseDoubleClick="SkinTile_MouseDoubleClick" ToolTip="{Binding ToolTipText}" AutomationProperties.Name="{Binding AccessibleName}"
+                                ContextMenuOpening="SkinTile_ContextMenuOpening">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="{local:T 'Remove this photo'}" Click="RemovePhoto_Click"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
                             <Grid Width="120" Height="120">
                                 <Ellipse Width="110" Height="110">
                                     <Ellipse.Fill>
-                                        <ImageBrush ImageSource="{Binding FullPath}" Stretch="UniformToFill" />
+                                        <ImageBrush ImageSource="{Binding Image}" Stretch="UniformToFill" />
                                     </Ellipse.Fill>
                                 </Ellipse>
+                                <!-- Marks photos the user uploaded (they can be removed; shipped avatars cannot). -->
+                                <Border Visibility="{Binding IsCustom, Converter={StaticResource BooleanToVisibilityConverter}}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,6,6"
+                                        Width="26" Height="26" CornerRadius="13" Background="{DynamicResource IconFill}" BorderBrush="{DynamicResource MainBackground}" BorderThickness="2">
+                                    <TextBlock Text="&#xE77B;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{DynamicResource OnAccentForeground}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
                             </Grid>
                         </Button>
                     </DataTemplate>
@@ -106,6 +117,8 @@
             </ListBox>
 
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
+                <Button Content="{local:T 'UPLOAD PHOTO…'}" Click="Upload_Click" MinWidth="140" Height="35" Margin="0,0,20,0" Style="{StaticResource SecondaryButton}" Padding="16,8"
+                        ToolTip="{local:T 'Add your own picture. You can move and zoom it to fit the circle before it is saved.'}" AutomationProperties.Name="{local:T 'Upload your own photo'}"/>
                 <Button Content="{local:T 'CANCEL'}" Click="Cancel_Click" Width="100" Height="35" Margin="0,0,20,0" Style="{StaticResource CancelButton}" Padding="10,8" IsCancel="True" ToolTip="{local:T 'Keep the current avatar (Esc)'}"/>
                 <Button x:Name="SelectButton" Content="{local:T 'USE AVATAR'}" Click="Select_Click" MinWidth="150" Height="35" Padding="20,8" Style="{StaticResource OkButton}" IsDefault="True" IsEnabled="False" ToolTip="{local:T 'Use the selected avatar (Enter)'}"/>
             </StackPanel>

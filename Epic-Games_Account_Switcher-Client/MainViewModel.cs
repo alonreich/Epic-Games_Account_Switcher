@@ -1006,9 +1006,12 @@ namespace Epic_Games_Account_Switcher_Client
 
                 var cancellationToken = BeginBusyOperation(L.T("Creating backup…"));
                 var succeeded = false;
+                int verifiedCount = 0;
                 try
                 {
                     await Task.Run(() => AccountService.BackupAccounts(sfd.FileName, passwordWindow.EnteredPassword, null, cancellationToken), cancellationToken);
+                    // Never report a backup that cannot be read back (project rule 4.6).
+                    verifiedCount = await Task.Run(() => AccountService.VerifyBackupFile(sfd.FileName, passwordWindow.EnteredPassword), cancellationToken);
                     succeeded = true;
                 }
                 catch (OperationCanceledException)
@@ -1026,7 +1029,7 @@ namespace Epic_Games_Account_Switcher_Client
                 }
 
                 if (!succeeded) return;
-                var count = Accounts == null ? 0 : Accounts.Count;
+                var count = verifiedCount;
                 var done = new CustomMessageBox(L.T("Backup Saved"),
                     (count == 1
                         ? L.T("1 account was saved to:\n{0}\n\nKeep the password somewhere safe. Without it this backup can't be restored.", sfd.FileName)

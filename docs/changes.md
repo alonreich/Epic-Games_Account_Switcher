@@ -13,7 +13,18 @@ AGENT / DEVELOPER RULES (mandatory, see project_structure.txt section 6)
 -->
 
 ## [Unreleased]
+### Security
+- The public signing certificate and `ssl-certificate\thumbprint.txt` are committed again (removed from `.gitignore`), so every build embeds the update pin. Without it `UpdateService.VerifySignature` falls back to SHA-256 only, and that hash comes from the same release.
+  - Public: Every build of the app now checks that updates are signed by the project's own certificate.
+- `UpdateService.PinnedSigningThumbprints` accepts several pinned signers (`thumbprint.txt` + optional `ssl-certificate\trusted-thumbprints.txt`, joined in `Directory.Build.props`), so a future signing certificate can be trusted before releases switch to it.
+  - Public: -
 ### Added
+- `LICENSE` (MIT; Epic's outfit artwork excluded) and `.github/workflows/build.yml` (free GitHub Actions CI: tests + unsigned installer artifact; SignPath signing step activates once its secret/variables exist). Prerequisites for the free SignPath Foundation open-source signing program; steps in `ssl-certificate/README.md`.
+  - Public: -
+- Own profile photos: "UPLOAD PHOTO…" in the avatar picker and "ADD YOUR OWN PHOTO…" in Settings open `ImageCropWindow` (drag/wheel/slider/arrow-key crop under a round mask with live previews, EXIF rotation, 512×512 JPEG). Photos are stored in `<user data>\Skin_Icons\Custom` (`SkinLibrary`); uploaded photos can be removed from the picker (right-click or Delete) unless a profile uses them.
+  - Public: You can now upload your own profile photos and choose how they fit the round frame before saving.
+- 20 new avatars in `Skin_Icons` (Peely, Fishstick, Raven, Drift, Midas, Renegade Raider, Black Knight, Aura, Crystal, Meowscles, Ghoul Trooper, Cuddle Team Leader, Brite Bomber, Lynx, The Reaper, Omega, Ikonik, Calamity, Jonesy The First, Leviathan).
+  - Public: 20 popular Fortnite outfits were added to the avatar collection.
 - Launcher window placement is kept across accounts: before `AccountService.SwitchToAccount` stops the launcher it reads the real window rectangle (`LauncherWindowPlacement.Capture`; the launcher is force-stopped and never saves it itself), merges it into the live `[WindowSettings] MainLauncherWindow` value (`LauncherWindowPlacement.Apply`, skipped on scaled displays) and writes that into the restored config (`ApplyKeptLauncherWindowSettings`), falling back to the account's own saved placement. New `AppSettings.KeepLauncherWindowPlacement` (default on) + Settings checkbox.
   - Public: Epic Games Launcher now reopens at the same size and position for every account. You can turn this off in Settings.
 - Saved password is usable: SHOW/HIDE and COPY in the Add/Edit dialog, "COPY PASSWORD" in the card menu (`MainViewModel.CopyPassword`, `ClipboardHelper.CopySensitive`: kept out of clipboard history, removed after 30 s), `Account.HasSavedPassword`.
@@ -28,6 +39,12 @@ AGENT / DEVELOPER RULES (mandatory, see project_structure.txt section 6)
   - Public: You can now zoom with Ctrl and the plus, minus and zero keys.
 
 ### Changed
+- Runtime: all projects except the installer bootstrapper move from .NET Framework 4.8 / C# 7.3 to .NET 10 (`net10.0-windows`, C# 14). The app ships self-contained with ReadyToRun (`Build.cmd` publish), so users need no .NET install; the installer grows from ~2 MB to ~68 MB. `SingleFilePacker` stays on .NET Framework 4.8 (always present on Windows) so the installer itself starts anywhere. NativeAOT/trimming are not used (WPF does not support them).
+  - Public: The app now runs on the latest .NET and starts faster. No separate .NET download is needed.
+- Backups are written in one streaming pass (files → ZIP → AES → disk) without temp copies, skip browser cache (`CacheFilter`), store shipped avatars by name and include uploaded photos (`Skin_Icons/Custom`); verify/restore decrypt in memory (temp file only above 64 MB) and restore swaps a staging folder in with a rename (`AccountService.Backup.cs`). Same `EGASBKP2` file format, so older backups still restore and older versions can read new ones. Measured on 9 real profiles: 713 MB → 10.7 MB, backup under 1 s, check 20 ms.
+  - Public: Backups are now about 70 times smaller and take about a second instead of minutes. Old backups still restore.
+- Saved profiles no longer keep throw-away browser cache (`CopyDirectoryStrictAsync` uses `CacheFilter.IsDisposable`; existing profiles are cleaned once in the background at startup by `AccountService.PruneSavedProfileCaches`). Sign-in data (cookies, local storage) is kept.
+  - Public: Saved accounts take much less disk space (about 1.4 GB down to about 60 MB for 9 accounts), and switching copies less.
 - Clicking the account that is already signed in no longer runs a switch: it only says so, or opens the launcher when it is closed (`MainViewModel.SwitchToAccount` compares with `AccountService.GetCurrentAccountId`). The full restore is the new card-menu item "RELOAD SAVED SIGN-IN…" on the active card.
   - Public: Clicking the account that is already active no longer restarts Epic Games Launcher.
 - Zoom also applies to the Settings popup, card menus and dialogs (never below 100%, reduced when a dialog would not fit the screen): `DialogWindowHelper.UiZoom/PopupZoom/ApplyZoom`, `MainViewModel.PopupZoom`.
@@ -36,6 +53,12 @@ AGENT / DEVELOPER RULES (mandatory, see project_structure.txt section 6)
   - Public: Frame mode now stays put while you switch accounts instead of collapsing and wrapping again.
 
 ### Fixed
+- Manual BACKUP said "Backup Saved" without reading the file back: `MainViewModel` now calls `AccountService.VerifyBackupFile` after `BackupAccounts` (a failed check shows "Backup Failed") and reports the verified profile count.
+  - Public: The app now checks every backup you make before saying it was saved.
+- Restore copied avatars into the account data folder (`EG\Skin_Icons`) and each backup/restore cycle added another per-account copy of the chosen avatar (`<id>_<id>_X.jpg`). Copies of shipped avatars now map back to the shipped file (`SkinLibrary.FindBuiltInFor`) and restore keeps avatars out of the account folder.
+  - Public: Restoring a backup no longer piles up duplicate copies of your avatars.
+- `Build.cmd`/`Release.cmd` failed at signing/hashing when started from PowerShell 7 (its module path hid `Cert:` and `Get-FileHash` from Windows PowerShell); both scripts now set the Windows PowerShell module path.
+  - Public: -
 - Zoomed dashboard went blank in a small window: the applied zoom is `MainViewModel.EffectiveZoom` = chosen zoom capped by `ZoomFitLimit` (set from the window size in `MainWindow.UpdateZoomFitLimit`); toolbar columns are Auto/*/Auto so groups cannot overlap.
   - Public: Zooming in can no longer make the window content disappear in a small window.
 - Maximizing overflowed the screen and hid the bottom toolbar behind the taskbar.
@@ -58,6 +81,10 @@ AGENT / DEVELOPER RULES (mandatory, see project_structure.txt section 6)
   - Public: -
 
 ### Internal
+- New `UpdateServiceTests` (thumbprint list parsing).
+- Removed dead `<exe dir>\Payload\Skin_Icons` lookups from `AccountService.NormalizeProfileImagePath` / `FindSkinByFileName` (no install or dev build has that folder; matches `SkinLibrary`).
+- `AccountService.cs` (~3,000 lines) split into partial files by area: `AccountService.cs` (accounts, avatars, shared paths), `.Session.cs` (validation, INI, current account), `.Switch.cs` (Epic processes, safe moves, capture, switching), `.Registry.cs`, `.Backup.cs`. No behaviour change.
+- New tests: `CacheFilterOnlyMatchesBrowserCache`, `BackupSkipsBrowserCacheAndRoundTripsUploadedPhoto`, `LegacyPerAccountAvatarCopyMapsToShippedAvatar`.
 - `Epic-Games_Account_Switcher-Tests/LocalizationTests.cs` (text lookup, placeholders, case variants, account labels) and `LauncherWindowPlacementTests.cs` (window value rewriting).
 - UI/UX audit of 2026-11-12 (18 findings) resolved; live checks used a dev instance with fake accounts and a stand-in launcher window.
 

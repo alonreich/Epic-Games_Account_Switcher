@@ -127,6 +127,63 @@ namespace Epic_Games_Account_Switcher_Tests
             File.SetAttributes(Path.Combine(target, "read_only.txt"), FileAttributes.Normal);
         }
 
+        [TestMethod]
+        public void CacheFilterOnlyMatchesBrowserCache()
+        {
+            Assert.IsTrue(CacheFilter.IsDisposable(@"C:\EG\a1\WebCaches\webcache_4430\Cache\data_1"));
+            Assert.IsTrue(CacheFilter.IsDisposable(@"C:\EG\a1\EOS_Data\EOSOverlay\BrowserCache\0\Default\Service Worker\CacheStorage"));
+            Assert.IsTrue(CacheFilter.IsDisposable(@"C:\EG\a1\EOS_Data\EOSOverlay\BrowserCache\0\BrowserMetrics-spare.pma"));
+            Assert.IsFalse(CacheFilter.IsDisposable(@"C:\EG\a1\WebCaches\webcache_4430\Cookies"));
+            Assert.IsFalse(CacheFilter.IsDisposable(@"C:\EG\a1\EOS_Data\EOSOverlay\BrowserCache\0\Default\Local Storage\leveldb\0003.log"));
+            Assert.IsFalse(CacheFilter.IsDisposable(@"C:\EG\a1\Config\Cache\settings.ini"));
+        }
+
+        [TestMethod]
+        public void BackupSkipsBrowserCacheAndRoundTripsUploadedPhoto()
+        {
+            var profile = Path.Combine(Globals.UserDataFolder, "EG", "acc42");
+            var cache = Path.Combine(profile, "EOS_Data", "EOSOverlay", "BrowserCache", "0", "Default", "Cache");
+            var cookies = Path.Combine(profile, "WebCaches", "webcache_1", "Cookies");
+            Directory.CreateDirectory(cache);
+            Directory.CreateDirectory(Path.GetDirectoryName(cookies));
+            File.WriteAllBytes(Path.Combine(cache, "big.bin"), new byte[4 * 1024 * 1024]);
+            File.WriteAllText(cookies, "cookie");
+            var photo = SkinLibrary.SaveCustom(new byte[] { 1, 2, 3, 4 }, "My Photo");
+            AccountService.SaveAccounts(new List<Account> { new Account("acc42", "Photo Account") { ProfileImagePath = photo } });
+
+            var backup = Path.Combine(_root, "small.egbackup");
+            AccountService.BackupAccounts(backup, null, CancellationToken.None);
+            Assert.IsTrue(new FileInfo(backup).Length < 64 * 1024, "browser cache must not be in the backup");
+            Assert.AreEqual(1, AccountService.VerifyBackupFile(backup));
+
+            TryDeleteDirectory(Globals.UserDataFolder);
+            Directory.CreateDirectory(Globals.UserDataFolder);
+            AccountService.RestoreAccounts(backup, CancellationToken.None);
+
+            var restored = AccountService.GetAccounts();
+            Assert.AreEqual(1, restored.Count);
+            Assert.IsTrue(SkinLibrary.IsCustom(restored[0].ProfileImagePath), restored[0].ProfileImagePath);
+            CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 4 }, File.ReadAllBytes(restored[0].ProfileImagePath));
+            Assert.IsTrue(File.Exists(Path.Combine(Globals.UserDataFolder, "EG", "acc42", "WebCaches", "webcache_1", "Cookies")));
+            Assert.IsFalse(Directory.Exists(Path.Combine(Globals.UserDataFolder, "EG", "acc42", "EOS_Data", "EOSOverlay", "BrowserCache", "0", "Default", "Cache")));
+            Assert.IsFalse(Directory.Exists(Path.Combine(Globals.UserDataFolder, "EG", "Skin_Icons")), "avatars must not land inside the account folder");
+        }
+
+        [TestMethod]
+        public void LegacyPerAccountAvatarCopyMapsToShippedAvatar()
+        {
+            Directory.CreateDirectory(SkinLibrary.BuiltInFolder);
+            var shipped = Path.Combine(SkinLibrary.BuiltInFolder, "Test_Shipped_Skin.jpg");
+            File.WriteAllBytes(shipped, new byte[] { 9 });
+            try
+            {
+                var legacy = Path.Combine(Globals.UserDataFolder, "EG", "Skin_Icons", "Selected", "0123456789abcdef0123456789abcdef_0123456789abcdef0123456789abcdef_Test_Shipped_Skin.jpg");
+                Assert.AreEqual(shipped, SkinLibrary.FindBuiltInFor(legacy));
+                Assert.IsNull(SkinLibrary.FindBuiltInFor(Path.Combine(SkinLibrary.CustomFolder, "Test_Shipped_Skin.jpg")));
+            }
+            finally { File.Delete(shipped); }
+        }
+
         private static object InvokeValidateSession(string folder, string expectedAccountId)
         {
             var method = typeof(AccountService).GetMethod("ValidateSession", BindingFlags.NonPublic | BindingFlags.Static);

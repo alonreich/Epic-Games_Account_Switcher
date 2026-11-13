@@ -16,12 +16,11 @@ SingleFilePacker/payload.sha256
 *.user
 *.log
 
-# Code-signing secrets: NEVER commit (public .cer and thumbprint.txt are fine)
+# Code-signing secrets: NEVER commit. The public .cer and thumbprint.txt ARE committed on purpose:
+# every build then embeds the update pin (without it the updater would trust the SHA-256 file alone).
 ssl-certificate/private/
 *.pfx
 *.p12
 *.pvk
 *.snk
 
-*.cer
-*thumbprint*.txt

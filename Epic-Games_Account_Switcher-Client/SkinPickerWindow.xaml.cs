@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using Epic_Games_Account_Switcher_Globals;
 
 namespace Epic_Games_Account_Switcher_Client
@@ -17,7 +18,11 @@ namespace Epic_Games_Account_Switcher_Client
         {
             public string Name { get; set; }
             public string FullPath { get; set; }
-            public string AccessibleName => L.T("Avatar {0}", Name);
+            public bool IsCustom { get; set; }
+            /// <summary>Loaded into memory (small decode) so the file is never locked and can be removed.</summary>
+            public BitmapImage Image { get; set; }
+            public string AccessibleName => IsCustom ? L.T("Your photo {0}", Name) : L.T("Avatar {0}", Name);
+            public string ToolTipText => IsCustom ? L.T("{0} (your photo — right-click or press Delete to remove it)", Name) : Name;
             public override string ToString() => Name ?? "";
         }
         public SkinPickerWindow(string currentPath = null)
@@ -69,19 +74,93 @@ namespace Epic_Games_Account_Switcher_Client
         private void LoadSkins()
         {
             var skins = new List<SkinItem>();
-            var paths = new[] { Path.Combine(Globals.UserDataFolder, "Skin_Icons"), Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skin_Icons"), Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Payload", "Skin_Icons") };
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var dir in paths)
+            foreach (var skin in SkinLibrary.GetAll())
             {
-                if (!Directory.Exists(dir)) continue;
-                foreach (var f in Directory.GetFiles(dir, "*.*", SearchOption.AllDirectories))
-                {
-                    var ext = Path.GetExtension(f).ToLower(); if (ext != ".jpg" && ext != ".png" && ext != ".jpeg") continue;
-                    var fn = Path.GetFileName(f); if (seen.Contains(fn)) continue;
-                    seen.Add(fn); skins.Add(new SkinItem { Name = Path.GetFileNameWithoutExtension(f).Replace("_", " "), FullPath = f });
-                }
+                var image = LoadThumbnail(skin.FullPath);
+                if (image == null) continue;
+                skins.Add(new SkinItem { Name = skin.Name, FullPath = skin.FullPath, IsCustom = skin.IsCustom, Image = image });
             }
             SkinsList.ItemsSource = skins;
+        }
+
+        private static BitmapImage LoadThumbnail(string path)
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = 240;
+                bitmap.UriSource = new Uri(path, UriKind.Absolute);
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("[SKINS] Skipped unreadable avatar " + path, ex);
+                return null;
+            }
+        }
+
+        private void Upload_Click(object sender, RoutedEventArgs e)
+        {
+            var saved = ImageCropWindow.PickCropAndSave(this);
+            if (saved == null) return;
+            LoadSkins();
+            PreselectCurrent(saved);
+            FocusSelectedTile();
+        }
+
+        private void SkinTile_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            // Only uploaded photos have a menu (Remove); shipped avatars cannot be removed.
+            var skin = (sender as FrameworkElement)?.DataContext as SkinItem;
+            if (skin == null || !skin.IsCustom) e.Handled = true;
+        }
+
+        private void RemovePhoto_Click(object sender, RoutedEventArgs e)
+        {
+            var menu = (sender as MenuItem)?.Parent as ContextMenu;
+            var skin = (menu?.PlacementTarget as FrameworkElement)?.DataContext as SkinItem;
+            RemovePhoto(skin);
+        }
+
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Delete) return;
+            var skin = SkinsList.SelectedItem as SkinItem;
+            if (skin == null || !skin.IsCustom) return;
+            RemovePhoto(skin);
+            e.Handled = true;
+        }
+
+        private void RemovePhoto(SkinItem skin)
+        {
+            if (skin == null || !skin.IsCustom) return;
+            var users = AccountService.GetAccounts()
+                .Where(a => string.Equals(a.ProfileImagePath, skin.FullPath, StringComparison.OrdinalIgnoreCase))
+                .Select(a => a.Name).ToList();
+            if (users.Count > 0)
+            {
+                new CustomMessageBox(L.T("Photo In Use"), L.T("This photo is used by: {0}. Choose another avatar for those profiles first, then remove it.", string.Join(", ", users))) { Owner = this }.ShowDialog();
+                return;
+            }
+            var confirm = new CustomMessageBox(L.T("Remove Photo"), L.T("Remove the photo \"{0}\" from your avatars?", skin.Name), L.T("REMOVE"), null, L.T("KEEP"), MessageBoxVisualStyle.Danger) { Owner = this };
+            confirm.ShowDialog();
+            if (confirm.Result != CustomDialogResult.Primary) return;
+            try
+            {
+                SkinLibrary.DeleteCustom(skin.FullPath);
+                if (string.Equals(SelectedSkinPath, skin.FullPath, StringComparison.OrdinalIgnoreCase)) SelectedSkinPath = null;
+                LoadSkins();
+                FocusSelectedTile();
+            }
+            catch (Exception ex)
+            {
+                Globals.WriteToLog("[SKINS] Could not remove photo " + skin.FullPath, ex);
+                new CustomMessageBox(L.T("Photo Not Removed"), L.T("The photo could not be removed: {0}", ex.Message), MessageBoxVisualStyle.Error) { Owner = this }.ShowDialog();
+            }
         }
         private void Dialog_DragMove(object sender, MouseButtonEventArgs e) => DialogWindowHelper.DragMove(this, e);
         private void SkinsList_MouseDoubleClick(object sender, MouseButtonEventArgs e) { SelectCurrentSkin(); }

@@ -71,6 +71,12 @@ Keep the password somewhere safe. Without it this backup can't be restored.</val
   <data name="ADD ACCOUNT" xml:space="preserve">
     <value>ADD ACCOUNT</value>
   </data>
+  <data name="ADD YOUR OWN PHOTO…" xml:space="preserve">
+    <value>ADD YOUR OWN PHOTO…</value>
+  </data>
+  <data name="ADJUST YOUR PHOTO" xml:space="preserve">
+    <value>ADJUST YOUR PHOTO</value>
+  </data>
   <data name="Account '{0}' saved." xml:space="preserve">
     <value>Account '{0}' saved.</value>
   </data>
@@ -91,6 +97,21 @@ Keep the password somewhere safe. Without it this backup can't be restored.</val
   </data>
   <data name="Add the account signed in to Epic Games Launcher" xml:space="preserve">
     <value>Add the account signed in to Epic Games Launcher</value>
+  </data>
+  <data name="Add the photo to your avatars (Enter)" xml:space="preserve">
+    <value>Add the photo to your avatars (Enter)</value>
+  </data>
+  <data name="Add your own photo" xml:space="preserve">
+    <value>Add your own photo</value>
+  </data>
+  <data name="Add your own photos to the avatar collection. You choose how each photo fits the round frame. Backups include them." xml:space="preserve">
+    <value>Add your own photos to the avatar collection. You choose how each photo fits the round frame. Backups include them.</value>
+  </data>
+  <data name="Add your own picture. You can move and zoom it to fit the circle before it is saved." xml:space="preserve">
+    <value>Add your own picture. You can move and zoom it to fit the circle before it is saved.</value>
+  </data>
+  <data name="Adjust Photo" xml:space="preserve">
+    <value>Adjust Photo</value>
   </data>
   <data name="Administrator Required" xml:space="preserve">
     <value>Administrator Required</value>
@@ -124,6 +145,9 @@ Keep the password somewhere safe. Without it this backup can't be restored.</val
   </data>
   <data name="Another saved account already uses this name." xml:space="preserve">
     <value>Another saved account already uses this name.</value>
+  </data>
+  <data name="Avatar list" xml:space="preserve">
+    <value>Avatar list</value>
   </data>
   <data name="Avatar {0}" xml:space="preserve">
     <value>Avatar {0}</value>
@@ -224,14 +248,17 @@ Keep the password somewhere safe. Without it this backup can't be restored.</val
   <data name="Choose a password for this backup (at least 8 characters). You'll need it to restore these accounts on any PC, and it can't be recovered if you forget it." xml:space="preserve">
     <value>Choose a password for this backup (at least 8 characters). You'll need it to restore these accounts on any PC, and it can't be recovered if you forget it.</value>
   </data>
+  <data name="Choose a photo" xml:space="preserve">
+    <value>Choose a photo</value>
+  </data>
   <data name="Choose an avatar" xml:space="preserve">
     <value>Choose an avatar</value>
   </data>
   <data name="Clean Install" xml:space="preserve">
     <value>Clean Install</value>
   </data>
-  <data name="Click an avatar to select it, or double-click to use it right away." xml:space="preserve">
-    <value>Click an avatar to select it, or double-click to use it right away.</value>
+  <data name="Click an avatar to select it, or double-click to use it right away. Use UPLOAD PHOTO to add your own picture." xml:space="preserve">
+    <value>Click an avatar to select it, or double-click to use it right away. Use UPLOAD PHOTO to add your own picture.</value>
   </data>
   <data name="Click to switch. Right-click, the ⋯ button or the Menu key opens edit, reorder and delete. Arrow keys move between accounts." xml:space="preserve">
     <value>Click to switch. Right-click, the ⋯ button or the Menu key opens edit, reorder and delete. Arrow keys move between accounts.</value>
@@ -357,6 +384,9 @@ This can't be undone unless you restore a backup.</value>
   <data name="Display name *" xml:space="preserve">
     <value>Display name *</value>
   </data>
+  <data name="Do not add this photo (Esc)" xml:space="preserve">
+    <value>Do not add this photo (Esc)</value>
+  </data>
   <data name="Don't offer to save this account again." xml:space="preserve">
     <value>Don't offer to save this account again.</value>
   </data>
@@ -368,6 +398,9 @@ This can't be undone unless you restore a backup.</value>
   </data>
   <data name="Downloading and verifying… {0:0}%" xml:space="preserve">
     <value>Downloading and verifying… {0:0}%</value>
+  </data>
+  <data name="Drag the photo to move it. Scroll or use the slider to zoom. Only the part inside the circle is shown." xml:space="preserve">
+    <value>Drag the photo to move it. Scroll or use the slider to zoom. Only the part inside the circle is shown.</value>
   </data>
   <data name="EDIT ACCOUNT" xml:space="preserve">
     <value>EDIT ACCOUNT</value>
@@ -477,6 +510,9 @@ This can't be undone unless you restore a backup.</value>
   <data name="Hide until tomorrow." xml:space="preserve">
     <value>Hide until tomorrow.</value>
   </data>
+  <data name="Images" xml:space="preserve">
+    <value>Images</value>
+  </data>
   <data name="Improvements and fixes." xml:space="preserve">
     <value>Improvements and fixes.</value>
   </data>
@@ -498,6 +534,9 @@ This setup: {1}</value>
   </data>
   <data name="Just now" xml:space="preserve">
     <value>Just now</value>
+  </data>
+  <data name="KEEP" xml:space="preserve">
+    <value>KEEP</value>
   </data>
   <data name="Keep Editing" xml:space="preserve">
     <value>Keep Editing</value>
@@ -684,6 +723,12 @@ Sign in here in a secure window, or open Epic Games Launcher, sign in there, and
   <data name="Overwrites this account's saved sign-in with the account currently signed in to Epic Games Launcher." xml:space="preserve">
     <value>Overwrites this account's saved sign-in with the account currently signed in to Epic Games Launcher.</value>
   </data>
+  <data name="PREVIEW" xml:space="preserve">
+    <value>PREVIEW</value>
+  </data>
+  <data name="PROFILE PICTURES" xml:space="preserve">
+    <value>PROFILE PICTURES</value>
+  </data>
   <data name="Password" xml:space="preserve">
     <value>Password</value>
   </data>
@@ -695,6 +740,33 @@ Sign in here in a secure window, or open Epic Games Launcher, sign in there, and
   </data>
   <data name="Permanently removes this account and its saved sign-in from this PC." xml:space="preserve">
     <value>Permanently removes this account and its saved sign-in from this PC.</value>
+  </data>
+  <data name="Photo" xml:space="preserve">
+    <value>Photo</value>
+  </data>
+  <data name="Photo In Use" xml:space="preserve">
+    <value>Photo In Use</value>
+  </data>
+  <data name="Photo Not Removed" xml:space="preserve">
+    <value>Photo Not Removed</value>
+  </data>
+  <data name="Photo Not Saved" xml:space="preserve">
+    <value>Photo Not Saved</value>
+  </data>
+  <data name="Photo Not Supported" xml:space="preserve">
+    <value>Photo Not Supported</value>
+  </data>
+  <data name="Photo added. Choose it from any profile's avatar picker." xml:space="preserve">
+    <value>Photo added. Choose it from any profile's avatar picker.</value>
+  </data>
+  <data name="Photo crop area. Use the arrow keys to move the photo and plus or minus to zoom." xml:space="preserve">
+    <value>Photo crop area. Use the arrow keys to move the photo and plus or minus to zoom.</value>
+  </data>
+  <data name="Photo name" xml:space="preserve">
+    <value>Photo name</value>
+  </data>
+  <data name="Pick a picture, then move and zoom it to fit the circle. It then appears in every profile's avatar picker." xml:space="preserve">
+    <value>Pick a picture, then move and zoom it to fit the circle. It then appears in every profile's avatar picker.</value>
   </data>
   <data name="Please wait" xml:space="preserve">
     <value>Please wait</value>
@@ -713,6 +785,9 @@ Sign in here in a secure window, or open Epic Games Launcher, sign in there, and
   </data>
   <data name="RELOAD SAVED SIGN-IN…" xml:space="preserve">
     <value>RELOAD SAVED SIGN-IN…</value>
+  </data>
+  <data name="REMOVE" xml:space="preserve">
+    <value>REMOVE</value>
   </data>
   <data name="REPLACE WITH CURRENT EPIC LOGIN…" xml:space="preserve">
     <value>REPLACE WITH CURRENT EPIC LOGIN…</value>
@@ -737,6 +812,15 @@ Sign in here in a secure window, or open Epic Games Launcher, sign in there, and
   </data>
   <data name="Remove App, Keep My Accounts" xml:space="preserve">
     <value>Remove App, Keep My Accounts</value>
+  </data>
+  <data name="Remove Photo" xml:space="preserve">
+    <value>Remove Photo</value>
+  </data>
+  <data name="Remove the photo &quot;{0}&quot; from your avatars?" xml:space="preserve">
+    <value>Remove the photo "{0}" from your avatars?</value>
+  </data>
+  <data name="Remove this photo" xml:space="preserve">
+    <value>Remove this photo</value>
   </data>
   <data name="Replace" xml:space="preserve">
     <value>Replace</value>
@@ -809,6 +893,9 @@ Accounts you added or changed after this backup was made will be lost. Click BAC
   </data>
   <data name="SAVE CHANGES" xml:space="preserve">
     <value>SAVE CHANGES</value>
+  </data>
+  <data name="SAVE PHOTO" xml:space="preserve">
+    <value>SAVE PHOTO</value>
   </data>
   <data name="SETUP" xml:space="preserve">
     <value>SETUP</value>
@@ -947,6 +1034,9 @@ Please try again. If it keeps failing, check the setup log in your Temp folder (
   <data name="Skip this version" xml:space="preserve">
     <value>Skip this version</value>
   </data>
+  <data name="Small size" xml:space="preserve">
+    <value>Small size</value>
+  </data>
   <data name="Something unexpected stopped the account from being saved. Please try again.&#xA;&#xA;If it keeps happening, use SHOW LOGS for details." xml:space="preserve">
     <value>Something unexpected stopped the account from being saved. Please try again.
 
@@ -1077,6 +1167,15 @@ You can open it yourself in Notepad:
   <data name="The password is not correct for this backup. Passwords are case-sensitive." xml:space="preserve">
     <value>The password is not correct for this backup. Passwords are case-sensitive.</value>
   </data>
+  <data name="The photo could not be cropped: {0}" xml:space="preserve">
+    <value>The photo could not be cropped: {0}</value>
+  </data>
+  <data name="The photo could not be removed: {0}" xml:space="preserve">
+    <value>The photo could not be removed: {0}</value>
+  </data>
+  <data name="The photo could not be saved: {0}" xml:space="preserve">
+    <value>The photo could not be saved: {0}</value>
+  </data>
   <data name="The program files could not be removed. Your accounts were not touched." xml:space="preserve">
     <value>The program files could not be removed. Your accounts were not touched.</value>
   </data>
@@ -1151,6 +1250,9 @@ Use SHOW LOGS for details.</value>
 
 Use it when the launcher asks you to sign in although this account is shown as active.</value>
   </data>
+  <data name="This file could not be opened as a picture. Try a JPG or PNG photo." xml:space="preserve">
+    <value>This file could not be opened as a picture. Try a JPG or PNG photo.</value>
+  </data>
   <data name="This file is not a valid Epic Switcher backup, or it is damaged." xml:space="preserve">
     <value>This file is not a valid Epic Switcher backup, or it is damaged.</value>
   </data>
@@ -1158,6 +1260,15 @@ Use it when the launcher asks you to sign in although this account is shown as a
     <value>This permanently deletes every saved account from this PC.
 
 A safety backup will be saved to your Downloads folder first, so you can bring them back later with RESTORE.</value>
+  </data>
+  <data name="This photo is larger than 40 MB. Please pick a smaller one." xml:space="preserve">
+    <value>This photo is larger than 40 MB. Please pick a smaller one.</value>
+  </data>
+  <data name="This photo is too small. Please pick one at least {0} pixels wide and high." xml:space="preserve">
+    <value>This photo is too small. Please pick one at least {0} pixels wide and high.</value>
+  </data>
+  <data name="This photo is used by: {0}. Choose another avatar for those profiles first, then remove it." xml:space="preserve">
+    <value>This photo is used by: {0}. Choose another avatar for those profiles first, then remove it.</value>
   </data>
   <data name="This release has no checksum file, so it cannot be verified. Please download it from the release page." xml:space="preserve">
     <value>This release has no checksum file, so it cannot be verified. Please download it from the release page.</value>
@@ -1179,6 +1290,9 @@ A safety backup will be saved to your Downloads folder first, so you can bring t
   </data>
   <data name="UPDATES" xml:space="preserve">
     <value>UPDATES</value>
+  </data>
+  <data name="UPLOAD PHOTO…" xml:space="preserve">
+    <value>UPLOAD PHOTO…</value>
   </data>
   <data name="USE AVATAR" xml:space="preserve">
     <value>USE AVATAR</value>
@@ -1221,6 +1335,9 @@ A safety backup will be saved to your Downloads folder first, so you can bring t
   </data>
   <data name="Upgrade &amp; Keep Accounts Instead" xml:space="preserve">
     <value>Upgrade &amp; Keep Accounts Instead</value>
+  </data>
+  <data name="Upload your own photo" xml:space="preserve">
+    <value>Upload your own photo</value>
   </data>
   <data name="Use a password with at least {0} characters." xml:space="preserve">
     <value>Use a password with at least {0} characters.</value>
@@ -1304,6 +1421,9 @@ Use SHOW LOGS for details.</value>
 
 Use SHOW LOGS for details.</value>
   </data>
+  <data name="Your photo {0}" xml:space="preserve">
+    <value>Your photo {0}</value>
+  </data>
   <data name="Your saved account list could not be read, so no accounts are shown. {0}&#xA;&#xA;Restore a backup to get your accounts back. Setup also keeps automatic backups in your Downloads folder." xml:space="preserve">
     <value>Your saved account list could not be read, so no accounts are shown. {0}
 
@@ -1317,11 +1437,17 @@ What would you like to remove?</value>
   <data name="Your saved accounts were kept. Reinstall at any time to get them back." xml:space="preserve">
     <value>Your saved accounts were kept. Reinstall at any time to get them back.</value>
   </data>
+  <data name="Zoom" xml:space="preserve">
+    <value>Zoom</value>
+  </data>
   <data name="Zoom in" xml:space="preserve">
     <value>Zoom in</value>
   </data>
   <data name="Zoom in (Ctrl + Plus, or Ctrl + mouse wheel up)" xml:space="preserve">
     <value>Zoom in (Ctrl + Plus, or Ctrl + mouse wheel up)</value>
+  </data>
+  <data name="Zoom in or out" xml:space="preserve">
+    <value>Zoom in or out</value>
   </data>
   <data name="Zoom out" xml:space="preserve">
     <value>Zoom out</value>
@@ -1332,11 +1458,17 @@ What would you like to remove?</value>
   <data name="e.g., Main Account / Alt 1" xml:space="preserve">
     <value>e.g., Main Account / Alt 1</value>
   </data>
+  <data name="e.g., My photo" xml:space="preserve">
+    <value>e.g., My photo</value>
+  </data>
   <data name="e.g., user@domain.com" xml:space="preserve">
     <value>e.g., user@domain.com</value>
   </data>
   <data name="{0} (Active)" xml:space="preserve">
     <value>{0} (Active)</value>
+  </data>
+  <data name="{0} (your photo — right-click or press Delete to remove it)" xml:space="preserve">
+    <value>{0} (your photo — right-click or press Delete to remove it)</value>
   </data>
   <data name="{0} accounts were saved to:&#xA;{1}&#xA;&#xA;Keep the password somewhere safe. Without it this backup can't be restored." xml:space="preserve">
     <value>{0} accounts were saved to:

@@ -1,0 +1,93 @@
+<Window x:Class="Epic_Games_Account_Switcher_Client.ImageCropWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Epic_Games_Account_Switcher_Client"
+        Title="{local:T 'Adjust Photo'}" SizeToContent="WidthAndHeight"
+        Background="{DynamicResource MainBackground}" WindowStyle="None" AllowsTransparency="True"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
+    <Border BorderBrush="{DynamicResource IconFill}" BorderThickness="1" CornerRadius="12" Background="{DynamicResource MainBackground}" MouseLeftButtonDown="Dialog_DragMove">
+        <Grid Margin="22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Margin="0,0,0,18">
+                <TextBlock Text="{local:T 'ADJUST YOUR PHOTO'}" Foreground="{DynamicResource PrimaryTextForeground}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="{local:T 'Drag the photo to move it. Scroll or use the slider to zoom. Only the part inside the circle is shown.'}" Foreground="{DynamicResource SubTextForeground}" FontSize="13" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="520" Margin="0,6,0,0"/>
+            </StackPanel>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <!-- Crop area: the photo moves under a dark mask with a round window (the square around the circle is what gets saved). -->
+                    <Border x:Name="CropFrame" Width="320" Height="320" ClipToBounds="True" Background="{DynamicResource DialogBottomBackground}" Cursor="SizeAll" Focusable="True"
+                            BorderBrush="{DynamicResource BtnBorder}" BorderThickness="0"
+                            MouseLeftButtonDown="Crop_MouseLeftButtonDown" MouseMove="Crop_MouseMove" MouseLeftButtonUp="Crop_MouseLeftButtonUp" MouseWheel="Crop_MouseWheel" LostMouseCapture="Crop_LostMouseCapture"
+                            AutomationProperties.Name="{local:T 'Photo crop area. Use the arrow keys to move the photo and plus or minus to zoom.'}">
+                        <Grid>
+                            <Canvas x:Name="CropCanvas" Width="320" Height="320">
+                                <Image x:Name="CropImage" RenderOptions.BitmapScalingMode="HighQuality" Stretch="Fill"/>
+                            </Canvas>
+                            <Path IsHitTestVisible="False" Fill="{DynamicResource OverlayBackground}">
+                                <Path.Data>
+                                    <CombinedGeometry GeometryCombineMode="Exclude">
+                                        <CombinedGeometry.Geometry1>
+                                            <RectangleGeometry Rect="0,0,320,320"/>
+                                        </CombinedGeometry.Geometry1>
+                                        <CombinedGeometry.Geometry2>
+                                            <EllipseGeometry Center="160,160" RadiusX="160" RadiusY="160"/>
+                                        </CombinedGeometry.Geometry2>
+                                    </CombinedGeometry>
+                                </Path.Data>
+                            </Path>
+                            <Ellipse IsHitTestVisible="False" Stroke="{DynamicResource IconFill}" StrokeThickness="2"/>
+                        </Grid>
+                    </Border>
+
+                    <Grid Margin="0,14,0,0" Width="320">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource SubTextForeground}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <Slider x:Name="ZoomSlider" Grid.Column="1" Minimum="1" Maximum="6" Value="1" SmallChange="0.1" LargeChange="0.5" VerticalAlignment="Center"
+                                ValueChanged="ZoomSlider_ValueChanged" AutomationProperties.Name="{local:T 'Zoom'}" ToolTip="{local:T 'Zoom in or out'}"/>
+                        <TextBlock Grid.Column="2" Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource SubTextForeground}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Margin="26,0,0,0" Width="180">
+                    <TextBlock Text="{local:T 'PREVIEW'}" Foreground="{DynamicResource SubTextForeground}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                    <Ellipse Width="110" Height="110" HorizontalAlignment="Left" Stroke="{DynamicResource BtnBorder}" StrokeThickness="1">
+                        <Ellipse.Fill>
+                            <VisualBrush Visual="{Binding ElementName=CropCanvas}" ViewboxUnits="Absolute" Viewbox="0,0,320,320" Stretch="Fill"/>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <TextBlock Text="{local:T 'Avatar list'}" Foreground="{DynamicResource SubTextForeground}" FontSize="11" Margin="0,6,0,14"/>
+                    <Ellipse Width="48" Height="48" HorizontalAlignment="Left" Stroke="{DynamicResource BtnBorder}" StrokeThickness="1">
+                        <Ellipse.Fill>
+                            <VisualBrush Visual="{Binding ElementName=CropCanvas}" ViewboxUnits="Absolute" Viewbox="0,0,320,320" Stretch="Fill"/>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <TextBlock Text="{local:T 'Small size'}" Foreground="{DynamicResource SubTextForeground}" FontSize="11" Margin="0,6,0,18"/>
+
+                    <TextBlock x:Name="NameLabel" Text="{local:T 'Photo name'}" Foreground="{DynamicResource SubTextForeground}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBox x:Name="NameBox" Style="{StaticResource WatermarkTextBoxStyle}" Padding="8" FontSize="13" MaxLength="60"
+                             Tag="{local:T 'e.g., My photo'}" AutomationProperties.LabeledBy="{Binding ElementName=NameLabel}"/>
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,22,0,0">
+                <Button Content="{local:T 'CANCEL'}" Click="Cancel_Click" Width="100" Height="35" Margin="0,0,20,0" Style="{StaticResource CancelButton}" Padding="10,8" IsCancel="True" ToolTip="{local:T 'Do not add this photo (Esc)'}"/>
+                <Button Content="{local:T 'SAVE PHOTO'}" Click="Save_Click" MinWidth="150" Height="35" Padding="20,8" Style="{StaticResource OkButton}" IsDefault="True" ToolTip="{local:T 'Add the photo to your avatars (Enter)'}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

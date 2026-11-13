@@ -9,7 +9,7 @@
   
   <p>
     <img alt="Windows" src="https://img.shields.io/badge/Windows-Desktop-0078D6?style=flat-square&logo=windows&logoColor=white">
-    <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?style=flat-square&logo=dotnet&logoColor=white">
+    <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white">
     <img alt="WPF" src="https://img.shields.io/badge/UI-WPF_+_XAML-5C2D91?style=flat-square">
     <img alt="Runtime" src="https://img.shields.io/badge/Runtime-win--x64-24292f?style=flat-square">
   </p>

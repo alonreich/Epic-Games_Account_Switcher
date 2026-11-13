@@ -11,10 +11,12 @@
 | :--- | :--- |
 | `dev.cmd` (watch) / `dev.cmd run` (single) | Debug launch with isolated data in `%TMP%\Epic_Games_Account_Switcher_DEV` (never touches real profiles). Every launch wipes that dev data + logs, force-stops dev instances from this repo and deletes Client/Globals `bin`+`obj`. Also `dev.cmd build`, `restore`, `clean`. |
 | `dev_build.cmd` | Local installer build (`Build.cmd --dev`): no tests, no Git. |
-| `Build.cmd` | Full release build: clean -> tests -> publish (no .pdb) -> sign -> pack (+payload SHA-256) -> installer -> sign -> `compiled\*.exe.sha256`. |
+| `Build.cmd` | Full release build: clean -> tests -> publish self-contained + ReadyToRun for win-x64 (no .pdb) -> sign -> pack (+payload SHA-256) -> installer -> sign -> `compiled\*.exe.sha256`. Needs the .NET 10 SDK. Works from cmd, Windows PowerShell and PowerShell 7 (it pins the Windows PowerShell module path). |
 | `Release.cmd 3.0.1` | Everything below, end to end. |
 
 Every change must add an entry to `docs\changes.md` -> `## [Unreleased]` (rules at the top of that file).
+
+Runtime facts (.NET 10 self-contained, net48 bootstrapper, no NativeAOT): see `../project_structure.txt` section 1. Installer ≈ 68 MB.
 
 ## 3. Release (Release.cmd)
 1. Refuses a dirty tree, any branch other than `main`, or being behind `origin/main`.
@@ -33,7 +35,8 @@ Asset names are a contract with the in-app updater (`UpdateService.InstallerAsse
 ## 4. How users receive updates
 - The app checks `releases/latest` at most once a day at startup (10 s timeout; silent when offline) plus SETTINGS -> *Check for updates now*.
 - The banner offers **Update now / Later (24 h) / Skip version / What's new**. Nothing downloads until *Update now*.
-- The download is verified with SHA-256, plus the Authenticode signature pinned to `ssl-certificate\thumbprint.txt`. A verified download is reused instead of downloaded again.
+- The download is verified with SHA-256, plus the Authenticode signature pinned to `ssl-certificate\thumbprint.txt` (+ any extra signer in optional `ssl-certificate\trusted-thumbprints.txt`). A verified download is reused instead of downloaded again.
+- Changing the signing certificate: first release a version whose `trusted-thumbprints.txt` lists the new thumbprint, then sign with the new certificate. Otherwise existing installs reject the update.
 - Installation starts only after the user confirms *Install & Restart Now*. The installer runs with `--update`: no questions, accounts kept, app reopens.
 
 ## 5. Installer guarantees (App.xaml.cs)
